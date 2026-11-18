@@ -208,3 +208,78 @@ describe('UPI Lite top-up (A3, A7)', () => {
     expect((await byId('axis')).balance).toBe(10000);
   });
 });
+
+describe('review queue resolution', () => {
+  const { resolveCaptureAccount, pickCaptureWallet } = require('../../utils/FeatureService');
+
+  test('create the suggested account: all similar pending captures resolve, latest SMS balance wins', async () => {
+    const a = capture(SMS.hdfc, {}, 'AD-HDFCBK');
+    const b = capture(
+      SMS.hdfc.replace('25,000.00', '1,000.00').replace('30,000.00', '31,000.00'),
+      {},
+      'AD-HDFCBK'
+    );
+    await save([a, b]);
+    const r = await resolveCaptureAccount(a.id, { create: true });
+    expect(r.resolved).toBe(2);
+    const hdfc = (await accounts()).find((x) => x.id === r.accountId);
+    expect(hdfc).toMatchObject({
+      name: 'HDFC Bank ••4321',
+      type: 'Bank Account',
+      last4: '4321',
+      balance: 31000,
+    });
+    expect((await getAll()).every((t) => !t.accountUnresolved && t.accountId === r.accountId)).toBe(true);
+    // a later HDFC SMS now matches automatically
+    await save([capture(SMS.hdfc.replace('30,000.00', '32,500.00'), {}, 'AD-HDFCBK')]);
+    expect((await byId(r.accountId)).balance).toBe(32500);
+  });
+
+  test('pick one of two ambiguous accounts; delete afterwards restores it', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([...OWNER(), { id: 'axis2', name: 'Axis Salary', type: 'Bank Account', balance: 50 }])
+    );
+    const tx = capture(SMS.autopay);
+    await save([tx]);
+    await resolveCaptureAccount(tx.id, { accountId: 'axis' });
+    expect((await byId('axis')).balance).toBeCloseTo(8001.81, 2);
+    expect((await getAll())[0]).toMatchObject({ accountId: 'axis', reviewStatus: 'pending' });
+    await remove(tx.id);
+    expect((await byId('axis')).balance).toBe(10000);
+  });
+
+  test('pick a wallet for a top-up that matched two wallets; net worth unchanged', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([
+        ...OWNER(),
+        {
+          id: 'w1',
+          name: 'PhonePe UPI Lite',
+          type: 'Wallet',
+          subType: 'UPI Lite',
+          provider: 'PhonePe',
+          balance: 0,
+        },
+        {
+          id: 'w2',
+          name: 'Paytm UPI Lite',
+          type: 'Wallet',
+          subType: 'UPI Lite',
+          provider: 'Paytm',
+          balance: 0,
+        },
+      ])
+    );
+    const before = computeNetWorth(await accounts()).netWorth;
+    const tx = capture(SMS.topup);
+    await save([tx]);
+    expect((await getAll())[0].reviewReason).toBe('pick_wallet');
+    expect((await byId('axis')).balance).toBe(9500); // bank leg only so far
+    await pickCaptureWallet(tx.id, 'w2');
+    expect((await byId('w2')).balance).toBe(500);
+    expect((await byId('axis')).balance).toBe(9500);
+    expect(computeNetWorth(await accounts()).netWorth).toBe(before);
+  });
+});

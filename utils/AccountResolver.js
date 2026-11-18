@@ -183,18 +183,42 @@ export const linkWalletTransfer = (accounts, tx, perspective, { newId }) => {
       reviewReason = 'new_wallet';
     }
   }
+  const linked = linkToCounter(tx, perspective, counter);
+  if (reviewReason) linked.reviewReason = reviewReason;
+  return { accounts: next, tx: linked };
+};
+
+/**
+ * Two-legged version of a one-sided transfer. `perspective` = account the SMS was about,
+ * `counter` = the other side. flow 'in' means money arrived at `perspective`.
+ */
+export const linkToCounter = (tx, perspective, counter) => {
   const receiver = tx.flow === 'in' ? perspective : counter;
   const sender = tx.flow === 'in' ? counter : perspective;
-  const linked = {
+  const out = {
     ...tx,
     accountId: sender.id,
     account: sender.name,
     toAccountId: receiver.id,
     toAccount: receiver.name,
-    walletAccountId: (perspective.type === 'Wallet' ? perspective : counter).id,
   };
-  if (reviewReason) linked.reviewReason = reviewReason;
-  return { accounts: next, tx: linked };
+  if (perspective.type === 'Wallet' || counter.type === 'Wallet')
+    out.walletAccountId = (perspective.type === 'Wallet' ? perspective : counter).id;
+  return out;
+};
+
+/**
+ * Give a capture its account (matched automatically, or picked/created by the user):
+ * learn the account's last-4 digits, record who owns the SMS balance, link wallet transfers.
+ */
+export const assignCapture = (accounts, tx, account, { newId }) => {
+  let next = withAccount(accounts, account);
+  let acc = account;
+  if (tx.last4 && !last4Of(acc) && acc.type !== 'Wallet') {
+    acc = { ...acc, last4: String(tx.last4) }; // learn the digits on first sight
+    next = withAccount(next, acc);
+  }
+  return linkWalletTransfer(next, resolvedFields(tx, acc), acc, { newId });
 };
 
 /**
@@ -232,19 +256,16 @@ export const resolveCapture = (accounts, tx, { newId }) => {
       },
     };
   }
-  // learn the digits on first sight
-  if (tx.last4 && !last4Of(account) && account.type !== 'Wallet') {
-    account = { ...account, last4: String(tx.last4) };
-    next = withAccount(next, account);
-  }
-  const resolved = resolvedFields(tx, account);
-  if (r.status === 'none') resolved.reviewReason = 'new_wallet';
-  return linkWalletTransfer(next, resolved, account, { newId });
+  const out = assignCapture(next, tx, account, { newId });
+  if (r.status === 'none') out.tx = { ...out.tx, reviewReason: 'new_wallet' };
+  return out;
 };
 
 /** Resolve a batch (oldest first so wallets created early are reused). */
+export const newAccountId = () => `acc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
 export const resolveCaptures = (accounts, txs, { newId } = {}) => {
-  const gen = newId || (() => `acc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const gen = newId || newAccountId;
   let next = accounts;
   const order = txs.map((tx, i) => [tx, i]).sort((a, b) => new Date(a[0].fullDate) - new Date(b[0].fullDate));
   const out = new Array(txs.length);

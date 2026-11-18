@@ -74,7 +74,13 @@ export const updateInDb = async (db, id, changes) => {
   const next = encodeTransaction({ ...old, ...changes, id: old.id });
   if (old.balanceMode !== 'none')
     await moveBalances(db, (accounts) => applyToAccounts(reverseOnAccounts(accounts, old), next));
-  await db.runAsync(
+  await writeRow(db, next);
+  return next;
+};
+/** Overwrite a stored row as-is (no balance movement). Callers handle balances. */
+export const writeRow = (db, tx) => {
+  const next = encodeTransaction(tx);
+  return db.runAsync(
     'UPDATE transactions SET sourceId=?, fullDate=?, category=?, account=?, type=?, amount=?, excluded=?, data=? WHERE id=?',
     sourceId(next),
     next.fullDate,
@@ -84,9 +90,8 @@ export const updateInDb = async (db, id, changes) => {
     Number(next.amount),
     next.excludeFromReports ? 1 : 0,
     JSON.stringify(next),
-    String(id)
+    String(next.id)
   );
-  return next;
 };
 export const update = (id, changes) => atomic((db) => updateInDb(db, id, changes));
 export const removeInDb = async (db, id) => {

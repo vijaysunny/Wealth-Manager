@@ -12,7 +12,10 @@ import {
   bulkDelete,
   contributeToGoal,
   saveNetWorthSnapshot,
+  resolveCaptureAccount,
+  pickCaptureWallet,
 } from '../utils/FeatureService';
+import { describeCapture, reviewHint } from '../utils/ReviewText';
 import { filterHistory, xirr, amortize } from '../utils/FinanceTools';
 import { exportHistory } from '../utils/HistoryExport';
 import { parseAmount, parseNonNegative, formatMoney } from '../utils/Format';
@@ -192,14 +195,41 @@ export default function ToolsScreen({ navigation, route }) {
             <Text style={{ fontWeight: 'bold', marginTop: 16 }}>Pending captures: {review.length}</Text>
             {review.map((tx) => (
               <View key={tx.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: '#ccc' }}>
+                <Text style={{ fontWeight: '600' }}>{describeCapture(tx)}</Text>
                 <Text>
-                  {tx.title} · {formatMoney(tx.amount)} · {tx.account}
+                  {tx.category} · {tx.date}
                 </Text>
-                <Text>{tx.merchant || tx.vpa || tx.category}</Text>
-                <Button
-                  title="Confirm"
-                  onPress={() => run(() => update(tx.id, { reviewStatus: 'confirmed' }))}
-                />
+                {reviewHint(tx) ? <Text style={{ color: '#E65100' }}>{reviewHint(tx)}</Text> : null}
+                {tx.reviewReason === 'new_account' && (
+                  <Button
+                    title={`Create "${tx.suggestedAccount?.name || 'account'}"`}
+                    onPress={() => run(() => resolveCaptureAccount(tx.id, { create: true }))}
+                  />
+                )}
+                {tx.accountUnresolved && (
+                  <Choices
+                    items={spendable.filter(
+                      (a) =>
+                        (tx.accountCandidates || []).map(String).includes(String(a.id)) ||
+                        (!tx.accountCandidates && a.type === (tx.suggestedAccount?.type || a.type))
+                    )}
+                    value=""
+                    onChange={(accountId) => run(() => resolveCaptureAccount(tx.id, { accountId }))}
+                  />
+                )}
+                {tx.reviewReason === 'pick_wallet' && (
+                  <Choices
+                    items={accounts.filter((a) => a.type === 'Wallet')}
+                    value=""
+                    onChange={(walletId) => run(() => pickCaptureWallet(tx.id, walletId))}
+                  />
+                )}
+                {!tx.accountUnresolved && (
+                  <Button
+                    title="Confirm"
+                    onPress={() => run(() => update(tx.id, { reviewStatus: 'confirmed' }))}
+                  />
+                )}
                 <Button
                   title="Edit"
                   onPress={() => navigation.navigate('EditTransaction', { transaction: tx })}
