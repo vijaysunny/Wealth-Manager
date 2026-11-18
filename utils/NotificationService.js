@@ -32,15 +32,29 @@ export async function sendTransactionNotification(title, body) {
   // Update tracker
   lastNotifContent = contentKey;
   lastNotifTime = now;
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: title,
-      body: body,
-      sound: true,
-      priority: Notifications.AndroidNotificationPriority.HIGH,
-    },
-    trigger: null, // Send Immediately
-  });
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: title,
+        body: body,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null, // Send Immediately
+    });
+  } catch (e) {
+    // B11: a revoked notification permission must never break SMS capture
+    console.warn('Notification not shown:', e?.message || e);
+  }
+}
+
+/** B11: true / false, or null when the status cannot be read. */
+export async function notificationsAllowed() {
+  try {
+    return (await Notifications.getPermissionsAsync()).granted === true;
+  } catch {
+    return null;
+  }
 }
 
 // 4. DAILY NIGHT SUMMARY (9 PM)

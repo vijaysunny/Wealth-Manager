@@ -10,7 +10,7 @@ import { getAll } from '../data/TransactionRepo';
  */
 
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { StyleSheet, Alert, ActivityIndicator, Modal, FlatList, Platform, Linking } from 'react-native';
 import AsyncStorage from '../data/Storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,6 +20,9 @@ import { saveWithDedup, createDedupIndex } from '../utils/DeduplicationEngine';
 import { computeNetWorth, isReportable } from '../utils/BalanceService';
 import { shiftMonth } from '../utils/Format';
 import { backupStatus, LAST_BACKUP_KEY } from '../utils/BackupReminder';
+import { permissionWarnings } from '../utils/PermissionHealth';
+import { hasReceivePermission, isTrackingEnabled } from '../utils/SmsTracking';
+import { notificationsAllowed } from '../utils/NotificationService';
 export default function HomeScreen({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
@@ -34,6 +37,7 @@ export default function HomeScreen({ navigation }) {
   const [userName, setUserName] = useState('');
   const [netWorth, setNetWorth] = useState(0);
   const [backup, setBackup] = useState(null);
+  const [permWarnings, setPermWarnings] = useState([]);
   const changeMonth = (direction) => {
     setCurrentDate(shiftMonth(currentDate, direction));
   };
@@ -133,6 +137,14 @@ export default function HomeScreen({ navigation }) {
   );
   const loadData = useCallback(async () => {
     setBackup(backupStatus(await AsyncStorage.getItem(LAST_BACKUP_KEY)));
+    setPermWarnings(
+      permissionWarnings({
+        platform: Platform.OS,
+        smsEnabled: await isTrackingEnabled(),
+        smsPermission: await hasReceivePermission(),
+        notificationsGranted: await notificationsAllowed(),
+      })
+    );
     const name = await AsyncStorage.getItem('user_name');
     if (name) setUserName(name);
     const txJson = JSON.stringify(await getAll());
@@ -156,6 +168,21 @@ export default function HomeScreen({ navigation }) {
           paddingBottom: 20,
         }}
       >
+        {permWarnings.map((w) => (
+          <TouchableOpacity
+            key={w.key}
+            onPress={() => Linking.openSettings()}
+            style={{
+              backgroundColor: '#FFEBEE',
+              marginHorizontal: 12,
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ color: '#B71C1C' }}>{w.text} Tap to open settings.</Text>
+          </TouchableOpacity>
+        ))}
         {backup?.stale && (
           <TouchableOpacity
             onPress={() => navigation.navigate('SettingsTab')}

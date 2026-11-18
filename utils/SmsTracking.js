@@ -30,7 +30,7 @@ export const startTracking = () => {
 
 export const isTrackingEnabled = async () => (await AsyncStorage.getItem(SMS_FLAG_KEY)) !== 'false';
 
-const hasReceivePermission = async () => {
+export const hasReceivePermission = async () => {
   if (Platform.OS !== 'android') return false;
   try {
     const [read, recv] = await Promise.all([
