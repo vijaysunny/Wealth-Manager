@@ -13,7 +13,11 @@ import AsyncStorage from '../data/Storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
-import { sendBudgetAlert } from '../utils/NotificationService';
+import {
+  sendBudgetAlert,
+  setWalletReconcileReminder,
+  WALLET_REMINDER_KEY,
+} from '../utils/NotificationService';
 import { importAxioData } from '../utils/AxioImporter';
 import { APP_VERSION } from '../utils/appInfo';
 import { setSmsTracking } from '../utils/SmsTracking';
@@ -87,6 +91,7 @@ export default function SettingsScreen({ navigation }) {
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailSyncing, setGmailSyncing] = useState(false);
   const [smsAutoTrack, setSmsAutoTrack] = useState(true);
+  const [walletReminder, setWalletReminder] = useState(false);
   useEffect(() => {
     loadSettings();
   }, []);
@@ -99,6 +104,7 @@ export default function SettingsScreen({ navigation }) {
     setAccounts(savedWealth ? JSON.parse(savedWealth) : []);
     const gmailOk = isGmailEnabled() && (await isGmailConnected());
     setGmailConnected(gmailOk);
+    setWalletReminder((await AsyncStorage.getItem(WALLET_REMINDER_KEY)) === 'true');
     const smsEnabled = await AsyncStorage.getItem('sms_auto_track_enabled');
     setSmsAutoTrack(smsEnabled !== 'false');
   };
@@ -408,6 +414,22 @@ export default function SettingsScreen({ navigation }) {
                 true: '#4CAF5080',
               }}
               thumbColor={smsAutoTrack ? '#4CAF50' : '#999'}
+            />
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.rowBtn}>
+            <Ionicons name="wallet" size={20} color="#1976D2" />
+            <Text style={styles.rowBtnText}>Weekly wallet reconcile reminder</Text>
+            <Switch
+              style={{ marginLeft: 'auto' }}
+              value={walletReminder}
+              onValueChange={async (on) => {
+                setWalletReminder(on);
+                if (!(await setWalletReconcileReminder(on))) {
+                  setWalletReminder(!on);
+                  Alert.alert('Reminder', 'Could not change the reminder. Check notification permission.');
+                }
+              }}
             />
           </View>
           <View style={styles.divider} />

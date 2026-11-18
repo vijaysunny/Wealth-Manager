@@ -83,3 +83,29 @@ export async function sendBudgetAlert(message, force = false) {
   });
   if (!force) await AsyncStorage.setItem('last_budget_alert_date', today);
 }
+
+// 6. WEEKLY WALLET RECONCILE REMINDER (plan A4.1 / A6, optional)
+export const WALLET_REMINDER_KEY = 'wallet_reconcile_reminder';
+const WALLET_REMINDER_TITLE = 'Reconcile your wallets';
+
+/** Turn the weekly (Sunday 10:00) reminder on/off. Idempotent; never throws. */
+export async function setWalletReconcileReminder(enabled) {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of scheduled.filter((s) => s.content?.title === WALLET_REMINDER_TITLE))
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    if (enabled)
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: WALLET_REMINDER_TITLE,
+          body: 'UPI Lite payments often send no SMS. Enter the balance your UPI app shows (Wealth → Reconcile).',
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: 1, hour: 10, minute: 0 },
+      });
+    await AsyncStorage.setItem(WALLET_REMINDER_KEY, enabled ? 'true' : 'false');
+    return true;
+  } catch (e) {
+    console.warn('Wallet reminder scheduling failed:', e?.message || e);
+    return false;
+  }
+}
