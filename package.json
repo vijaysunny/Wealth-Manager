@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "vendor:pdf": "node scripts/vendor-pdf.cjs",
     "format": "prettier --write \"**/*.{js,cjs,json}\"",
-    "format:check": "prettier --check \"**/*.{js,cjs,json}\""
+    "format:check": "prettier --check \"**/*.{js,cjs,json}\"",
+    "test:coverage": "jest --runInBand --coverage"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -75,7 +76,66 @@
     ],
     "setupFilesAfterEnv": [
       "<rootDir>/jest.setup.js"
-    ]
+    ],
+    "collectCoverageFrom": [
+      "utils/**/*.js",
+      "data/**/*.js",
+      "!utils/PdfBundle.js"
+    ],
+    "coverageReporters": [
+      "text-summary",
+      "lcov"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 66,
+        "branches": 55,
+        "functions": 75,
+        "lines": 67
+      },
+      "./utils/TransactionParser.js": {
+        "statements": 80,
+        "branches": 70,
+        "functions": 70,
+        "lines": 80
+      },
+      "./utils/BalanceService.js": {
+        "statements": 80,
+        "branches": 70,
+        "functions": 70,
+        "lines": 80
+      },
+      "./utils/AccountResolver.js": {
+        "statements": 80,
+        "branches": 70,
+        "functions": 70,
+        "lines": 80
+      },
+      "./utils/TransferPairing.js": {
+        "statements": 80,
+        "branches": 70,
+        "functions": 70,
+        "lines": 80
+      },
+      "./utils/WalletReconcile.js": {
+        "statements": 80,
+        "branches": 70,
+        "functions": 70,
+        "lines": 80
+      },
+      "./utils/DeduplicationEngine.js": {
+        "statements": 80,
+        "branches": 70,
+        "functions": 70,
+        "lines": 80
+      },
+      "./utils/CaptureMapper.js": {
+        "statements": 80,
+        "branches": 70,
+        "functions": 70,
+        "lines": 80
+      }
+    }
   },
   "engines": {
     "node": ">=24.12.0"

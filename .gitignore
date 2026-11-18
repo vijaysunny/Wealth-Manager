@@ -54,3 +54,4 @@ yarn-error.*
 
 # Windows download metadata
 *:Zone.Identifier
+coverage/

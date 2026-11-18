@@ -4,6 +4,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         tz: [Asia/Kolkata, UTC] # B12: month boundaries, recurring dates and IDs must not depend on TZ
     env:
@@ -12,8 +13,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm test -- --runInBand
       - run: npm run lint
+      - run: npm run format:check
+      # Coverage thresholds live in package.json (jest.coverageThreshold)
+      - run: npm run test:coverage
+  doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Reported, not blocking: 4 pre-existing findings (expo-font peer/duplicate, SDK 54 patch
+      # versions, unmaintained SMS listener) need a dependency decision - see docs/phase11-notes.md
+      - run: npx expo-doctor
+        continue-on-error: true
