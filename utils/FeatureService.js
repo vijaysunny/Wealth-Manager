@@ -17,10 +17,12 @@ export const rejectCapture = (id) =>
   atomic(async (db) => {
     const row = await db.getFirstAsync('SELECT data FROM transactions WHERE id=?', String(id));
     if (!row) return;
-    const source = sourceId(decodeRow(row));
-    if (source) {
+    const tx = decodeRow(row);
+    // a merged transfer stands for every SMS paired into it: reject them all
+    const sources = [sourceId(tx), ...(tx.pairedSmsIds || []).map((s) => `sms:${s}`)].filter(Boolean);
+    if (sources.length) {
       const rejected = JSON.parse((await readValue(db, 'rejected_sources')) || '[]');
-      await writeValue(db, 'rejected_sources', JSON.stringify([...new Set([...rejected, source])]));
+      await writeValue(db, 'rejected_sources', JSON.stringify([...new Set([...rejected, ...sources])]));
     }
     await removeInDb(db, id);
   });

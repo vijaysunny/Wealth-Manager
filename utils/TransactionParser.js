@@ -428,6 +428,20 @@ const MERCHANT_RE =
   /\b(?:paid to|sent to|received from|towards|at|to)\s+([a-z][a-z0-9 .&_-]{1,60}?)(?=\s+(?:on|via|using|ref|upi|avl|available|bal|from|for)\b|[.;\n]|$)/i;
 // "credited to your SBI Credit Card" names the account, not a merchant
 const NOT_MERCHANT_RE = /^(?:your|you|the|a\/c|ac|acct|account)\b/i;
+/**
+ * The message with the payee removed, so bank / account-type detection describes the
+ * account money moved FROM/TO, not the payee: "A/c XX0973 debited ... UPI/P2M/.../SBI CARD
+ * ... Axis Bank" is an Axis bank debit, not an SBI credit-card transaction.
+ */
+export const ownAccountText = (text = '') => {
+  let t = String(text).replace(
+    CHANNEL_SLASH_RE,
+    (m, ch, mode, ref) => `${ch}/${mode ? `${mode}/` : ''}${ref}/ `
+  );
+  const payee = t.match(MERCHANT_RE)?.[1];
+  if (payee && !NOT_MERCHANT_RE.test(payee.trim())) t = t.replace(payee, ' ');
+  return t;
+};
 export const extractMerchant = (text = '') => {
   const s = String(text);
   const vpa = s.match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
@@ -478,7 +492,8 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
   const amount = extractAmount(body);
   if (amount === null || amount <= 0) return null;
 
-  const accountType = detectAccountType(body, { sender });
+  const own = ownAccountText(body);
+  const accountType = detectAccountType(own, { sender });
   const last4 = extractLast4(body);
   const { channel, mode, counterparty } = extractChannel(body);
   let type = detectDirection(body);
@@ -489,7 +504,7 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
     ({ type, flow } = WALLET_SHAPES[wallet.kind][wallet.perspective]);
     if (type === 'transfer') kind = wallet.kind;
     category = WALLET_CATEGORY[wallet.kind] || category;
-  } else if (isCardPayment(body, accountType)) {
+  } else if (isCardPayment(own, accountType)) {
     type = 'transfer';
     kind = 'cc_payment';
     flow = 'in';
@@ -499,8 +514,8 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
   const isTransfer = type === 'transfer';
   const bankName =
     wallet && wallet.perspective === 'wallet'
-      ? wallet.provider || detectBank(sender, body) || bankFallback
-      : detectBank(sender, body) || bankFallback;
+      ? wallet.provider || detectBank(sender, own) || bankFallback
+      : detectBank(sender, own) || bankFallback;
 
   return {
     amount,

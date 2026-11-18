@@ -114,11 +114,14 @@ export const createDedupIndex = (existing = []) => {
   const buckets = new Map(); // amount|type|day → [slot]
 
   const register = (t, consumed) => {
-    [t.smsId, t.gmailMsgId, typeof t.id === 'string' && t.id.startsWith('rec_') ? t.id : null].forEach(
-      (v) => {
-        if (v) ids.add(v);
-      }
-    );
+    [
+      t.smsId,
+      t.gmailMsgId,
+      typeof t.id === 'string' && t.id.startsWith('rec_') ? t.id : null,
+      ...(Array.isArray(t.pairedSmsIds) ? t.pairedSmsIds : []), // SMS merged into this transfer
+    ].forEach((v) => {
+      if (v) ids.add(v);
+    });
     const ms = toMs(t);
     if (t.bodyHash) {
       if (!bodies.has(t.bodyHash)) bodies.set(t.bodyHash, []);

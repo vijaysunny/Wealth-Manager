@@ -283,3 +283,78 @@ describe('review queue resolution', () => {
     expect(computeNetWorth(await accounts()).netWorth).toBe(before);
   });
 });
+
+describe('card bill payment seen twice → one transfer (UNVERIFIED-SAMPLE bank side)', () => {
+  // Synthetic Axis-style debit for paying the SBI card; replace with a real one when available
+  const AXIS_PAYS_SBI_CARD =
+    'INR 5770.00 debited\nA/c no. XX0973\n10-11-26, 10:00:15\nUPI/P2M/631234567890/SBI CARD\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank';
+  const netWorth = async () => computeNetWorth(await accounts()).netWorth;
+
+  test('bank debit first, then card "payment received": one transfer, net worth unchanged', async () => {
+    const before = await netWorth();
+    await save([capture(AXIS_PAYS_SBI_CARD)]);
+    await save([capture(SMS.sbiPay)]);
+    const rows = await getAll();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      type: 'transfer',
+      transferKind: 'cc_payment',
+      accountId: 'axis',
+      toAccountId: 'sbicc',
+    });
+    expect((await byId('axis')).balance).toBe(4230);
+    expect((await byId('sbicc')).balance).toBe(230);
+    expect(await netWorth()).toBe(before);
+  });
+
+  test('card SMS first, then bank debit: the stored transfer is linked; re-scan adds nothing', async () => {
+    const before = await netWorth();
+    const pay = capture(SMS.sbiPay);
+    const debit = capture(AXIS_PAYS_SBI_CARD);
+    await save([pay]);
+    await save([debit]);
+    let rows = await getAll();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: pay.id, accountId: 'axis', toAccountId: 'sbicc' });
+    expect(rows[0].pairedSmsIds).toEqual([debit.smsId]);
+    expect(await netWorth()).toBe(before);
+    await save([
+      { ...debit, id: 'rescan1' },
+      { ...pay, id: 'rescan2' },
+    ]);
+    rows = await getAll();
+    expect(rows).toHaveLength(1);
+    expect((await byId('axis')).balance).toBe(4230);
+  });
+
+  test('both in one batch pair too', async () => {
+    await save([capture(AXIS_PAYS_SBI_CARD), capture(SMS.sbiPay)]);
+    expect(await getAll()).toHaveLength(1);
+    expect((await byId('sbicc')).balance).toBe(230);
+  });
+
+  test('undo of the merged transfer restores both and blocks both SMS from returning', async () => {
+    const debit = capture(AXIS_PAYS_SBI_CARD);
+    const pay = capture(SMS.sbiPay);
+    await save([debit, pay]);
+    await rejectCapture((await getAll())[0].id);
+    expect((await byId('axis')).balance).toBe(10000);
+    expect((await byId('sbicc')).balance).toBe(6000);
+    await save([
+      { ...debit, id: 'x1' },
+      { ...pay, id: 'x2' },
+    ]);
+    expect(await getAll()).toHaveLength(0);
+  });
+
+  test('no card-payment wording or > 3 days apart → not paired', async () => {
+    await save([capture(SMS.sbiPay)]);
+    await save([capture(SMS.imps178.replace('178.00', '5770.00').replace('baja', 'GROCERY'))]);
+    expect(await getAll()).toHaveLength(2);
+    await Storage.clear();
+    await Storage.setItem('user_wealth_accounts', JSON.stringify(OWNER()));
+    await save([capture(SMS.sbiPay, { fullDate: '2026-11-01T00:00:00Z' })]);
+    await save([capture(AXIS_PAYS_SBI_CARD, { fullDate: '2026-11-05T00:00:01Z' })]);
+    expect(await getAll()).toHaveLength(2);
+  });
+});

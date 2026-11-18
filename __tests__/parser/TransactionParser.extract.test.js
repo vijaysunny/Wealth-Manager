@@ -146,3 +146,27 @@ test('Bajaj Finance / Finserv is a loan payment (generic)', () => {
   expect(guessCategory('IMPS/P2A/632012808676/BAJAJ FINANCE LTD')).toBe('Loan/EMI');
   expect(guessCategory('NACH debit BAJAJ FINSERV')).toBe('Loan/EMI');
 });
+
+describe('bank and account type come from the account side, not the payee', () => {
+  const { ownAccountText } = require('../../utils/TransactionParser');
+  test('Axis debit paying "SBI CARD" is an Axis bank debit', () => {
+    const r = parseTransactionText(
+      'INR 5770.00 debited\nA/c no. XX0973\n10-11-26, 10:00:15\nUPI/P2M/631234567890/SBI CARD\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank'
+    );
+    expect(r).toMatchObject({
+      bankName: 'Axis Bank',
+      accountType: 'Bank Account',
+      merchant: 'SBI CARD',
+      last4: '0973',
+    });
+  });
+  test('UPI payment "to HDFC CREDIT CARD" from Equitas stays Equitas savings', () => {
+    const r = parseTransactionText(
+      'INR 96.00 debited via UPI from Equitas A/c 1246 -Ref:061704889746 on 08-08-25 to HDFC CREDIT CARD.'
+    );
+    expect(r).toMatchObject({ bankName: 'Equitas Small Finance Bank', accountType: 'Bank Account' });
+  });
+  test('"credited to your SBI Credit Card" is kept (it is the account, not a payee)', () => {
+    expect(ownAccountText('the same has been credited to your SBI Credit Card.')).toMatch(/SBI Credit Card/);
+  });
+});

@@ -4,7 +4,8 @@ import { readValue } from './Storage';
 import { checkBudgetAlerts } from '../utils/MonthlyBudgets';
 import { filterNew } from '../utils/DeduplicationEngine';
 import { applyToAccounts, reverseOnAccounts, applyCapturedToAccounts } from '../utils/BalanceService';
-import { resolveCaptures } from '../utils/AccountResolver';
+import { resolveCaptures, linkToCounter } from '../utils/AccountResolver';
+import { findTransferPair, isOpenCardPayment, pairedSmsIdsOf } from '../utils/TransferPairing';
 export const getAll = async () =>
   (await (await getDatabase()).getAllAsync('SELECT data FROM transactions ORDER BY fullDate DESC')).map(
     decodeRow
@@ -51,11 +52,53 @@ const persistMany = (transactions, { balanceMode = 'none', dedup = true } = {}) 
       ({ accounts, txs: candidates } = resolveCaptures(accounts, candidates));
     }
     const addedTxs = [];
+    const applyTxs = []; // rows whose balance effect is applied below (new + re-linked)
+    const live = current.slice();
+    const accountById = (id) => accounts && accounts.find((a) => String(a.id) === String(id));
     for (const tx of candidates) {
-      const record = { ...tx, balanceMode };
-      if ((await insertRow(db, record)).changes === 1) addedTxs.push(record);
+      let record = { ...tx, balanceMode };
+      const partner =
+        balanceMode === 'captured'
+          ? findTransferPair(
+              record,
+              live.filter((r) => r.balanceMode === 'captured')
+            )
+          : null;
+      const card = partner && accountById(isOpenCardPayment(record) ? record.accountId : partner.accountId);
+      const bank = partner && accountById(isOpenCardPayment(record) ? partner.accountId : record.accountId);
+      if (partner && card && bank) {
+        // One card-bill payment seen twice (issuer + paying bank) → ONE transfer bank → card
+        accounts = reverseOnAccounts(accounts, partner);
+        if (isOpenCardPayment(record)) {
+          await db.runAsync('DELETE FROM transactions WHERE id=?', String(partner.id));
+          live.splice(live.indexOf(partner), 1);
+          record = {
+            ...linkToCounter(record, card, bank),
+            pairedSmsIds: [...pairedSmsIdsOf(record), ...pairedSmsIdsOf(partner), partner.smsId].filter(
+              Boolean
+            ),
+          };
+        } else {
+          const merged = {
+            ...linkToCounter(partner, card, bank),
+            pairedSmsIds: [...pairedSmsIdsOf(partner), record.smsId].filter(Boolean),
+            ...(Number.isFinite(record.extractedBalance)
+              ? { extractedBalance: record.extractedBalance, balanceAccountId: bank.id }
+              : {}),
+          };
+          await writeRow(db, merged);
+          live[live.indexOf(partner)] = merged;
+          applyTxs.push(merged);
+          continue; // the bank debit is now the transfer's other leg, not a row of its own
+        }
+      }
+      if ((await insertRow(db, record)).changes === 1) {
+        addedTxs.push(record);
+        applyTxs.push(record);
+        live.push(record);
+      }
     }
-    if (balanceMode === 'captured') await moveBalances(db, () => applyCapturedToAccounts(accounts, addedTxs));
+    if (balanceMode === 'captured') await moveBalances(db, () => applyCapturedToAccounts(accounts, applyTxs));
     if (balanceMode === 'delta')
       await moveBalances(db, (accounts) => addedTxs.reduce(applyToAccounts, accounts));
     return { added: addedTxs.length, skipped: transactions.length - addedTxs.length, addedTxs };
