@@ -1,0 +1,46 @@
+# WealthManager — completed source phases 7–10
+
+Use WealthManager_phase10.zip for the cumulative latest project. Earlier archives are independent cumulative checkpoints, not patches. No node_modules, generated Android/iOS directories, credentials, database files or scratch tooling are included.
+
+## Run and build
+
+1. Back up your existing app data before installing a SQLite build. Preserve the backup outside the app.
+2. Extract the project, use Node 24.12 or later, and run `npm ci`.
+3. Run `npm test -- --runInBand` and `npm run lint`.
+4. Build a native development app with `npm run android`, or use the existing EAS preview profile to create an APK (`eas build --platform android --profile preview`). An Android SDK/JDK or an authenticated EAS account is required. Expo Go cannot run the old native SMS modules.
+5. Choose manual entry or SMS tracking during onboarding. Open Settings → Money tools for transfers, review, search/export, goal contributions and wealth calculators. Security and appearance settings include dark mode, biometrics and encrypted backups.
+
+Gmail remains unconfigured because no OAuth client was supplied. See docs/phase7-notes.md before entering an EXPO_PUBLIC_GOOGLE_CLIENT_ID. A Web client secret must never be bundled in the app; Google's Android custom-scheme restrictions must be resolved for the configured client before this PKCE implementation can be used.
+
+## Data and recovery
+
+The first run migrates AsyncStorage to SQLite in a transaction and checks the row count. It retains user_transactions_backup and a complete sqlite_migration_backup in the original storage. Corrupt rows or duplicate IDs abort migration with a retry screen; original data remains available for recovery. Legacy imports do not record whether their balances were adjusted, so verify balances after migration.
+
+Standard backups and authenticated encrypted backups include transactions, accounts/assets, goals, contribution history, recurring entries, monthly budgets, category rules, rejected capture markers and net-worth history. Tokens, biometric preferences and price caches are excluded. Encrypted backups require the original passphrase. Merge adds missing data while preserving current account balances and settings. Imported merged rows do not move balances. Replace writes all present fields atomically.
+
+The app lock protects the app UI, including when the app returns from the background. It does not encrypt the SQLite database; Android device storage protection applies. Biometric enrollment must remain available to unlock.
+
+PDF parsing embeds PDF.js and its worker locally (Apache-2.0 license in assets/pdfjs-LICENSE.txt). It needs an up-to-date Android System WebView and a text-based PDF. Scanned/password-protected documents may need conversion or unlocking first. To refresh the vendored parser after updating pdfjs-dist, run `npm run vendor:pdf` and re-test offline extraction.
+
+## Verification and remaining device checks
+
+Automated checks cover parser/dedup, recurrence, balances, real SQLite SQL through a test adapter, migration backup/counts, concurrent writes, rollback, transfer accounting, budget rollover, encryption/tampering, category/review/bulk actions, goals, merge restore, and mocked OAuth code/refresh/401/revocation paths. See docs/jest-phase10.txt and docs/eslint-after-phase10.txt. Android native-project generation and Android JavaScript bundle export were checked; this does not establish that an APK builds or launches. The export disables Hermes bytecode because the sandboxed Windows compiler could not write its temporary output.
+
+Before using real data, verify on Android:
+
+- Migrate a copy of real data, compare counts and balances, add/edit/delete a transaction and restore a backup.
+- Receive an SMS with the app closed, open it, confirm it appears once; disable tracking; undo a capture and re-scan.
+- Confirm a transfer changes both accounts, including a credit-card payment; verify reports exclude it.
+- Import SBI/HDFC statements and a text PDF in airplane mode; check duplicate re-imports.
+- Confirm category rules, bulk edits/deletes, CSV/Excel sharing, goals and contribution history.
+- Confirm month/year budgets, rollover and 80%/100% alerts from manual, imported and captured expenses.
+- Test biometric cancel/failure, background privacy, cold-start lock and dark-theme contrast.
+- Configure Gmail and verify callback, HTML mail, pagination, refresh after an hour and SMS/Gmail dedup.
+- Verify card reminders. They are scheduled for twelve months, clamp short months, and can be delayed by Android's inexact-alarm scheduling. Renew after a year.
+- Check investment refresh, stock/gold units and net-worth snapshots. Loan and XIRR tools provide simulations; multiple sign changes may have multiple XIRR roots.
+
+## Upgrade plan
+
+Remain on Expo SDK 54 while using the two existing SMS bridge libraries. SDK 54 is the last Expo SDK that supports disabling the New Architecture. Evaluate replacing inbox reads with an Expo native module around Android ContentResolver and paged queries, and real-time capture with an Expo native event/receiver module. OTP-only SMS Retriever alternatives do not replace bank-inbox scanning. Validate process death, permission denial, timestamp IDs, duplicate delivery and background scheduling before upgrading. Then test all other native modules, regenerate projects and run a signed-device migration test before moving SDKs.
+
+References: https://docs.expo.dev/guides/new-architecture/ and https://developers.google.com/identity/protocols/oauth2/native-app

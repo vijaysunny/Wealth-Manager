@@ -1,0 +1,201 @@
+{
+  "_note": "Real samples supplied by the owner. 'expected' = DESIRED behaviour; 'currentlyWrong' = observed in the Phase 10 parser. Sender IDs are unknown (samples were copied from chat) - replace with the real sender from the phone. If this repo is ever pushed to a public GitHub, replace third-party names (HARISH, NANDINI H), the autopay mandate VPA and reference numbers.",
+  "messages": [
+    {
+      "id": "axis-cc-spend-01",
+      "sender": "UNKNOWN (fill from phone)",
+      "body": "Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nSELVA KUMAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.",
+      "expected": {
+        "type": "expense",
+        "amount": 121,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070",
+        "merchant": "SELVA KUMAR",
+        "refNo": null,
+        "availableLimit": 275541.19,
+        "balance": null
+      },
+      "currentlyWrong": "refNo='919951860002' (helpline number). Account resolves to plain 'Axis Bank', not the card."
+    },
+    {
+      "id": "axis-autopay-google-01",
+      "sender": "UNKNOWN",
+      "body": "Your A/c has been debited towards Google for INR 1998.19 on 18-11-26. s2bvuWCARzH6xideZ5l7UafD6Ojf1KFE@apl - Axis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 1998.19,
+        "bank": "Axis Bank",
+        "last4": null,
+        "needsAccountReview": true,
+        "merchant": "Google",
+        "category": "Subscriptions",
+        "refNo": null
+      },
+      "currentlyWrong": "merchant = mandate VPA string; category General; no account digits so account is ambiguous (savings XX0973 vs card XX9070)."
+    },
+    {
+      "id": "axis-imps-debit-178",
+      "sender": "UNKNOWN",
+      "body": "Debit INR 178.00\nAxis Bank A/c XX0973\n16-11-26 13:45:25\nIMPS/P2A/632013023016/baja\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002",
+      "expected": {
+        "type": "expense",
+        "amount": 178,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "channel": "IMPS",
+        "counterparty": "baja",
+        "refNo": "632013023016"
+      },
+      "currentlyWrong": "last4 not extracted"
+    },
+    {
+      "id": "axis-upilite-topup-500",
+      "sender": "UNKNOWN",
+      "body": "UPI LITE enabled on UPI App for A/c no. XX0973 with successful top-up of INR 500.00 on 07-11-26 09:46:28 IST. Ref no. 01007102616409005179402498474608827 - Axis Bank",
+      "expected": {
+        "type": "transfer",
+        "kind": "wallet_topup",
+        "subType": "UPI Lite",
+        "amount": 500,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "refNo": "01007102616409005179402498474608827",
+        "balance": null
+      },
+      "currentlyWrong": "NOT PARSED AT ALL (message has no 'debited/credited' word) -> bank balance never reduced"
+    },
+    {
+      "id": "axis-upi-groww-5050",
+      "sender": "UNKNOWN",
+      "body": "INR 5050.00 debited\nA/c no. XX0973\n05-11-26, 10:00:15\nUPI/P2M/630969451444/GROWW INVEST TECH P\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 5050,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "GROWW INVEST TECH P",
+        "category": "Investment",
+        "refNo": "630969451444"
+      },
+      "currentlyWrong": "last4 not extracted; merchant null"
+    },
+    {
+      "id": "axis-imps-debit-42000",
+      "sender": "UNKNOWN",
+      "body": "Debit INR 42000.00\nAxis Bank A/c XX0973\n16-11-26 12:26:31\nIMPS/P2A/632012808676/baja\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002",
+      "expected": {
+        "type": "expense",
+        "amount": 42000,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "channel": "IMPS",
+        "counterparty": "baja",
+        "refNo": "632012808676",
+        "transferCandidate": true
+      },
+      "currentlyWrong": "no self-transfer detection"
+    },
+    {
+      "id": "equitas-upi-96",
+      "sender": "UNKNOWN",
+      "body": "INR 96.00 debited via UPI from Equitas A/c 1246 -Ref:061704889746 on 08-08-25 to HARISH. Avl Bal is INR 581.65.Not U?Call 18001031222/SMS BLOCK UPI/BLOCK ACT 1246 to 7045030000.",
+      "expected": {
+        "type": "expense",
+        "amount": 96,
+        "bank": "Equitas Small Finance Bank",
+        "last4": "1246",
+        "merchant": "HARISH",
+        "refNo": "061704889746",
+        "balance": 581.65
+      },
+      "currentlyWrong": "bank = 'Unknown Bank' -> account skipped, balance 581.65 never applied"
+    },
+    {
+      "id": "equitas-upi-25",
+      "sender": "UNKNOWN",
+      "body": "INR 25.00 debited via UPI from Equitas A/c 1246-Ref:071290089144 on 30-06-25 to NANDINI H.Not U?Call 18001031222/SMS BLOCK UPI/BLOCK ACT 1246 to 7045030000",
+      "expected": {
+        "type": "expense",
+        "amount": 25,
+        "bank": "Equitas Small Finance Bank",
+        "last4": "1246",
+        "merchant": "NANDINI H",
+        "refNo": "071290089144"
+      },
+      "currentlyWrong": "bank = 'Unknown Bank'"
+    },
+    {
+      "id": "sbi-cc-spend-143",
+      "sender": "UNKNOWN",
+      "body": "Rs.143.00 spent on your SBI Credit Card ending 1987 at PRADHANMANTRIBHARTIYAJ on 08/11/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expected": {
+        "type": "expense",
+        "amount": 143,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": "1987",
+        "merchant": "PRADHANMANTRIBHARTIYAJ",
+        "category": "Health"
+      },
+      "currentlyWrong": "account = plain 'SBI' (collides with SBI savings); category General"
+    },
+    {
+      "id": "sbi-cc-payment-5770",
+      "sender": "UNKNOWN",
+      "body": "We have received payment of Rs.5,770.00 via BBPS & the same has been credited to your SBI Credit Card. Your available limit is Rs.178,307.37.",
+      "expected": {
+        "type": "transfer",
+        "kind": "cc_payment",
+        "amount": 5770,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": null,
+        "availableLimit": 178307.37,
+        "channel": "BBPS"
+      },
+      "currentlyWrong": "income 5770 (fake income) + merchant 'your SBI Credit Card'; the paying bank's debit would also be an expense = card spend counted twice"
+    },
+    {
+      "id": "sbi-cc-spend-86",
+      "sender": "UNKNOWN",
+      "body": "Rs.86.00 spent on your SBI Credit Card ending 1987 at ADYARANANDABHAVANSW on 31/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expected": {
+        "type": "expense",
+        "amount": 86,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": "1987",
+        "category": "Food"
+      },
+      "currentlyWrong": "category General (merchant has no word breaks)"
+    },
+    {
+      "id": "sbi-cc-spend-600",
+      "sender": "UNKNOWN",
+      "body": "Rs.600.00 spent on your SBI Credit Card ending 1987 at BANGALOREPALACE on 31/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expected": {
+        "type": "expense",
+        "amount": 600,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": "1987",
+        "category": "Food"
+      },
+      "currentlyWrong": "category General"
+    },
+    {
+      "id": "sbi-cc-spend-353",
+      "sender": "UNKNOWN",
+      "body": "Rs.353.00 spent on your SBI Credit Card ending 1987 at PAAKASHALAMGROAD on 31/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expected": {
+        "type": "expense",
+        "amount": 353,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": "1987"
+      },
+      "currentlyWrong": "last4 not extracted"
+    }
+  ]
+}
