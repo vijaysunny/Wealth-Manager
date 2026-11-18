@@ -11,9 +11,7 @@ test('labels: fresh, stale flag, old price, manual override, non-market', () => 
   expect(priceStatusLabel({ symbol: 'X', priceStale: true, priceAsOf: '2026-11-16T10:00:00Z' }, NOW)).toBe(
     'Price may be stale · 2d ago'
   );
-  expect(priceStatusLabel({ symbol: 'X', priceAsOf: '2026-11-17T04:00:00Z' }, NOW)).toMatch(
-    /stale · 1d ago/
-  );
+  expect(priceStatusLabel({ symbol: 'X', priceAsOf: '2026-11-17T04:00:00Z' }, NOW)).toMatch(/stale · 1d ago/);
   expect(priceStatusLabel({ symbol: 'X', priceOverride: true }, NOW)).toMatch(/Manual value/);
   expect(priceStatusLabel({ name: 'Axis' }, NOW)).toBe('');
 });

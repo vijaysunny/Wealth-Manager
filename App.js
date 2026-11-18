@@ -7,13 +7,13 @@
  * - Graceful permission handling for Android 16
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { AppState, View, Text, Button } from 'react-native';
+import { AppState } from 'react-native';
 
 // --- SCREENS ---
 import HomeScreen from './screens/HomeScreen';
@@ -41,7 +41,7 @@ import { syncTrackingWithFlag, stopTracking } from './utils/SmsTracking';
 import { syncSms } from './utils/SmsSync';
 import { processRecurringTransactions } from './utils/RecurringEngine';
 
-import { getDatabase } from './data/Database';
+import Bootstrap from './components/Bootstrap';
 
 import ToolsScreen from './screens/ToolsScreen';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -83,8 +83,7 @@ function MainTabs() {
 
 function AppContent() {
   const { dark } = useAppTheme();
-  const [ready, setReady] = useState(false);
-  const [storageError, setStorageError] = useState('');
+  // The database is already open: Bootstrap (outermost) is the only startup gate (B5).
   useEffect(() => {
     // Foreground catch-up: the real-time listener misses messages while the app is killed,
     // so every time the app starts or returns to the foreground we re-apply the saved
@@ -102,8 +101,6 @@ function AppContent() {
     };
 
     async function setupApp() {
-      await getDatabase();
-      setReady(true);
       // Schedule daily summary notification
       scheduleDailySummary();
 
@@ -114,7 +111,7 @@ function AppContent() {
       await catchUp();
     }
 
-    setupApp().catch((error) => setStorageError(error.message));
+    setupApp().catch((error) => console.warn('Startup tasks failed:', error?.message || error));
 
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') catchUp();
@@ -126,23 +123,6 @@ function AppContent() {
     };
   }, []);
 
-  if (!ready)
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
-        <Text>{storageError || 'Preparing your saved data…'}</Text>
-        {storageError ? (
-          <Button
-            title="Retry"
-            onPress={() => {
-              setStorageError('');
-              getDatabase()
-                .then(() => setReady(true))
-                .catch((error) => setStorageError(error.message));
-            }}
-          />
-        ) : null}
-      </View>
-    );
   return (
     <NavigationContainer theme={dark ? DarkTheme : DefaultTheme}>
       <StatusBar style="auto" />
@@ -172,27 +152,6 @@ function AppContent() {
       </Stack.Navigator>
     </NavigationContainer>
   );
-}
-function Bootstrap({ children }) {
-  const [ready, setReady] = useState(false),
-    [error, setError] = useState('');
-  const start = React.useCallback(() => {
-    setError('');
-    getDatabase()
-      .then(() => setReady(true))
-      .catch((e) => setError(e.message));
-  }, []);
-  useEffect(() => {
-    start();
-  }, [start]);
-  if (!ready)
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
-        <Text>{error || 'Preparing your saved data…'}</Text>
-        {error ? <Button title="Retry migration" onPress={start} /> : null}
-      </View>
-    );
-  return children;
 }
 export default function App() {
   return (
