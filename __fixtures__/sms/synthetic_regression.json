@@ -1,0 +1,59 @@
+{
+  "_note": "Synthetic messages (not real owner samples) migrated from the original inline parser tests, plus negative cases. Keep real samples in owner_real_samples.json.",
+  "messages": [
+    {
+      "id": "syn-icici-debit-info-credited",
+      "sender": "VK-ICICIB",
+      "body": "ICICI Bank Acct XX123 debited for Rs 500.00 on 05-Jan-24; Rahul credited. UPI:401234567890. Avl Bal Rs 12,345.67",
+      "expected": { "parsed": true, "type": "expense", "amount": 500, "bank": "ICICI Bank", "balance": 12345.67, "refNo": "401234567890" }
+    },
+    {
+      "id": "syn-hdfc-salary-credit",
+      "sender": "AD-HDFCBK",
+      "body": "Rs 25,000.00 credited to your A/c XX4321 on 01-Jan-24 by ACME Salary. Avl Bal Rs 30,000.00",
+      "expected": { "parsed": true, "type": "income", "amount": 25000, "category": "Salary", "bank": "HDFC Bank", "balance": 30000, "last4": "4321" }
+    },
+    {
+      "id": "syn-hdfc-upi-sent",
+      "sender": "",
+      "body": "Sent Rs.250.00 From HDFC Bank A/C *1234 To SWIGGY On 02/01/24 Ref 401",
+      "expected": { "parsed": true, "type": "expense", "amount": 250, "bank": "HDFC Bank", "last4": "1234" }
+    },
+    {
+      "id": "syn-upi-received",
+      "sender": "",
+      "body": "Received Rs.700.00 in your A/c from Amit via UPI",
+      "expected": { "parsed": true, "type": "income", "amount": 700 }
+    },
+    {
+      "id": "syn-due-to-wording",
+      "sender": "",
+      "body": "Due to a revision, Rs 99 debited from A/c XX11 for NETFLIX",
+      "expected": { "parsed": true, "amount": 99, "type": "expense" }
+    },
+    {
+      "id": "neg-otp",
+      "sender": "",
+      "body": "123456 is your OTP for txn of Rs 500. Do not share.",
+      "expected": { "parsed": false }
+    },
+    {
+      "id": "neg-will-be-debited",
+      "sender": "",
+      "body": "Rs 5,000 will be debited from your a/c on 05-Jan for EMI",
+      "expected": { "parsed": false }
+    },
+    {
+      "id": "neg-failed",
+      "sender": "",
+      "body": "Payment of Rs 800 failed. Please retry.",
+      "expected": { "parsed": false }
+    },
+    {
+      "id": "neg-cc-payment-due",
+      "sender": "",
+      "body": "Your credit card bill of Rs 4,500 payment due on 10-Jan",
+      "expected": { "parsed": false }
+    }
+  ]
+}

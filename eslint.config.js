@@ -19,6 +19,7 @@ module.exports = defineConfig([
         jest: 'readonly',
         beforeAll: 'readonly',
         afterAll: 'readonly',
+        __dirname: 'readonly',
       },
     },
   },
