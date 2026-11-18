@@ -93,14 +93,22 @@ const BANKS = [
   [/CANARA|\bCNRB\b/, 'Canara Bank'],
   [/UNION BANK/, 'Union Bank'],
   [/EQUITAS/, 'Equitas Small Finance Bank'],
-  [/PAYTM/, 'Paytm Bank'],
+  // Paytm Payments Bank is a bank; "Paytm" alone (wallet / UPI Lite / app) is a provider below
+  [/PAYTM PAYMENTS BANK|\bPPBL\b/, 'Paytm Payments Bank'],
   [/AIRTEL (?:PAYMENTS )?BANK|AIRTEL PAYMENTS/, 'Airtel Payments Bank'],
+  [/JUPITER/, 'Jupiter'],
+];
+
+// Wallet / UPI-app providers. Never treated as banks by account creation; detectBank()
+// only falls back to them when no real bank is named (keeps old labels for app-only SMS).
+export const WALLET_PROVIDERS = [
+  [/PAYTM/, 'Paytm'],
   [/AMAZON|\bAMZN\b/, 'Amazon Pay'],
   [/PHONE ?PE/, 'PhonePe'],
   [/\bGPAY\b|GOOGLE ?PAY/, 'Google Pay'],
+  [/\bBHIM\b/, 'BHIM'],
   [/\bCRED\b/, 'CRED'],
   [/MOBIKWIK/, 'MobiKwik'],
-  [/JUPITER/, 'Jupiter'],
 ];
 
 // ── Sender filter ───────────────────────────────────────────────────────
@@ -179,17 +187,101 @@ export const isTransactionalSender = (address = '') => {
   return /[A-Z]/.test(core); // any other alphanumeric header
 };
 
-/** Known bank/app name found in sender + body, or null. */
-export const detectBank = (sender = '', body = '') => {
-  const t = `${sender} ${body}`.toUpperCase();
-  for (const [re, name] of BANKS) if (re.test(t)) return name;
+const firstMatch = (table, text) => {
+  for (const [re, name] of table) if (re.test(text)) return name;
   return null;
 };
 
-/** 'Credit Card' for credit-card messages, otherwise 'Bank Account'. */
-export const detectAccountType = (body = '') => {
+/** Known bank in sender + body; a wallet/app provider only if no bank is named; else null. */
+export const detectBank = (sender = '', body = '') => {
+  const t = `${sender} ${body}`.toUpperCase();
+  return firstMatch(BANKS, t) || firstMatch(WALLET_PROVIDERS, t);
+};
+
+/** Wallet / UPI app named in sender + body (PhonePe, Paytm, ...), or null. */
+export const detectWalletProvider = (sender = '', body = '') =>
+  firstMatch(WALLET_PROVIDERS, `${sender} ${body}`.toUpperCase());
+
+// ── Wallets and UPI Lite (plan A2) ────────────────────────────────────────
+// Patterns marked VERIFIED come from the owner's real samples (__fixtures__/sms).
+// UNVERIFIED-SAMPLE patterns are best guesses: replace them when a real message arrives.
+
+export const WALLET_SUBTYPES = ['UPI Lite', 'Paytm Wallet', 'Amazon Pay', 'FASTag', 'Other Wallet'];
+
+// Which wallet product a message is about.
+const WALLET_PRODUCTS = [
+  [/\bupi[\s-]?lite\b|\bupilite\b/i, 'UPI Lite'], // VERIFIED: "UPI LITE enabled on UPI App ..." (Axis)
+  [/\bpaytm\s+wallet\b/i, 'Paytm Wallet'], // UNVERIFIED-SAMPLE
+  [/\bamazon\s+pay\s+balance\b/i, 'Amazon Pay'], // UNVERIFIED-SAMPLE
+  [/\bfastag\b/i, 'FASTag'], // UNVERIFIED-SAMPLE
+  [/\bmobikwik\s+wallet\b|\bwallet\b.*\bmobikwik\b/i, 'Other Wallet'], // UNVERIFIED-SAMPLE
+];
+// Not completed yet / failed: never applied
+const WALLET_NOT_DONE_RE =
+  /\b(?:fail(?:ed|ure)?|unsuccessful|declined|pending|in progress|will be (?:debited|credited)|request (?:received|initiated)|otp)\b/i;
+// Money moved bank → wallet. VERIFIED: "with successful top-up of INR 500.00".
+// FASTag "recharge" is UNVERIFIED-SAMPLE (and only counts for FASTag).
+const WALLET_TOPUP_RE = /\btop[\s-]?up\b|\badded to\b|\bloaded\b|\bload money\b/i; // only "top-up" is VERIFIED
+const FASTAG_RECHARGE_RE = /\brecharge[ds]?\b/i; // UNVERIFIED-SAMPLE
+// Money moved wallet → bank (withdraw, disable with balance return, reversed top-up). UNVERIFIED-SAMPLE
+const WALLET_WITHDRAW_RE =
+  /\bwithdraw(?:n|al)?\b|\btransferred back\b|\breversed\b|\breversal\b|\bdisabled\b|\bunload(?:ed)?\b/i;
+// Refund/credit INTO the wallet from a merchant. UNVERIFIED-SAMPLE
+const WALLET_CREDIT_RE = /\b(?:refund(?:ed)?|cashback|credited)\b/i;
+// Payment FROM the wallet. UNVERIFIED-SAMPLE ("paid to X using UPI Lite", "deducted from FASTag")
+const WALLET_SPEND_RE = /\b(?:paid|spent|sent|deducted|debited|payment of)\b/i;
+// The message is about a bank account (bank perspective) rather than the wallet itself
+const BANK_ACCOUNT_REF_RE = /\b(?:a\/c|acct|account)\b/i;
+
+const WALLET_IGNORE = Object.freeze({ ignore: true });
+
+/**
+ * Wallet / UPI Lite classification. Pure.
+ * Returns null for non-wallet messages, WALLET_IGNORE ({ignore:true}) for a wallet message
+ * that must not be applied (failed / pending), else:
+ *   { kind: 'wallet_topup'|'wallet_withdraw'|'wallet_spend'|'wallet_credit',
+ *     provider: 'PhonePe'|'Paytm'|...|null, subType: 'UPI Lite'|..., perspective: 'bank'|'wallet',
+ *     balanceBelongsTo: 'bank'|'wallet'|'unknown' }
+ * perspective = which account the SMS is about: a bank top-up debit SMS is the bank's view.
+ */
+export const classifyWalletEvent = (body = '', { sender = '' } = {}) => {
+  const text = String(body || '');
+  const subType = firstMatch(WALLET_PRODUCTS, text);
+  if (!subType) return null;
+  if (WALLET_NOT_DONE_RE.test(text)) return WALLET_IGNORE;
+
+  const provider =
+    subType === 'Paytm Wallet'
+      ? 'Paytm'
+      : subType === 'Amazon Pay'
+        ? 'Amazon Pay'
+        : detectWalletProvider(sender, text);
+  const perspective =
+    firstMatch(BANKS, `${sender} ${text}`.toUpperCase()) && BANK_ACCOUNT_REF_RE.test(text)
+      ? 'bank'
+      : 'wallet';
+  const balanceBelongsTo = perspective;
+  const base = { provider, subType, perspective, balanceBelongsTo };
+
+  const isTopup = WALLET_TOPUP_RE.test(text) || (subType === 'FASTag' && FASTAG_RECHARGE_RE.test(text));
+  if (WALLET_WITHDRAW_RE.test(text)) return { ...base, kind: 'wallet_withdraw' };
+  if (isTopup) return { ...base, kind: 'wallet_topup' };
+  if (perspective === 'wallet' && WALLET_CREDIT_RE.test(text) && !WALLET_SPEND_RE.test(text))
+    return { ...base, kind: 'wallet_credit' };
+  if (WALLET_SPEND_RE.test(text)) return { ...base, kind: 'wallet_spend' };
+  return null; // wallet mentioned, but no money movement we understand (e.g. "UPI Lite enabled")
+};
+
+/**
+ * 'Credit Card' for credit-card messages, 'Wallet' for messages about a wallet balance
+ * itself (UPI Lite spend, Paytm Wallet, FASTag ...), otherwise 'Bank Account'.
+ * Card wording wins, so RuPay-credit-card-on-UPI spends stay card expenses.
+ */
+export const detectAccountType = (body = '', { sender = '' } = {}) => {
   if (/credit\s*card|\bcc\b/i.test(body)) return 'Credit Card';
   if (/\bcard\b/i.test(body) && !/debit\s*card/i.test(body)) return 'Credit Card';
+  const wallet = classifyWalletEvent(body, { sender });
+  if (wallet && !wallet.ignore && wallet.perspective === 'wallet') return 'Wallet';
   return 'Bank Account';
 };
 
@@ -362,38 +454,67 @@ const TRANSFER_RAILS = ['IMPS', 'NEFT', 'RTGS'];
  * the bank may have several matching accounts (pipeline decides).
  * transferCandidate: IMPS/NEFT/RTGS debit to a person/account - possibly a self-transfer.
  */
+// Wallet event → parser fields. Bank-perspective top-up/withdraw = one-sided transfer of the
+// bank; wallet-perspective spend/credit = expense/income ON the wallet account.
+const WALLET_SHAPES = {
+  wallet_topup: { bank: { type: 'transfer', flow: 'out' }, wallet: { type: 'transfer', flow: 'in' } },
+  wallet_withdraw: { bank: { type: 'transfer', flow: 'in' }, wallet: { type: 'transfer', flow: 'out' } },
+  wallet_spend: { bank: { type: 'expense', flow: null }, wallet: { type: 'expense', flow: null } },
+  wallet_credit: { bank: { type: 'income', flow: null }, wallet: { type: 'income', flow: null } },
+};
+const WALLET_CATEGORY = { wallet_topup: 'Wallet Top-up', wallet_withdraw: 'Wallet Withdrawal' };
+
 export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknown Bank' } = {}) => {
   if (!body) return null;
-  if (IGNORE_RE.test(body)) return null;
-  if (!TXN_WORD_RE.test(body)) return null;
+  const wallet = classifyWalletEvent(body, { sender });
+  if (wallet && wallet.ignore) return null;
+  // A recognised wallet event skips the generic ignore/keyword gates: its own rules decided
+  // (e.g. a real top-up that also says "offer", or "top-up" with no "debited" word).
+  if (!wallet) {
+    if (IGNORE_RE.test(body)) return null;
+    if (!TXN_WORD_RE.test(body)) return null;
+  }
 
   const amount = extractAmount(body);
   if (amount === null || amount <= 0) return null;
 
-  const accountType = detectAccountType(body);
+  const accountType = detectAccountType(body, { sender });
   const last4 = extractLast4(body);
   const { channel, mode, counterparty } = extractChannel(body);
   let type = detectDirection(body);
   let category = guessCategory(body);
   let kind = null;
   let flow = null;
-  if (isCardPayment(body, accountType)) {
+  if (wallet) {
+    ({ type, flow } = WALLET_SHAPES[wallet.kind][wallet.perspective]);
+    if (type === 'transfer') kind = wallet.kind;
+    category = WALLET_CATEGORY[wallet.kind] || category;
+  } else if (isCardPayment(body, accountType)) {
     type = 'transfer';
     kind = 'cc_payment';
     flow = 'in';
     category = 'Card Payment';
   }
   const merchantInfo = extractMerchant(body);
+  const isTransfer = type === 'transfer';
+  const bankName =
+    wallet && wallet.perspective === 'wallet'
+      ? wallet.provider || detectBank(sender, body) || bankFallback
+      : detectBank(sender, body) || bankFallback;
 
   return {
     amount,
     ...merchantInfo,
-    merchant: kind === 'cc_payment' ? null : merchantInfo.merchant,
+    merchant: isTransfer ? null : merchantInfo.merchant,
     type,
     kind,
     flow,
     category,
-    bankName: detectBank(sender, body) || bankFallback,
+    walletEvent: wallet ? { kind: wallet.kind, provider: wallet.provider, subType: wallet.subType } : null,
+    subType: wallet ? wallet.subType : null,
+    provider: wallet ? wallet.provider : null,
+    balanceBelongsTo: wallet ? wallet.balanceBelongsTo : null,
+    bankName,
     balance: extractBalance(body),
     availableLimit: extractAvailableLimit(body),
     accountType,
@@ -402,7 +523,7 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
     channelMode: mode,
     counterparty,
     refNo: extractRefNo(body),
-    needsAccountReview: !last4 && accountType !== 'Credit Card',
+    needsAccountReview: !last4 && accountType === 'Bank Account',
     transferCandidate: type === 'expense' && TRANSFER_RAILS.includes(channel) && mode !== 'P2M',
   };
 };

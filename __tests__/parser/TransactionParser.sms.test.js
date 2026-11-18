@@ -18,18 +18,7 @@ const { rules: OWNER_RULES } = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', '..', '__fixtures__', 'category_rules.owner.json'), 'utf8')
 );
 
-const KNOWN_FAILING = new Set([
-  // UPI Lite top-up: phase A2 (wallet classifier)
-  'axis-upilite-topup-500.parsed',
-  'axis-upilite-topup-500.type',
-  'axis-upilite-topup-500.kind',
-  'axis-upilite-topup-500.subType',
-  'axis-upilite-topup-500.amount',
-  'axis-upilite-topup-500.bank',
-  'axis-upilite-topup-500.last4',
-  'axis-upilite-topup-500.refNo',
-  'axis-upilite-topup-500.balance',
-]);
+const KNOWN_FAILING = new Set([]);
 
 // Fixture key → parser output key, where the names differ.
 const FIELD_MAP = { bank: 'bankName' };

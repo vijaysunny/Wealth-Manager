@@ -18,6 +18,13 @@ import AsyncStorage from '../data/Storage';
 
 const ACCOUNTS_KEY = 'user_wealth_accounts';
 const SPENDABLE_TYPES = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
+
+// Wallet accounts keep type 'Wallet'; optional metadata on the account record (plan A1):
+//   subType: one of WALLET_SUBTYPES, provider: 'PhonePe' | ..., linkedBankId: id | null,
+//   aliases: ['phonepe lite', ...] (lowercase, matched against SMS/statement text)
+export { WALLET_SUBTYPES } from './TransactionParser';
+/** True for wallet accounts (UPI Lite, Paytm Wallet, Amazon Pay, FASTag, other). */
+export const isWallet = (account) => !!account && account.type === 'Wallet';
 const LIABILITY_TYPES = ['Loan', 'Credit Card'];
 const GENERIC_ACCOUNT_NAMES = ['', 'cash', 'unknown', 'unknown bank', 'bank'];
 
