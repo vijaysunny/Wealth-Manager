@@ -6,6 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { fetchMutualFundNAV, fetchStockPrice } from '../utils/InvestmentApi';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { parseAmount, parseNonNegative } from '../utils/Format';
+import AsyncStorage from '../data/Storage';
+import { WALLET_SUBTYPES } from '../utils/TransactionParser';
+import { walletFields, WALLET_PROVIDER_CHOICES as WALLET_PROVIDERS } from '../utils/WalletAccounts';
+
 export default function AddAssetScreen({ navigation, route }) {
   // Common State
   const [name, setName] = useState('');
@@ -30,6 +34,15 @@ export default function AddAssetScreen({ navigation, route }) {
   const [interestRate, setInterestRate] = useState('');
   const [emisPaid, setEmisPaid] = useState(''); // <--- NEW STATE
   const [showPicker, setShowPicker] = useState(false);
+  const [walletSubType, setWalletSubType] = useState('UPI Lite');
+  const [provider, setProvider] = useState('');
+  const [linkedBankId, setLinkedBankId] = useState(null);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  useEffect(() => {
+    AsyncStorage.getItem('user_wealth_accounts')
+      .then((json) => setBankAccounts(JSON.parse(json || '[]').filter((a) => a.type === 'Bank Account')))
+      .catch(() => setBankAccounts([]));
+  }, []);
 
   // Constants
   const types = [
@@ -166,6 +179,7 @@ export default function AddAssetScreen({ navigation, route }) {
       tenure: type === 'Loan' && Number.isFinite(tenureMonths) && tenureMonths > 0 ? tenureMonths : null,
       // PF / Loan Interest
       interestRate: rate,
+      ...(type === 'Wallet' ? walletFields({ name, walletSubType, provider, linkedBankId }) : {}),
     };
     await putAccount(newAsset);
     navigation.goBack();
@@ -213,6 +227,61 @@ export default function AddAssetScreen({ navigation, route }) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {type === 'Wallet' && (
+          <View>
+            <Text style={styles.sectionLabel}>WALLET TYPE</Text>
+            <View style={styles.chipContainer}>
+              {WALLET_SUBTYPES.map((w) => (
+                <TouchableOpacity
+                  key={w}
+                  onPress={() => setWalletSubType(w)}
+                  style={[
+                    styles.chip,
+                    walletSubType === w && { backgroundColor: '#2196F3', borderColor: '#2196F3' },
+                  ]}
+                >
+                  <Text style={{ color: walletSubType === w ? '#fff' : '#333' }}>{w}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.sectionLabel}>APP / PROVIDER</Text>
+            <View style={styles.chipContainer}>
+              {WALLET_PROVIDERS.map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  onPress={() => setProvider(p)}
+                  style={[
+                    styles.chip,
+                    provider === p && { backgroundColor: '#2196F3', borderColor: '#2196F3' },
+                  ]}
+                >
+                  <Text style={{ color: provider === p ? '#fff' : '#333' }}>{p}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.sectionLabel}>FUNDED FROM (OPTIONAL)</Text>
+            <View style={styles.chipContainer}>
+              {bankAccounts.map((b) => (
+                <TouchableOpacity
+                  key={String(b.id)}
+                  onPress={() => setLinkedBankId(String(linkedBankId) === String(b.id) ? null : b.id)}
+                  style={[
+                    styles.chip,
+                    String(linkedBankId) === String(b.id) && {
+                      backgroundColor: '#2196F3',
+                      borderColor: '#2196F3',
+                    },
+                  ]}
+                >
+                  <Text style={{ color: String(linkedBankId) === String(b.id) ? '#fff' : '#333' }}>
+                    {b.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* 1. MUTUAL FUND FORM */}
         {type === 'Mutual Fund' && (

@@ -8,13 +8,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { fetchMutualFundNAV, fetchStockPrice } from '../utils/InvestmentApi';
 import { calculateOutstandingBalance } from '../utils/LoanCalculator'; // <--- Import Calculator
 import { useFocusEffect } from '@react-navigation/native';
-import { computeNetWorth } from '../utils/BalanceService';
+import { computeNetWorth, isWallet } from '../utils/BalanceService';
+import { computeReconcile } from '../utils/WalletReconcile';
+import { reconcileWallet } from '../utils/FeatureService';
+import { formatMoney } from '../utils/Format';
 
 export default function WealthScreen({ navigation }) {
   const [data, setData] = useState({ banks: [], pf: [], liabilities: [], investments: [] });
   const [totals, setTotals] = useState({ netWorth: 0, assets: 0, debt: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState(null); // { account, text }
+  const [reconcile, setReconcile] = useState(null); // { account, text, category, requestId }
 
   useFocusEffect(
     useCallback(() => {
@@ -98,7 +102,14 @@ export default function WealthScreen({ navigation }) {
     // --- CATEGORIZATION & TOTALS ---
     const pf = accounts.filter((a) => a.type === 'Provident Fund');
     const loans = accounts.filter((a) => a.type === 'Loan' || a.type === 'Credit Card');
-    const banks = accounts.filter((a) => ['Bank Account', 'Cash', 'Wallet'].includes(a.type));
+    const banks = accounts.filter((a) => a.type === 'Bank Account');
+    // "Cash & wallets" (A6): cash plus UPI Lite / Paytm Wallet / FASTag ... with their linked bank
+    const wallets = accounts
+      .filter((a) => a.type === 'Cash' || isWallet(a))
+      .map((a) => ({
+        ...a,
+        linkedBankName: accounts.find((b) => String(b.id) === String(a.linkedBankId))?.name,
+      }));
     // Investments: Everything else (Mutual Funds, Stocks, Gold, Real Estate)
     const inv = accounts.filter(
       (a) => !['Provident Fund', 'Loan', 'Credit Card', 'Bank Account', 'Cash', 'Wallet'].includes(a.type)
@@ -106,7 +117,7 @@ export default function WealthScreen({ navigation }) {
 
     const nw = computeNetWorth(accounts);
 
-    setData({ banks, pf, liabilities: loans, investments: inv });
+    setData({ banks, wallets, pf, liabilities: loans, investments: inv });
     setTotals({ netWorth: nw.netWorth, assets: nw.assets, debt: nw.liabilities });
     setRefreshing(false);
   };
@@ -135,6 +146,56 @@ export default function WealthScreen({ navigation }) {
     }
     updateAccount(balanceEdit.account.id, { balance: value });
     setBalanceEdit(null);
+  };
+  // A4.1: type the balance the UPI app shows; the gap becomes one entry (confirmed first)
+  const startReconcile = (account) =>
+    setReconcile({ account, text: '', category: '', requestId: `${account.id}_${Date.now()}` });
+  const submitReconcile = () => {
+    const { account, text, category, requestId } = reconcile;
+    let gap;
+    try {
+      gap = computeReconcile(account, parseFloat(String(text).replace(/,/g, '')));
+    } catch (error) {
+      Alert.alert('Check the amount', error.message);
+      return;
+    }
+    const save = (mode) =>
+      reconcileWallet(account.id, parseFloat(String(text).replace(/,/g, '')), {
+        requestId,
+        mode,
+        category: category.trim() || undefined,
+      })
+        .then(() => {
+          setReconcile(null);
+          loadData();
+        })
+        .catch((error) => Alert.alert('Could not reconcile', error.message));
+    if (gap.action === 'none') {
+      Alert.alert('Already matching', `${account.name} already shows this balance.`);
+      setReconcile(null);
+      return;
+    }
+    if (gap.action === 'expense') {
+      Alert.alert(
+        'Record unrecorded spends?',
+        `${formatMoney(gap.diff)} was spent from ${account.name} without a message. Save it as "Unrecorded wallet spends"${category.trim() ? ` (${category.trim()})` : ''}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save', onPress: () => save('income') },
+        ]
+      );
+      return;
+    }
+    const options = [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Correction', onPress: () => save('income') },
+    ];
+    if (account.linkedBankId) options.push({ text: 'Top-up from bank', onPress: () => save('topup') });
+    Alert.alert(
+      'Balance is higher',
+      `${account.name} has ${formatMoney(-gap.diff)} more than tracked. Was it a top-up that was not captured, or a correction?`,
+      options
+    );
   };
   const promptType = (account) => {
     Alert.alert(
@@ -189,7 +250,25 @@ export default function WealthScreen({ navigation }) {
           ) : (
             <Text style={styles.sub}>
               {item.subType || item.type} {item.interestRate ? `• ${item.interestRate}%` : ''}
+              {item.provider ? ` • ${item.provider}` : ''}
+              {item.linkedBankName ? ` • from ${item.linkedBankName}` : ''}
             </Text>
+          )}
+          {isWallet(item) && (
+            <View style={{ flexDirection: 'row', marginTop: 4 }}>
+              <TouchableOpacity onPress={() => startReconcile(item)} style={{ marginRight: 16 }}>
+                <Text style={{ color: '#1976D2', fontWeight: '600' }}>Reconcile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate('Expense', {
+                    prefill: { amount: '', category: '', accountName: item.name },
+                  })
+                }
+              >
+                <Text style={{ color: '#1976D2', fontWeight: '600' }}>Add spend</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>
@@ -256,8 +335,15 @@ export default function WealthScreen({ navigation }) {
 
         {data.banks.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.secTitle}>Liquid Assets</Text>
+            <Text style={styles.secTitle}>Bank accounts</Text>
             <View style={styles.card}>{data.banks.map((i) => renderItem(i, false))}</View>
+          </View>
+        )}
+
+        {(data.wallets || []).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.secTitle}>Cash & wallets</Text>
+            <View style={styles.card}>{data.wallets.map((i) => renderItem(i, false))}</View>
           </View>
         )}
 
@@ -284,6 +370,39 @@ export default function WealthScreen({ navigation }) {
       </ScrollView>
 
       {/* UPDATE BALANCE MODAL */}
+      <Modal visible={!!reconcile} transparent animationType="fade" onRequestClose={() => setReconcile(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Reconcile wallet</Text>
+            <Text style={styles.modalSub}>
+              {reconcile?.account?.name}: tracked {formatMoney(reconcile?.account?.balance || 0)}. Enter the
+              balance your UPI app shows.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={reconcile?.text ?? ''}
+              onChangeText={(t) => setReconcile((prev) => ({ ...prev, text: t }))}
+              keyboardType="numeric"
+              placeholder="Balance in the app"
+              autoFocus
+            />
+            <TextInput
+              style={styles.modalInput}
+              value={reconcile?.category ?? ''}
+              onChangeText={(t) => setReconcile((prev) => ({ ...prev, category: t }))}
+              placeholder="Category for unrecorded spends (optional)"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setReconcile(null)} style={styles.modalBtn}>
+                <Text style={{ color: '#666', fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={submitReconcile} style={styles.modalBtn}>
+                <Text style={{ color: '#1976D2', fontWeight: '600' }}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <Modal
         visible={!!balanceEdit}
         transparent

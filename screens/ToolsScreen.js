@@ -128,6 +128,31 @@ export default function ToolsScreen({ navigation, route }) {
       <ScrollView style={{ marginTop: 12 }} contentContainerStyle={{ paddingBottom: 40 }}>
         {tab === 'Transfers' && (
           <View>
+            {accounts
+              .filter((w) => w.type === 'Wallet')
+              .map((w) => {
+                const bank = accounts.find((b) => String(b.id) === String(w.linkedBankId));
+                return (
+                  <View key={`short_${w.id}`} style={{ flexDirection: 'row', marginBottom: 6 }}>
+                    <Button
+                      title={`Top-up ${w.name}`}
+                      disabled={!bank}
+                      onPress={() => {
+                        setFrom(bank.id);
+                        setTo(w.id);
+                      }}
+                    />
+                    <Button
+                      title="Withdraw to bank"
+                      disabled={!bank}
+                      onPress={() => {
+                        setFrom(w.id);
+                        setTo(bank.id);
+                      }}
+                    />
+                  </View>
+                );
+              })}
             <Text>From account</Text>
             <Choices items={spendable} value={from} onChange={setFrom} />
             <Text>To account</Text>
@@ -142,9 +167,16 @@ export default function ToolsScreen({ navigation, route }) {
                     destination = accounts.find((a) => String(a.id) === String(to));
                   if (!value || !source || !destination || String(from) === String(to))
                     throw new Error('Choose different accounts and a valid amount');
+                  const walletKind =
+                    destination.type === 'Wallet'
+                      ? 'wallet_topup'
+                      : source.type === 'Wallet'
+                        ? 'wallet_withdraw'
+                        : null;
                   await add({
                     id: `transfer_${Date.now()}`,
                     type: 'transfer',
+                    ...(walletKind ? { transferKind: walletKind, source: 'manual' } : {}),
                     title: `${source.name} → ${destination.name}`,
                     category: 'Transfer',
                     amount: value,
