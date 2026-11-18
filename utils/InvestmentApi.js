@@ -1,4 +1,4 @@
-import { fetchCachedJson } from './PriceCache';
+import { fetchCachedJson, fetchCachedJsonMeta } from './PriceCache';
 // utils/InvestmentApi.js
 
 // 1. MUTUAL FUNDS (Existing)
@@ -24,7 +24,11 @@ export const fetchStockPrice = async (symbol) => {
   try {
     // Yahoo Finance V8 Endpoint (Free & Public)
     // Suffix .NS for NSE (e.g., RELIANCE.NS) or .BO for BSE
-    const json = await fetchCachedJson(
+    const {
+      data: json,
+      time,
+      stale,
+    } = await fetchCachedJsonMeta(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`
     );
 
@@ -39,6 +43,8 @@ export const fetchStockPrice = async (symbol) => {
         price: parseFloat(price),
         change: parseFloat(price - prevClose),
         changePercent: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0,
+        asOf: new Date(time).toISOString(),
+        stale,
       };
     }
     return null;

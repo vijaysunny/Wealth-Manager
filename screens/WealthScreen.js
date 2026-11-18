@@ -12,6 +12,7 @@ import { computeNetWorth, isWallet } from '../utils/BalanceService';
 import { computeReconcile } from '../utils/WalletReconcile';
 import { reconcileWallet } from '../utils/FeatureService';
 import { formatMoney } from '../utils/Format';
+import { priceStatusLabel } from '../utils/PriceStatus';
 
 export default function WealthScreen({ navigation }) {
   const [data, setData] = useState({ banks: [], pf: [], liabilities: [], investments: [] });
@@ -45,9 +46,15 @@ export default function WealthScreen({ navigation }) {
           }
 
           // 2. STOCKS & GOLD (Live Prices)
-          if ((acc.subType === 'Stocks / Equity' || acc.subType === 'Gold / Silver') && acc.symbol) {
+          if (
+            (acc.subType === 'Stocks / Equity' || acc.subType === 'Gold / Silver') &&
+            acc.symbol &&
+            !acc.priceOverride // B3: manual value pauses live updates
+          ) {
             const stockData = await fetchStockPrice(acc.symbol);
             if (stockData) {
+              acc.priceAsOf = stockData.asOf;
+              acc.priceStale = !!stockData.stale;
               const liveRate = stockData.price;
               let val = 0;
               if (acc.subType === 'Gold / Silver' && acc.goldType === 'Jewellery') {
@@ -128,6 +135,14 @@ export default function WealthScreen({ navigation }) {
       [
         { text: 'Update Balance', onPress: () => promptBalance(account) },
         { text: 'Change Type', onPress: () => promptType(account) },
+        ...(account.priceOverride
+          ? [
+              {
+                text: 'Resume live price',
+                onPress: () => updateAccount(account.id, { priceOverride: false }),
+              },
+            ]
+          : []),
         { text: 'Delete', style: 'destructive', onPress: () => deleteAccount(account) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -144,7 +159,10 @@ export default function WealthScreen({ navigation }) {
       Alert.alert('Invalid amount', 'Please enter a valid number.');
       return;
     }
-    updateAccount(balanceEdit.account.id, { balance: value });
+    updateAccount(balanceEdit.account.id, {
+      balance: value,
+      ...(balanceEdit.account.symbol ? { priceOverride: true } : {}),
+    });
     setBalanceEdit(null);
   };
   // A4.1: type the balance the UPI app shows; the gap becomes one entry (confirmed first)
@@ -253,6 +271,9 @@ export default function WealthScreen({ navigation }) {
               {item.provider ? ` • ${item.provider}` : ''}
               {item.linkedBankName ? ` • from ${item.linkedBankName}` : ''}
             </Text>
+          )}
+          {!!priceStatusLabel(item) && (
+            <Text style={{ fontSize: 11, color: '#E65100' }}>{priceStatusLabel(item)}</Text>
           )}
           {isWallet(item) && (
             <View style={{ flexDirection: 'row', marginTop: 4 }}>
