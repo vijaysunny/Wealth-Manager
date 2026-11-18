@@ -4,7 +4,8 @@ import { getAll, updateInDb, removeInDb, writeRow, moveBalances } from '../data/
 import { assignCapture, captureSignature, linkToCounter, newAccountId } from './AccountResolver';
 import { filterNew } from './DeduplicationEngine';
 import { validateBackup, BACKUP_FIELDS } from './BackupService';
-import { computeNetWorth, applyCapturedToAccounts } from './BalanceService';
+import { computeNetWorth, applyCapturedToAccounts, applyToAccounts } from './BalanceService';
+import { reconcileTransaction } from './WalletReconcile';
 export const bulkUpdate = (ids, changes) =>
   atomic(async (db) => {
     for (const id of ids) await updateInDb(db, id, changes);
@@ -175,4 +176,27 @@ export const mergeRestore = (data) =>
       );
     }
     return { added, skipped: (data.transactions || []).length - added };
+  });
+
+/**
+ * Reconcile a wallet to the balance the UPI app shows (A4.1). Atomic; idempotent per
+ * `requestId` (the dialog makes one id, so a double tap saves once); reversible by deleting
+ * the created entry. Returns { tx } or { tx: null } when there was no gap.
+ */
+export const reconcileWallet = (accountId, entered, { requestId, mode, category } = {}) =>
+  atomic(async (db) => {
+    if (!requestId) throw new Error('requestId required');
+    const id = `recon_${requestId}`;
+    const existing = await db.getFirstAsync('SELECT data FROM transactions WHERE id=?', id);
+    if (existing) return { tx: decodeRow(existing), repeated: true };
+    const accounts = await loadAccounts(db);
+    const account = accounts.find((a) => String(a.id) === String(accountId));
+    const tx = reconcileTransaction(account, entered, { id, mode, category });
+    if (!tx) return { tx: null };
+    const record = { ...tx, balanceMode: 'delta' };
+    if (record.type === 'transfer')
+      record.account = accounts.find((a) => String(a.id) === String(record.accountId))?.name || 'Bank';
+    await insertRow(db, record);
+    await moveBalances(db, () => applyToAccounts(accounts, record));
+    return { tx: record };
   });
