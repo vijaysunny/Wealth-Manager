@@ -25,5 +25,20 @@ test('safe on empty input', () => {
     channel: null,
     counterparty: null,
     availableLimit: null,
+    bankName: null,
+  });
+});
+
+test('wallet events carry provider, subtype and balance owner', () => {
+  const top = parseTransactionText(
+    'UPI LITE enabled on UPI App for A/c no. XX0973 with successful top-up of INR 500.00 on 07-11-26. Ref no. 0100710261640900 - Axis Bank'
+  );
+  expect(capturedFields(top)).toMatchObject({
+    bankName: 'Axis Bank',
+    transferKind: 'wallet_topup',
+    flow: 'out',
+    walletSubType: 'UPI Lite',
+    walletProvider: null,
+    balanceBelongsTo: 'bank',
   });
 });

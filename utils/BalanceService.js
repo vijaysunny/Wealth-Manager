@@ -26,7 +26,6 @@ export { WALLET_SUBTYPES } from './TransactionParser';
 /** True for wallet accounts (UPI Lite, Paytm Wallet, Amazon Pay, FASTag, other). */
 export const isWallet = (account) => !!account && account.type === 'Wallet';
 const LIABILITY_TYPES = ['Loan', 'Credit Card'];
-const GENERIC_ACCOUNT_NAMES = ['', 'cash', 'unknown', 'unknown bank', 'bank'];
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => {
@@ -68,7 +67,7 @@ export const computeNetWorth = (accounts = [], assets = []) => {
 
 /** Index of the account a transaction belongs to: by accountId, else by name. -1 if none. */
 export const findAccountIndex = (accounts, tx) => {
-  if (!tx) return -1;
+  if (!tx || tx.accountUnresolved) return -1; // capture waiting for the user to pick an account
   if (tx.accountId !== undefined && tx.accountId !== null) {
     const byId = accounts.findIndex(
       (a) => String(a.id) === String(tx.accountId) && SPENDABLE_TYPES.includes(a.type)
@@ -139,42 +138,39 @@ export const updateOnAccounts = (accounts, oldTx, newTx) =>
   applyToAccounts(reverseOnAccounts(accounts, oldTx), newTx);
 
 /**
- * Auto-captured transactions (SMS / Gmail scan). When the bank message carries
- * the running balance it is authoritative, so the account is SET to it; otherwise
- * the transaction is applied as a delta. Processed oldest → newest so the latest
- * balance wins. Unknown named banks get an account created.
+ * Auto-captured transactions (SMS / Gmail scan), processed oldest → newest.
+ *  - Unresolved captures (account not picked yet) move nothing.
+ *  - Every capture is applied as a delta (both legs for a linked transfer).
+ *  - When the SMS carries a running balance, the account that balance belongs to
+ *    (`balanceAccountId`, set by AccountResolver from balanceBelongsTo) is then SET to it,
+ *    so the latest bank balance wins. Credit cards are never set (the figure is a limit).
+ *    balanceBelongsTo 'unknown' → deltas only, nothing is overwritten.
+ *  - Accounts are never created here (B7): AccountResolver / the review queue decide.
+ * Legacy captures without `balanceAccountId` set the balance of their own account.
  */
 export const applyCapturedToAccounts = (accounts, txs) => {
   let next = accounts.slice();
   const ordered = [...txs].sort((a, b) => new Date(a.fullDate) - new Date(b.fullDate));
   ordered.forEach((tx) => {
-    const name = String(tx.account || '').trim();
-    const hasBalance = Number.isFinite(tx.extractedBalance);
-    let idx = findAccountIndex(next, tx);
-    if (idx === -1) {
-      if (GENERIC_ACCOUNT_NAMES.includes(name.toLowerCase())) return;
-      next = [
-        ...next,
-        {
-          id: Date.now() + Math.random(),
-          name,
-          type: 'Bank Account',
-          subType: 'Bank Account',
-          balance: hasBalance ? tx.extractedBalance : 0,
-        },
-      ];
-      return; // a brand-new account starts from the bank's balance (or 0), not a delta
+    if (!tx || tx.accountUnresolved) return;
+    const balIdx =
+      tx.balanceAccountId !== undefined && tx.balanceAccountId !== null
+        ? next.findIndex((a) => String(a.id) === String(tx.balanceAccountId))
+        : tx.type !== 'transfer' && tx.balanceBelongsTo !== 'unknown'
+          ? findAccountIndex(next, tx)
+          : -1;
+    try {
+      next = applyToAccounts(next, tx);
+    } catch {
+      return; // a linked account was deleted meanwhile: never let one row break a sync
     }
-    const acc = next[idx];
-    if (hasBalance && acc.type !== 'Credit Card') {
+    if (Number.isFinite(tx.extractedBalance) && balIdx > -1 && next[balIdx].type !== 'Credit Card') {
       next = next.slice();
-      next[idx] = {
-        ...acc,
+      next[balIdx] = {
+        ...next[balIdx],
         balance: round2(tx.extractedBalance),
         lastUpdated: new Date(tx.fullDate).toISOString(),
       };
-    } else {
-      next = applyToAccounts(next, tx);
     }
   });
   return next;

@@ -13,7 +13,14 @@ export const capturedFields = (parsed = {}) => {
     channel: parsed.channel || null,
     counterparty: parsed.counterparty || null,
     availableLimit: Number.isFinite(parsed.availableLimit) ? parsed.availableLimit : null,
+    // bank/app named in the message; `account` gets the resolved account's name later
+    bankName: parsed.bankName || null,
   };
+  if (parsed.walletEvent) {
+    out.walletProvider = parsed.provider || null;
+    out.walletSubType = parsed.subType || null;
+    out.balanceBelongsTo = parsed.balanceBelongsTo || 'unknown';
+  }
   if (parsed.type === 'transfer' && parsed.kind) {
     out.transferKind = parsed.kind;
     out.flow = parsed.flow;

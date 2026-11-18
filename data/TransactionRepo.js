@@ -4,6 +4,7 @@ import { readValue } from './Storage';
 import { checkBudgetAlerts } from '../utils/MonthlyBudgets';
 import { filterNew } from '../utils/DeduplicationEngine';
 import { applyToAccounts, reverseOnAccounts, applyCapturedToAccounts } from '../utils/BalanceService';
+import { resolveCaptures } from '../utils/AccountResolver';
 export const getAll = async () =>
   (await (await getDatabase()).getAllAsync('SELECT data FROM transactions ORDER BY fullDate DESC')).map(
     decodeRow
@@ -40,16 +41,21 @@ const persistMany = (transactions, { balanceMode = 'none', dedup = true } = {}) 
     );
     const current = (await db.getAllAsync('SELECT data FROM transactions')).map(decodeRow);
     const rejected = new Set(JSON.parse((await readValue(db, 'rejected_sources')) || '[]'));
-    const candidates = (dedup ? filterNew(transactions, current) : transactions).filter(
+    let candidates = (dedup ? filterNew(transactions, current) : transactions).filter(
       (tx) => !rejected.has(sourceId(tx))
     );
+    // Captures get their account BEFORE they are stored (A3/B7): matched, pick, or new-account review
+    let accounts = null;
+    if (balanceMode === 'captured') {
+      accounts = (await db.getAllAsync('SELECT data FROM accounts')).map((r) => JSON.parse(r.data));
+      ({ accounts, txs: candidates } = resolveCaptures(accounts, candidates));
+    }
     const addedTxs = [];
     for (const tx of candidates) {
       const record = { ...tx, balanceMode };
       if ((await insertRow(db, record)).changes === 1) addedTxs.push(record);
     }
-    if (balanceMode === 'captured')
-      await moveBalances(db, (accounts) => applyCapturedToAccounts(accounts, addedTxs));
+    if (balanceMode === 'captured') await moveBalances(db, () => applyCapturedToAccounts(accounts, addedTxs));
     if (balanceMode === 'delta')
       await moveBalances(db, (accounts) => addedTxs.reduce(applyToAccounts, accounts));
     return { added: addedTxs.length, skipped: transactions.length - addedTxs.length, addedTxs };

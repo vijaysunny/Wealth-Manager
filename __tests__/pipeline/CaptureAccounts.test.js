@@ -1,0 +1,210 @@
+/**
+ * Capture pipeline (plan A3, B7, A7): owner's real SMS → parser → repo (real SQLite
+ * adapter) → account resolution → balances.
+ */
+import Storage from '../../data/Storage';
+import { addMany, getAll, remove } from '../../data/TransactionRepo';
+import { rejectCapture } from '../../utils/FeatureService';
+import { parseTransactionText } from '../../utils/TransactionParser';
+import { capturedFields } from '../../utils/CaptureMapper';
+import { computeNetWorth } from '../../utils/BalanceService';
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
+jest.mock('../../utils/NotificationService', () => ({ sendTransactionNotification: jest.fn() }));
+
+const SMS = {
+  topup:
+    'UPI LITE enabled on UPI App for A/c no. XX0973 with successful top-up of INR 500.00 on 07-11-26 09:46:28 IST. Ref no. 01007102616409005179402498474608827 - Axis Bank',
+  imps178:
+    'Debit INR 178.00\nAxis Bank A/c XX0973\n16-11-26 13:45:25\nIMPS/P2A/632013023016/baja\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002',
+  axisCard:
+    'Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nSELVA KUMAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.',
+  sbiCard:
+    'Rs.143.00 spent on your SBI Credit Card ending 1987 at PRADHANMANTRIBHARTIYAJ on 08/11/26. Trxn. not done by you? Report at https://sbicard.com/Dispute',
+  sbiPay:
+    'We have received payment of Rs.5,770.00 via BBPS & the same has been credited to your SBI Credit Card. Your available limit is Rs.178,307.37.',
+  equitas:
+    'INR 96.00 debited via UPI from Equitas A/c 1246 -Ref:061704889746 on 08-08-25 to HARISH. Avl Bal is INR 581.65.Not U?Call 18001031222/SMS BLOCK UPI/BLOCK ACT 1246 to 7045030000.',
+  autopay:
+    'Your A/c has been debited towards Google for INR 1998.19 on 18-11-26. s2bvuWCARzH6xideZ5l7UafD6Ojf1KFE@apl - Axis Bank',
+  hdfc: 'Rs 25,000.00 credited to your A/c XX4321 on 01-Jan-24 by ACME Salary. Avl Bal Rs 30,000.00',
+};
+
+let seq = 0;
+const capture = (body, extra = {}, sender = '') => {
+  const p = parseTransactionText(body, { sender });
+  seq += 1;
+  return {
+    id: `t${seq}`,
+    smsId: `sms:TEST:${seq}`,
+    amount: p.amount,
+    type: p.type,
+    title: p.merchant || p.category,
+    merchant: p.merchant,
+    category: p.category,
+    account: p.bankName,
+    refNo: p.refNo,
+    fullDate: new Date(Date.UTC(2026, 10, 1, 4, 0, seq)).toISOString(),
+    extractedBalance: p.balance,
+    ...capturedFields(p),
+    ...extra,
+  };
+};
+const OWNER = () => [
+  { id: 'axis', name: 'Axis Bank', type: 'Bank Account', balance: 10000 },
+  { id: 'axiscc', name: 'Axis Card', type: 'Credit Card', balance: 1000 },
+  { id: 'sbicc', name: 'SBI Card', type: 'Credit Card', balance: 6000 },
+  { id: 'equitas', name: 'Equitas', type: 'Bank Account', balance: 700 },
+];
+const accounts = async () => JSON.parse(await Storage.getItem('user_wealth_accounts'));
+const byId = async (id) => (await accounts()).find((a) => a.id === id);
+const save = (txs) => addMany(txs, { balanceMode: 'captured' });
+
+beforeEach(async () => {
+  await Storage.clear();
+  await Storage.setItem('user_wealth_accounts', JSON.stringify(OWNER()));
+});
+
+describe('matching by type + bank + last-4', () => {
+  test('Axis savings matched and learns 0973; card spends never touch savings', async () => {
+    await save([capture(SMS.imps178), capture(SMS.axisCard), capture(SMS.sbiCard)]);
+    expect(await byId('axis')).toMatchObject({ balance: 9822, last4: '0973' });
+    expect(await byId('axiscc')).toMatchObject({ balance: 1121, last4: '9070' });
+    expect(await byId('sbicc')).toMatchObject({ balance: 6143, last4: '1987' });
+    const rows = await getAll();
+    expect(rows.every((t) => t.accountId && !t.accountUnresolved)).toBe(true);
+  });
+  test('Equitas (owner account) balance is SET from the SMS', async () => {
+    await save([capture(SMS.equitas)]);
+    expect((await byId('equitas')).balance).toBe(581.65);
+  });
+  test('card payment lowers SBI card debt; no fake income', async () => {
+    await save([capture(SMS.sbiPay)]);
+    expect((await byId('sbicc')).balance).toBe(230);
+    expect((await getAll())[0]).toMatchObject({
+      type: 'transfer',
+      transferKind: 'cc_payment',
+      accountId: 'sbicc',
+    });
+  });
+});
+
+describe('B7: no junk accounts; ambiguity goes to review (A7.4)', () => {
+  test('unknown bank → new_account review with a suggestion; nothing created or moved', async () => {
+    await save([capture(SMS.hdfc, {}, 'AD-HDFCBK')]);
+    expect(await accounts()).toEqual(OWNER());
+    expect((await getAll())[0]).toMatchObject({
+      accountUnresolved: true,
+      reviewReason: 'new_account',
+      reviewStatus: 'pending',
+      suggestedAccount: { name: 'HDFC Bank ••4321', type: 'Bank Account', last4: '4321' },
+    });
+  });
+  test('two Axis savings accounts and an SMS without digits → pick_account, no guess', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([...OWNER(), { id: 'axis2', name: 'Axis Salary', type: 'Bank Account', balance: 50 }])
+    );
+    await save([capture(SMS.autopay)]);
+    const tx = (await getAll())[0];
+    expect(tx).toMatchObject({ accountUnresolved: true, reviewReason: 'pick_account' });
+    expect(tx.accountCandidates.sort()).toEqual(['axis', 'axis2']);
+    expect((await byId('axis')).balance).toBe(10000);
+    expect((await byId('axis2')).balance).toBe(50);
+  });
+  test('…but once Axis savings knows 0973, a digits SMS goes straight to it', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([
+        ...OWNER().map((a) => (a.id === 'axis' ? { ...a, last4: '0973' } : a)),
+        { id: 'axis2', name: 'Axis Salary', type: 'Bank Account', last4: '5555', balance: 50 },
+      ])
+    );
+    await save([capture(SMS.imps178)]);
+    expect((await byId('axis')).balance).toBe(9822);
+  });
+  test('a card SMS never matches a same-bank savings account', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([{ id: 'sbisav', name: 'SBI', type: 'Bank Account', balance: 100 }])
+    );
+    await save([capture(SMS.sbiCard)]);
+    expect((await getAll())[0].reviewReason).toBe('new_account');
+    expect((await byId('sbisav')).balance).toBe(100);
+  });
+});
+
+describe('UPI Lite top-up (A3, A7)', () => {
+  test('wallet created on first top-up, linked, both legs move, net worth unchanged (A7.1, A7.13)', async () => {
+    const before = computeNetWorth(await accounts()).netWorth;
+    await save([capture(SMS.topup)]);
+    const all = await accounts();
+    const wallet = all.find((a) => a.type === 'Wallet');
+    expect(wallet).toMatchObject({
+      name: 'UPI Lite',
+      subType: 'UPI Lite',
+      linkedBankId: 'axis',
+      balance: 500,
+    });
+    expect((await byId('axis')).balance).toBe(9500);
+    expect(computeNetWorth(all).netWorth).toBe(before);
+    expect((await getAll())[0]).toMatchObject({
+      type: 'transfer',
+      transferKind: 'wallet_topup',
+      accountId: 'axis',
+      toAccountId: wallet.id,
+      reviewReason: 'new_wallet',
+      reviewStatus: 'pending',
+    });
+  });
+  test('same SMS twice (listener + inbox scan) → one transfer (A7.2)', async () => {
+    const tx = capture(SMS.topup);
+    await save([tx]);
+    await save([{ ...tx, id: 'other-id' }]);
+    expect(await getAll()).toHaveLength(1);
+    expect((await byId('axis')).balance).toBe(9500);
+  });
+  test('two same-amount top-ups on one day → two transfers, one wallet (A7.5)', async () => {
+    await save([capture(SMS.topup), capture(SMS.topup.replace('09:46:28', '18:01:02'), { refNo: 'R2' })]);
+    expect(await getAll()).toHaveLength(2);
+    const wallets = (await accounts()).filter((a) => a.type === 'Wallet');
+    expect(wallets).toHaveLength(1);
+    expect(wallets[0].balance).toBe(1000);
+    expect((await byId('axis')).balance).toBe(9000);
+  });
+  test('existing wallet is reused, not duplicated', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([
+        ...OWNER(),
+        {
+          id: 'lite',
+          name: 'PhonePe UPI Lite',
+          type: 'Wallet',
+          subType: 'UPI Lite',
+          provider: 'PhonePe',
+          balance: 20,
+        },
+      ])
+    );
+    await save([capture(SMS.topup)]);
+    expect((await accounts()).filter((a) => a.type === 'Wallet')).toHaveLength(1);
+    expect((await byId('lite')).balance).toBe(520);
+  });
+  test('deleting the transfer restores both balances (A7.11)', async () => {
+    await save([capture(SMS.topup)]);
+    await remove((await getAll())[0].id);
+    expect((await byId('axis')).balance).toBe(10000);
+    expect((await accounts()).find((a) => a.type === 'Wallet').balance).toBe(0);
+  });
+  test('rejecting the capture keeps it from coming back on re-scan', async () => {
+    const tx = capture(SMS.topup);
+    await save([tx]);
+    await rejectCapture(tx.id);
+    await save([{ ...tx, id: 'rescan' }]);
+    expect(await getAll()).toHaveLength(0);
+    expect((await byId('axis')).balance).toBe(10000);
+  });
+});

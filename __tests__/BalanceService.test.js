@@ -98,13 +98,18 @@ describe('auto-captured transactions', () => {
     ]);
     expect(bal(a, 'Amex')).toBe(2100);
   });
-  test('unknown bank creates an account; generic names do not', () => {
+  test('B7: an unknown bank never auto-creates an account (AccountResolver sends it to review)', () => {
     const a = applyCapturedToAccounts(accts(), [
       sms('2024-01-01T10:00:00Z', { account: 'Axis Bank', extractedBalance: 4000 }),
       sms('2024-01-01T11:00:00Z', { account: 'Unknown Bank' }),
     ]);
-    expect(a).toHaveLength(5);
-    expect(bal(a, 'Axis Bank')).toBe(4000);
+    expect(a).toEqual(accts());
+  });
+  test('an unresolved capture moves nothing, even if its name matches an account', () => {
+    const a = applyCapturedToAccounts(accts(), [
+      sms('2024-01-01T10:00:00Z', { account: 'HDFC Bank', accountUnresolved: true, extractedBalance: 1 }),
+    ]);
+    expect(a).toEqual(accts());
   });
 });
 
