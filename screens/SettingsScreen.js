@@ -30,6 +30,7 @@ import {
   syncGmailTransactions,
 } from '../utils/GmailTracker';
 import { isGmailEnabled } from '../utils/Features';
+import { LAST_BACKUP_KEY } from '../utils/BackupReminder';
 const DEFAULT_CATS = [
   'Food',
   'Transport',
@@ -259,7 +260,19 @@ export default function SettingsScreen({ navigation }) {
       const data = await buildBackup();
       const uri = FileSystem.documentDirectory + 'wealthmanager_backup.json';
       await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2));
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+      // B2: the file must leave the app sandbox (uninstall deletes documentDirectory)
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert(
+          'Backup not shared',
+          'Sharing is not available, so the backup is only inside the app and will be lost if the app is removed.'
+        );
+        return;
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/json',
+        dialogTitle: 'Save WealthManager backup',
+      });
+      await AsyncStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
     } catch (_e) {
       Alert.alert('Backup Error', _e.message);
     }

@@ -19,6 +19,7 @@ import { getCategoryIcon } from '../utils/icons';
 import { saveWithDedup, createDedupIndex } from '../utils/DeduplicationEngine';
 import { computeNetWorth, isReportable } from '../utils/BalanceService';
 import { shiftMonth } from '../utils/Format';
+import { backupStatus, LAST_BACKUP_KEY } from '../utils/BackupReminder';
 export default function HomeScreen({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
@@ -32,6 +33,7 @@ export default function HomeScreen({ navigation }) {
   const [scannedTransactions, setScannedTransactions] = useState([]);
   const [userName, setUserName] = useState('');
   const [netWorth, setNetWorth] = useState(0);
+  const [backup, setBackup] = useState(null);
   const changeMonth = (direction) => {
     setCurrentDate(shiftMonth(currentDate, direction));
   };
@@ -130,6 +132,7 @@ export default function HomeScreen({ navigation }) {
     [currentDate]
   );
   const loadData = useCallback(async () => {
+    setBackup(backupStatus(await AsyncStorage.getItem(LAST_BACKUP_KEY)));
     const name = await AsyncStorage.getItem('user_name');
     if (name) setUserName(name);
     const txJson = JSON.stringify(await getAll());
@@ -153,6 +156,16 @@ export default function HomeScreen({ navigation }) {
           paddingBottom: 20,
         }}
       >
+        {backup?.stale && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('SettingsTab')}
+            style={{ backgroundColor: '#FFF3E0', margin: 12, padding: 10, borderRadius: 8 }}
+          >
+            <Text style={{ color: '#E65100' }}>
+              {backup.label}. Back up now (Settings → Backup) - data lives only on this phone.
+            </Text>
+          </TouchableOpacity>
+        )}
         {/* Header */}
         <View style={styles.header}>
           <View>
