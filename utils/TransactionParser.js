@@ -11,29 +11,44 @@
 // ── Regexes ───────────────────────────────────────────────────────────────
 
 const AMOUNT_G = /(?:Rs\.?|INR|₹)\s*\.?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/gi;
-const BALANCE_RE = /(?:avl\.?\s*|avbl\.?\s*|available\s*)?bal(?:ance)?\.?[:\s]*(?:is\s*)?(?:rs\.?|inr|₹)?\s*\.?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
+const BALANCE_RE =
+  /(?:avl\.?\s*|avbl\.?\s*|available\s*)?bal(?:ance)?\.?[:\s]*(?:is\s*)?(?:rs\.?|inr|₹)?\s*\.?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
 // Text just before an amount that marks it as a balance/limit, not the transaction
 const NOT_TXN_AMOUNT_BEFORE = /(?:bal(?:ance)?|limit|avl|avbl|available)[:\s.]*(?:is\s*)?$/i;
 
 // Words that make a message look like a transaction at all
-const TXN_WORD_RE = /\b(debited|credited|debit|credit|sent|paid|spent|received|withdrawn|withdrawal|deposited|transfer|transferred|purchase|used at|txn|transaction|refund|cashback)\b/i;
+const TXN_WORD_RE =
+  /\b(debited|credited|debit|credit|sent|paid|spent|received|withdrawn|withdrawal|deposited|transfer|transferred|purchase|used at|txn|transaction|refund|cashback)\b/i;
 
 // Messages that are NOT transactions (OTPs, reminders, failures, promos)
 const IGNORE_RE = new RegExp(
   [
-    '\\botp\\b', 'one[- ]time password', '\\blogin\\b', '\\bverif(?:y|ication)\\b',
-    '\\bpin\\b', '\\bcvv\\b', '\\bpassword\\b',
-    'will be (?:debited|credited|deducted)', 'request(?:ed)? received',
-    '\\bfailed\\b', '\\bdeclined\\b', 'payment due', '\\bdue (?:date|on|by|amount)\\b',
-    'min(?:imum)? (?:amount )?due', '\\breminder\\b', '\\breward points?\\b',
-    '\\boffer\\b', '\\bexpires?\\b',
+    '\\botp\\b',
+    'one[- ]time password',
+    '\\blogin\\b',
+    '\\bverif(?:y|ication)\\b',
+    '\\bpin\\b',
+    '\\bcvv\\b',
+    '\\bpassword\\b',
+    'will be (?:debited|credited|deducted)',
+    'request(?:ed)? received',
+    '\\bfailed\\b',
+    '\\bdeclined\\b',
+    'payment due',
+    '\\bdue (?:date|on|by|amount)\\b',
+    'min(?:imum)? (?:amount )?due',
+    '\\breminder\\b',
+    '\\breward points?\\b',
+    '\\boffer\\b',
+    '\\bexpires?\\b',
   ].join('|'),
   'i'
 );
 
 // Direction words. Whichever appears FIRST in the text decides the direction, so
 // "Rs 500 debited ... Info: XYZ credited" is an expense, not income.
-const DEBIT_WORDS = /\b(debited|debit(?!\s*card)|spent|paid|sent|withdrawn|withdrawal|purchase|used at|deducted)\b/i;
+const DEBIT_WORDS =
+  /\b(debited|debit(?!\s*card)|spent|paid|sent|withdrawn|withdrawal|purchase|used at|deducted)\b/i;
 const CREDIT_WORDS = /\b(credited|received|deposited|refund(?:ed)?|cashback|added to)\b/i;
 
 // ── Amount / balance ──────────────────────────────────────────────────────
@@ -91,11 +106,58 @@ const BANKS = [
 
 // Tokens found in Indian bank / UPI / wallet sender IDs (e.g. "AX-HDFCBK", "VM-SBIUPI", "JD-ICICIT-S")
 const SENDER_TOKENS = [
-  'HDFC', 'SBI', 'ICICI', 'AXIS', 'KOTAK', 'BOB', 'BARODA', 'PNB', 'IDFC', 'YESBNK', 'YESBANK',
-  'INDUS', 'FEDBK', 'FEDERAL', 'CNRB', 'CANARA', 'UNION', 'UBOI', 'BOI', 'CENTBK', 'IOB', 'UCOBNK',
-  'PAYTM', 'PYTM', 'AIRTEL', 'AMZN', 'AMAZON', 'PHONEPE', 'GPAY', 'CRED', 'MOBIKW', 'JUPITR', 'JUPITER',
-  'RBL', 'AUBANK', 'AUSFB', 'EQUITAS', 'BANDHAN', 'KVB', 'SIB', 'DBS', 'HSBC', 'SCBANK', 'CITI', 'AMEX',
-  'UPI', 'BANK', 'BNK', 'CARD', 'WALLET', 'NPCI', 'BHIM',
+  'HDFC',
+  'SBI',
+  'ICICI',
+  'AXIS',
+  'KOTAK',
+  'BOB',
+  'BARODA',
+  'PNB',
+  'IDFC',
+  'YESBNK',
+  'YESBANK',
+  'INDUS',
+  'FEDBK',
+  'FEDERAL',
+  'CNRB',
+  'CANARA',
+  'UNION',
+  'UBOI',
+  'BOI',
+  'CENTBK',
+  'IOB',
+  'UCOBNK',
+  'PAYTM',
+  'PYTM',
+  'AIRTEL',
+  'AMZN',
+  'AMAZON',
+  'PHONEPE',
+  'GPAY',
+  'CRED',
+  'MOBIKW',
+  'JUPITR',
+  'JUPITER',
+  'RBL',
+  'AUBANK',
+  'AUSFB',
+  'EQUITAS',
+  'BANDHAN',
+  'KVB',
+  'SIB',
+  'DBS',
+  'HSBC',
+  'SCBANK',
+  'CITI',
+  'AMEX',
+  'UPI',
+  'BANK',
+  'BNK',
+  'CARD',
+  'WALLET',
+  'NPCI',
+  'BHIM',
 ];
 
 /**
@@ -106,12 +168,14 @@ const SENDER_TOKENS = [
  *  - a plain phone number / short numeric code      → no (personal chats are never scanned)
  */
 export const isTransactionalSender = (address = '') => {
-  const a = String(address || '').trim().toUpperCase();
+  const a = String(address || '')
+    .trim()
+    .toUpperCase();
   if (!a) return false;
-  if (/^\+?[0-9][0-9\s-]*$/.test(a)) return false;       // numeric sender
-  const core = a.replace(/^[A-Z]{2}-/, '');               // strip operator/circle prefix "AX-"
-  if (SENDER_TOKENS.some(tok => core.includes(tok))) return true;
-  return /[A-Z]/.test(core);                              // any other alphanumeric header
+  if (/^\+?[0-9][0-9\s-]*$/.test(a)) return false; // numeric sender
+  const core = a.replace(/^[A-Z]{2}-/, ''); // strip operator/circle prefix "AX-"
+  if (SENDER_TOKENS.some((tok) => core.includes(tok))) return true;
+  return /[A-Z]/.test(core); // any other alphanumeric header
 };
 
 /** Known bank/app name found in sender + body, or null. */
@@ -145,11 +209,23 @@ export const detectDirection = (text = '') => {
 // ── Category guessing ─────────────────────────────────────────────────────
 
 const CATEGORY_RULES = [
-  ['Food', /zomato|swiggy|dominos|pizza|burger|restaurant|\bfood\b|\bcafe\b|\bkfc\b|\bmcd\b|mcdonald|blinkit|zepto|grofer|dunzo|bigbasket/i],
-  ['Transport', /\buber\b|\bola\b|rapido|\bfuel\b|petrol|diesel|\bmetro\b|irctc|railway|\bcab\b|\bauto\b|\btoll\b|fastag/i],
+  [
+    'Food',
+    /zomato|swiggy|dominos|pizza|burger|restaurant|\bfood\b|\bcafe\b|\bkfc\b|\bmcd\b|mcdonald|blinkit|zepto|grofer|dunzo|bigbasket/i,
+  ],
+  [
+    'Transport',
+    /\buber\b|\bola\b|rapido|\bfuel\b|petrol|diesel|\bmetro\b|irctc|railway|\bcab\b|\bauto\b|\btoll\b|fastag/i,
+  ],
   ['Shopping', /amazon|flipkart|myntra|ajio|nykaa|meesho|dmart|\bmart\b|\bstore\b|\bshop\b|retail/i],
-  ['Bills', /\bjio\b|airtel|\bvi\b|bsnl|electricity|\bwater\b|\bgas\b|\bbill\b|recharge|netflix|spotify|hotstar|\bprime\b|\bdth\b|broadband|tatasky/i],
-  ['Investment', /zerodha|groww|\bmf\b|\bsip\b|\bstocks?\b|mutual fund|upstox|angel|smallcase|demat|\bnse\b|\bbse\b/i],
+  [
+    'Bills',
+    /\bjio\b|airtel|\bvi\b|bsnl|electricity|\bwater\b|\bgas\b|\bbill\b|recharge|netflix|spotify|hotstar|\bprime\b|\bdth\b|broadband|tatasky/i,
+  ],
+  [
+    'Investment',
+    /zerodha|groww|\bmf\b|\bsip\b|\bstocks?\b|mutual fund|upstox|angel|smallcase|demat|\bnse\b|\bbse\b/i,
+  ],
   ['Salary', /salary|sal cr|payroll|stipend|pay credit/i],
   ['Health', /hospital|pharmacy|medical|doctor|clinic|apollo|netmeds|\b1mg\b|medplus|practo|\bhealth\b/i],
   ['Loan/EMI', /\bemi\b|loan repay|home loan|car loan|personal loan/i],
@@ -172,7 +248,8 @@ export const guessCategory = (text = '') => {
  * Used by the dedup engine to match the same payment across SMS, Gmail and
  * statements. Returns null when no reliable reference is present.
  */
-const REF_LABELLED_RE = /(?:\bupi(?:\s*ref(?:erence)?)?|\bref(?:erence)?(?:\s*(?:no|number|num|id))?|\brrn|\butr|\btxn\s*(?:id|no)|\btransaction\s*(?:id|no))\s*[:.#\-/]*\s*([A-Za-z]*\d{6,22})/i;
+const REF_LABELLED_RE =
+  /(?:\bupi(?:\s*ref(?:erence)?)?|\bref(?:erence)?(?:\s*(?:no|number|num|id))?|\brrn|\butr|\btxn\s*(?:id|no)|\btransaction\s*(?:id|no))\s*[:.#\-/]*\s*([A-Za-z]*\d{6,22})/i;
 const REF_BARE_RE = /\b(\d{12})\b/;
 export const extractRefNo = (text = '') => {
   const m = String(text).match(REF_LABELLED_RE) || String(text).match(REF_BARE_RE);
@@ -180,7 +257,9 @@ export const extractRefNo = (text = '') => {
 };
 // Statement "Ref No" cells: keep only values long enough to be a real reference
 const normRef = (v) => {
-  const r = String(v || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const r = String(v || '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase();
   return r.length >= 6 ? r : null;
 };
 
@@ -190,10 +269,15 @@ const normRef = (v) => {
  * @param {{sender?: string, bankFallback?: string}} opts
  * @returns {{amount:number,type:'income'|'expense',category:string,bankName:string,balance:number|null,accountType:string,refNo:string|null}|null}
  */
-export const extractMerchant = (text='') => {
-  const vpa=String(text).match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
-  const merchant=String(text).match(/(?:paid to|sent to|received from|at|to)\s+([a-z][a-z0-9 .&_-]{1,60}?)(?=\s+(?:on|via|using|ref|upi|avl|available|bal|from|for)\b|[.;]|$)/i)?.[1]?.trim() || vpa;
-  return {merchant,vpa};
+export const extractMerchant = (text = '') => {
+  const vpa = String(text).match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
+  const merchant =
+    String(text)
+      .match(
+        /(?:paid to|sent to|received from|at|to)\s+([a-z][a-z0-9 .&_-]{1,60}?)(?=\s+(?:on|via|using|ref|upi|avl|available|bal|from|for)\b|[.;]|$)/i
+      )?.[1]
+      ?.trim() || vpa;
+  return { merchant, vpa };
 };
 export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknown Bank' } = {}) => {
   if (!body) return null;
@@ -217,8 +301,22 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
 
 // ── Dates & amounts (statements) ──────────────────────────────────────────
 
-const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
-const MONTH_NAMES = 'Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?';
+const MONTHS = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+const MONTH_NAMES =
+  'Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?';
 
 const fullYear = (y) => (String(y).length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10));
 const mkDate = (y, m, d) => {
@@ -238,7 +336,8 @@ export const parseDate = (val) => {
   // YYYY-MM-DD
   if ((m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/))) return mkDate(+m[1], +m[2] - 1, +m[3]);
   // DD/MM/YYYY, DD-MM-YY
-  if ((m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})\b/))) return mkDate(fullYear(m[3]), +m[2] - 1, +m[1]);
+  if ((m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})\b/)))
+    return mkDate(fullYear(m[3]), +m[2] - 1, +m[1]);
   // 05 Jan 2024, 05-Jan-24, 5 January, 2024
   if ((m = s.match(new RegExp(`^(\\d{1,2})[ \\-/.]*(${MONTH_NAMES})[a-z]*[ \\-/.,]*(\\d{2,4})\\b`, 'i')))) {
     return mkDate(fullYear(m[3]), MONTHS[m[2].slice(0, 3).toLowerCase()], +m[1]);
@@ -261,13 +360,16 @@ const fmtDate = (d) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 's
 // Checked in this order; a header cell is assigned to the FIRST key it matches.
 // Word boundaries matter: "Description" must not match "cr", "Details" not "dt".
 const HEADER_PATTERNS = [
-  ['drCr',      /^(dr\s*[\/.]?\s*cr|cr\s*[\/.]?\s*dr|debit\s*[\/.]?\s*credit|credit\s*[\/.]?\s*debit|(?:txn|transaction)\s*type|type)\.?$/i],
-  ['date',      /\b(date|dt)\b/i],
-  ['refNo',     /\b(ref(?:erence)?|utr|cheque|chq|txn\s*id|transaction\s*id)\b/i],
-  ['balance',   /\b(balance|bal|closing)\b/i],
-  ['debit',     /\b(debits?|dr|withdrawals?|withdrawl|paid\s*out|money\s*out)\b/i],
-  ['credit',    /\b(credits?|cr|deposits?|received|paid\s*in|money\s*in)\b/i],
-  ['amount',    /^(?:transaction\s*|txn\s*)?(?:amount|amt)(?:\s*\(.*\))?\.?$/i],
+  [
+    'drCr',
+    /^(dr\s*[\/.]?\s*cr|cr\s*[\/.]?\s*dr|debit\s*[\/.]?\s*credit|credit\s*[\/.]?\s*debit|(?:txn|transaction)\s*type|type)\.?$/i,
+  ],
+  ['date', /\b(date|dt)\b/i],
+  ['refNo', /\b(ref(?:erence)?|utr|cheque|chq|txn\s*id|transaction\s*id)\b/i],
+  ['balance', /\b(balance|bal|closing)\b/i],
+  ['debit', /\b(debits?|dr|withdrawals?|withdrawl|paid\s*out|money\s*out)\b/i],
+  ['credit', /\b(credits?|cr|deposits?|received|paid\s*in|money\s*in)\b/i],
+  ['amount', /^(?:transaction\s*|txn\s*)?(?:amount|amt)(?:\s*\(.*\))?\.?$/i],
   ['narration', /\b(narration|description|particulars|details|remarks|merchant|note)\b/i],
 ];
 
@@ -308,24 +410,30 @@ export const parseStatementRows = (rawRows, bankHint = '') => {
   // Header row = first row (within 30) that yields a usable column map
   let headerIdx = -1;
   for (let i = 0; i < Math.min(rawRows.length, 30); i++) {
-    if (hasUsableColumns(detectColumns(rawRows[i] || []))) { headerIdx = i; break; }
+    if (hasUsableColumns(detectColumns(rawRows[i] || []))) {
+      headerIdx = i;
+      break;
+    }
   }
   if (headerIdx === -1) {
     // Fallback: first row with >= 3 non-empty cells
     headerIdx = 0;
     for (let i = 0; i < Math.min(rawRows.length, 15); i++) {
-      const nonEmpty = (rawRows[i] || []).filter(c => c && String(c).trim()).length;
-      if (nonEmpty >= 3) { headerIdx = i; break; }
+      const nonEmpty = (rawRows[i] || []).filter((c) => c && String(c).trim()).length;
+      if (nonEmpty >= 3) {
+        headerIdx = i;
+        break;
+      }
     }
   }
 
-  const headers = (rawRows[headerIdx] || []).map(h => String(h || '').trim());
+  const headers = (rawRows[headerIdx] || []).map((h) => String(h || '').trim());
   const cols = detectColumns(headers);
   const transactions = [];
 
   for (let i = headerIdx + 1; i < rawRows.length; i++) {
     const row = rawRows[i];
-    if (!row || row.every(c => !c || String(c).trim() === '')) continue;
+    if (!row || row.every((c) => !c || String(c).trim() === '')) continue;
 
     const date = parseDate(cols.date !== undefined ? row[cols.date] : null);
     if (!date) continue;
@@ -337,8 +445,13 @@ export const parseStatementRows = (rawRows, bankHint = '') => {
     if (cols.debit !== undefined && cols.credit !== undefined) {
       const debit = parseAmount(row[cols.debit]);
       const credit = parseAmount(row[cols.credit]);
-      if (credit && credit > 0) { amount = credit; txType = 'income'; }
-      else if (debit && debit > 0) { amount = debit; txType = 'expense'; }
+      if (credit && credit > 0) {
+        amount = credit;
+        txType = 'income';
+      } else if (debit && debit > 0) {
+        amount = debit;
+        txType = 'expense';
+      }
     } else if (cols.amount !== undefined) {
       amount = parseAmount(row[cols.amount]);
       const drCrVal = cols.drCr !== undefined ? String(row[cols.drCr] || '') : '';
@@ -383,7 +496,10 @@ const PDF_AMOUNT_RE = /(?:Rs\.?|INR|₹)?\s*([0-9][0-9,]*\.[0-9]{2})\b/g;
  * in running balance versus the previous row, then narration keywords.
  */
 export const parsePdfText = (text, bankHint = '') => {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
   const transactions = [];
   let prevBalance = null;
 
@@ -401,7 +517,7 @@ export const parsePdfText = (text, bankHint = '') => {
 
     // Last amount is the running balance when the row has 2+ amounts
     const balance = amounts.length >= 2 ? amounts[amounts.length - 1] : null;
-    const amount = amounts.find(a => a > 0);
+    const amount = amounts.find((a) => a > 0);
     if (!amount) continue;
 
     let type = null;

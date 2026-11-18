@@ -1,6 +1,11 @@
 import {
-  applyToAccounts, reverseOnAccounts, updateOnAccounts, applyCapturedToAccounts,
-  computeNetWorth, isReportable, findAccountIndex,
+  applyToAccounts,
+  reverseOnAccounts,
+  updateOnAccounts,
+  applyCapturedToAccounts,
+  computeNetWorth,
+  isReportable,
+  findAccountIndex,
 } from '../utils/BalanceService';
 
 // babel-jest hoists this above the imports
@@ -14,7 +19,7 @@ const accts = () => [
   { id: 3, name: 'Cash', type: 'Cash', balance: 500 },
   { id: 4, name: 'Home Loan', type: 'Loan', balance: 900000 },
 ];
-const bal = (a, name) => a.find(x => x.name === name).balance;
+const bal = (a, name) => a.find((x) => x.name === name).balance;
 const tx = (o) => ({ id: 't1', amount: 300, type: 'expense', account: 'HDFC Bank', accountId: 1, ...o });
 
 describe('add / edit / delete returns balances to start (C9)', () => {
@@ -88,7 +93,9 @@ describe('auto-captured transactions', () => {
     expect(bal(applyCapturedToAccounts(accts(), [sms('2024-01-01T10:00:00Z', {})]), 'HDFC Bank')).toBe(9900);
   });
   test('credit card ignores extracted balance (it is usually the limit) and uses a delta', () => {
-    const a = applyCapturedToAccounts(accts(), [sms('2024-01-01T10:00:00Z', { account: 'Amex', extractedBalance: 50000 })]);
+    const a = applyCapturedToAccounts(accts(), [
+      sms('2024-01-01T10:00:00Z', { account: 'Amex', extractedBalance: 50000 }),
+    ]);
     expect(bal(a, 'Amex')).toBe(2100);
   });
   test('unknown bank creates an account; generic names do not', () => {
@@ -114,4 +121,3 @@ describe('net worth (C10) and report filter (C11)', () => {
     expect(isReportable(null)).toBe(false);
   });
 });
-

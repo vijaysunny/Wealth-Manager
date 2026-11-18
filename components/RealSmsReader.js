@@ -5,14 +5,16 @@ import { buildSmsId, hashText } from '../utils/DeduplicationEngine';
 import { collectPages } from '../utils/SmsScan';
 
 const PAGE_SIZE = 500;
-const MAX_MESSAGES = 10000;   // safety ceiling per scan (≈ years of inbox for a normal phone)
+const MAX_MESSAGES = 10000; // safety ceiling per scan (≈ years of inbox for a normal phone)
 
 /** Silent check, safe in headless/background tasks (never shows a dialog). */
 export const hasSmsPermission = async () => {
   if (Platform.OS !== 'android') return false;
   try {
     return await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 };
 
 /** Shows the system dialog. Call ONLY from UI code (Settings, onboarding, manual scan). */
@@ -25,7 +27,9 @@ export const requestSmsPermission = async () => {
       buttonPositive: 'OK',
     });
     return res === PermissionsAndroid.RESULTS.GRANTED;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 };
 
 const listPage = (minDate, indexFrom, count) =>
@@ -35,7 +39,11 @@ const listPage = (minDate, indexFrom, count) =>
       JSON.stringify(filter),
       (fail) => reject(new Error(String(fail))),
       (_count, smsList) => {
-        try { resolve(JSON.parse(smsList)); } catch (e) { reject(e); }
+        try {
+          resolve(JSON.parse(smsList));
+        } catch (e) {
+          reject(e);
+        }
       }
     );
   });
@@ -50,12 +58,12 @@ export const scanBankSms = async (minDate = 0) => {
   if (Platform.OS !== 'android') return { ok: false, reason: 'not_android', items: [] };
   if (!(await hasSmsPermission())) return { ok: false, reason: 'no_permission', items: [] };
   try {
-    const { messages, truncated } = await collectPages(
-      (from, count) => listPage(minDate, from, count),
-      { pageSize: PAGE_SIZE, maxTotal: MAX_MESSAGES }
-    );
+    const { messages, truncated } = await collectPages((from, count) => listPage(minDate, from, count), {
+      pageSize: PAGE_SIZE,
+      maxTotal: MAX_MESSAGES,
+    });
     if (truncated) console.log(`⚠️ SMS scan stopped at ${MAX_MESSAGES} messages`);
-    const relevant = messages.filter(m => isTransactionalSender(m.address));
+    const relevant = messages.filter((m) => isTransactionalSender(m.address));
     console.log(`📥 ${messages.length} SMS read, ${relevant.length} from bank-like senders`);
     return { ok: true, reason: null, items: parseData(relevant) };
   } catch (err) {
@@ -84,7 +92,9 @@ const parseData = (messages) => {
       sender: msg.address,
       amount: parsed.amount,
       type: parsed.type,
-      category: parsed.category, merchant: parsed.merchant, vpa: parsed.vpa,
+      category: parsed.category,
+      merchant: parsed.merchant,
+      vpa: parsed.vpa,
       bankName: parsed.bankName,
       currentBalance: parsed.balance,
       accountType: parsed.accountType,

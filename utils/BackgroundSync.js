@@ -13,7 +13,9 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
     console.log('🔄 Background Sync Running...');
     const res = await syncSms();
     console.log('Background Sync result:', res.status, res.added);
-    return res.status === 'error' ? BackgroundTask.BackgroundTaskResult.Failed : BackgroundTask.BackgroundTaskResult.Success;
+    return res.status === 'error'
+      ? BackgroundTask.BackgroundTaskResult.Failed
+      : BackgroundTask.BackgroundTaskResult.Success;
   } catch (error) {
     console.log('Background Task Error:', error);
     return BackgroundTask.BackgroundTaskResult.Failed;

@@ -1,6 +1,12 @@
 import AsyncStorage from '../data/Storage';
 import {
-  advanceDue, firstDueOnOrAfter, dueDatesUpTo, migrateEntry, initialNextDue, toKey, fromKey,
+  advanceDue,
+  firstDueOnOrAfter,
+  dueDatesUpTo,
+  migrateEntry,
+  initialNextDue,
+  toKey,
+  fromKey,
   processRecurringTransactions,
 } from '../utils/RecurringEngine';
 
@@ -17,7 +23,10 @@ describe('month-end clamping (C12)', () => {
   test('Jan 31 → Feb 28 → Mar 31 → Apr 30', () => {
     let due = d('2023-01-31');
     const seq = [];
-    for (let i = 0; i < 3; i++) { due = advanceDue(entry, due); seq.push(toKey(due)); }
+    for (let i = 0; i < 3; i++) {
+      due = advanceDue(entry, due);
+      seq.push(toKey(due));
+    }
     expect(seq).toEqual(['2023-02-28', '2023-03-31', '2023-04-30']);
   });
   test('leap year Feb 29, and Dec → Jan rollover', () => {
@@ -31,7 +40,9 @@ describe('month-end clamping (C12)', () => {
   });
   test('first due: day already passed this month rolls to next, clamped', () => {
     expect(toKey(firstDueOnOrAfter(entry, d('2023-02-10')))).toBe('2023-02-28');
-    expect(toKey(firstDueOnOrAfter({ frequency: 'Monthly', dayOfMonth: 5 }, d('2023-02-10')))).toBe('2023-03-05');
+    expect(toKey(firstDueOnOrAfter({ frequency: 'Monthly', dayOfMonth: 5 }, d('2023-02-10')))).toBe(
+      '2023-03-05'
+    );
   });
 });
 
@@ -64,18 +75,28 @@ describe('weekly weekday', () => {
     expect(toKey(firstDueOnOrAfter(entry, d('2024-03-06')))).toBe('2024-03-08'); // Wed → Fri
     expect(toKey(firstDueOnOrAfter(entry, d('2024-03-08')))).toBe('2024-03-08'); // already Fri
     const next = { ...entry, nextDue: '2024-03-08' };
-    expect(keys(dueDatesUpTo(next, d('2024-03-25')).dates)).toEqual(['2024-03-08', '2024-03-15', '2024-03-22']);
+    expect(keys(dueDatesUpTo(next, d('2024-03-25')).dates)).toEqual([
+      '2024-03-08',
+      '2024-03-15',
+      '2024-03-22',
+    ]);
   });
 });
 
 describe('migration of old entries', () => {
   const today = d('2024-03-20');
   test('derives nextDue from lastProcessed', () => {
-    const e = migrateEntry({ id: 1, frequency: 'Monthly', dayOfMonth: 15, lastProcessed: '2024-02-15T10:00:00Z' }, today);
+    const e = migrateEntry(
+      { id: 1, frequency: 'Monthly', dayOfMonth: 15, lastProcessed: '2024-02-15T10:00:00Z' },
+      today
+    );
     expect(e.nextDue).toBe('2024-03-15'); // after Feb 15 → March 15 is still owed
   });
   test('lastProcessed on the due day itself moves to next month', () => {
-    const e = migrateEntry({ id: 1, frequency: 'Monthly', dayOfMonth: 15, lastProcessed: '2024-03-15T10:00:00Z' }, today);
+    const e = migrateEntry(
+      { id: 1, frequency: 'Monthly', dayOfMonth: 15, lastProcessed: '2024-03-15T10:00:00Z' },
+      today
+    );
     expect(e.nextDue).toBe('2024-04-15');
   });
   test('weekly legacy entry keeps the weekday of its last run', () => {
@@ -102,11 +123,27 @@ describe('processRecurringTransactions end to end', () => {
   test('generates missed instances once, moves the balance, advances nextDue', async () => {
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth() - 2, 1, 12);
-    await AsyncStorage.setItem('user_wealth_accounts', JSON.stringify([{ id: 1, name: 'HDFC Bank', type: 'Bank Account', balance: 10000 }]));
-    await AsyncStorage.setItem('recurring_transactions', JSON.stringify([{
-      id: 77, title: 'Rent', amount: 1000, type: 'expense', frequency: 'Monthly', dayOfMonth: 1,
-      account: 'HDFC Bank', category: 'Bills', active: true, nextDue: toKey(start),
-    }]));
+    await AsyncStorage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([{ id: 1, name: 'HDFC Bank', type: 'Bank Account', balance: 10000 }])
+    );
+    await AsyncStorage.setItem(
+      'recurring_transactions',
+      JSON.stringify([
+        {
+          id: 77,
+          title: 'Rent',
+          amount: 1000,
+          type: 'expense',
+          frequency: 'Monthly',
+          dayOfMonth: 1,
+          account: 'HDFC Bank',
+          category: 'Bills',
+          active: true,
+          nextDue: toKey(start),
+        },
+      ])
+    );
 
     const first = await processRecurringTransactions();
     expect(first.processed).toBe(3); // 2 months ago, last month, this month (day 1 has passed or is today)
@@ -124,10 +161,20 @@ describe('processRecurringTransactions end to end', () => {
   });
 
   test('paused entries are skipped', async () => {
-    await AsyncStorage.setItem('recurring_transactions', JSON.stringify([{
-      id: 1, title: 'X', amount: 5, type: 'expense', frequency: 'Daily', active: false, nextDue: '2020-01-01',
-    }]));
+    await AsyncStorage.setItem(
+      'recurring_transactions',
+      JSON.stringify([
+        {
+          id: 1,
+          title: 'X',
+          amount: 5,
+          type: 'expense',
+          frequency: 'Daily',
+          active: false,
+          nextDue: '2020-01-01',
+        },
+      ])
+    );
     expect((await processRecurringTransactions()).processed).toBe(0);
   });
 });
-

@@ -1,26 +1,36 @@
 import Storage from '../data/Storage';
-const memory=new Map();
-const pending=new Map();
-const TTL=15*60*1000;
-export const fetchCachedJson=async url=>{
-  const now=Date.now();
-  const key='price_cache_'+encodeURIComponent(url);
-  let cached=memory.get(url);
-  if(!cached){try{cached=JSON.parse(await Storage.getItem(key)||'null');}catch{/* no cache */}}
-  if(cached&&now-cached.time<TTL)return cached.data;
-  if(pending.has(url))return pending.get(url);
-  const promise=(async()=>{
-    const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),10000);
-    try{
-      const response=await fetch(url,{signal:controller.signal});
-      if(!response.ok)throw new Error(`Price fetch ${response.status}`);
-      const data=await response.json();
-      const record={time:Date.now(),data};memory.set(url,record);
-      await Storage.setItem(key,JSON.stringify(record));
+const memory = new Map();
+const pending = new Map();
+const TTL = 15 * 60 * 1000;
+export const fetchCachedJson = async (url) => {
+  const now = Date.now();
+  const key = 'price_cache_' + encodeURIComponent(url);
+  let cached = memory.get(url);
+  if (!cached) {
+    try {
+      cached = JSON.parse((await Storage.getItem(key)) || 'null');
+    } catch {
+      /* no cache */
+    }
+  }
+  if (cached && now - cached.time < TTL) return cached.data;
+  if (pending.has(url)) return pending.get(url);
+  const promise = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`Price fetch ${response.status}`);
+      const data = await response.json();
+      const record = { time: Date.now(), data };
+      memory.set(url, record);
+      await Storage.setItem(key, JSON.stringify(record));
       return data;
-    }finally{clearTimeout(timer);pending.delete(url);}
+    } finally {
+      clearTimeout(timer);
+      pending.delete(url);
+    }
   })();
-  pending.set(url,promise);
+  pending.set(url, promise);
   return promise;
 };

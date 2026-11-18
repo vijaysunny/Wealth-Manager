@@ -1,13 +1,40 @@
-import { parseAmount, parseNonNegative, shiftMonth, isSameMonth, formatMoney, formatNumber, safePercent } from '../utils/Format';
+import {
+  parseAmount,
+  parseNonNegative,
+  shiftMonth,
+  isSameMonth,
+  formatMoney,
+  formatNumber,
+  safePercent,
+} from '../utils/Format';
 
 describe('parseAmount', () => {
   test.each([
-    ['1,200', 1200], ['₹1,20,000', 120000], ['Rs. 500', 500], ['  99.50 ', 99.5],
-    ['1,23,456.78', 123456.78], ['.5', 0.5], [250, 250],
+    ['1,200', 1200],
+    ['₹1,20,000', 120000],
+    ['Rs. 500', 500],
+    ['  99.50 ', 99.5],
+    ['1,23,456.78', 123456.78],
+    ['.5', 0.5],
+    [250, 250],
   ])('%p -> %p', (input, out) => expect(parseAmount(input)).toBe(out));
 
-  test.each([[''], ['   '], ['abc'], ['12abc'], ['0'], ['-5'], ['1.2.3'], [null], [undefined], [NaN], [0], [-1], ['--5'], ['1e5']])(
-    'rejects %p', (input) => expect(parseAmount(input)).toBeNull());
+  test.each([
+    [''],
+    ['   '],
+    ['abc'],
+    ['12abc'],
+    ['0'],
+    ['-5'],
+    ['1.2.3'],
+    [null],
+    [undefined],
+    [NaN],
+    [0],
+    [-1],
+    ['--5'],
+    ['1e5'],
+  ])('rejects %p', (input) => expect(parseAmount(input)).toBeNull());
 });
 
 describe('parseNonNegative', () => {
@@ -34,12 +61,18 @@ describe('shiftMonth', () => {
     expect(shiftMonth(new Date(2026, 0, 15), -1).getMonth()).toBe(11);
   });
   test('12 steps of -1 from Jan 31 visits every month once', () => {
-    let d = new Date(2026, 0, 31); const seen = [];
-    for (let i = 0; i < 12; i++) { d = shiftMonth(d, -1); seen.push(d.getMonth()); }
+    let d = new Date(2026, 0, 31);
+    const seen = [];
+    for (let i = 0; i < 12; i++) {
+      d = shiftMonth(d, -1);
+      seen.push(d.getMonth());
+    }
     expect(new Set(seen).size).toBe(12);
   });
   test('does not mutate input', () => {
-    const d = new Date(2026, 0, 31); shiftMonth(d, 1); expect(d.getDate()).toBe(31);
+    const d = new Date(2026, 0, 31);
+    shiftMonth(d, 1);
+    expect(d.getDate()).toBe(31);
   });
 });
 

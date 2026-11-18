@@ -19,20 +19,20 @@ import { parseStatementRows, parsePdfText } from './TransactionParser';
 const parseExcelBuffer = (buffer, bankHint = '') => {
   const wb = xlsxRead(buffer, {
     type: 'array',
-    cellDates: true
+    cellDates: true,
   });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rawRows = xlsxUtils.sheet_to_json(sheet, {
     header: 1,
     defval: '',
-    raw: false
+    raw: false,
   });
   return parseStatementRows(rawRows, bankHint);
 };
 
 // ── PDF.js HTML builder ───────────────────────────────────────────────────
 
-export const buildPdfParserHtml = base64 => `
+export const buildPdfParserHtml = (base64) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -98,14 +98,21 @@ export { parsePdfText };
 
 // ── File picker ───────────────────────────────────────────────────────────
 
-export const pickAndParseStatement = async onPdfPicked => {
+export const pickAndParseStatement = async (onPdfPicked) => {
   const result = await DocumentPicker.getDocumentAsync({
-    type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv', 'text/comma-separated-values'],
-    copyToCacheDirectory: true
+    type: [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'text/comma-separated-values',
+    ],
+    copyToCacheDirectory: true,
   });
-  if (result.canceled) return {
-    canceled: true
-  };
+  if (result.canceled)
+    return {
+      canceled: true,
+    };
   const asset = result.assets[0];
   const uri = asset.uri;
   const name = asset.name || uri.split('/').pop();
@@ -114,12 +121,12 @@ export const pickAndParseStatement = async onPdfPicked => {
   // PDF path
   if (ext === 'pdf') {
     const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64
+      encoding: FileSystem.EncodingType.Base64,
     });
     onPdfPicked(base64, uri);
     return {
       type: 'pdf',
-      canceled: false
+      canceled: false,
     };
   }
 
@@ -130,31 +137,31 @@ export const pickAndParseStatement = async onPdfPicked => {
     if (ext === 'csv') {
       const text = await FileSystem.readAsStringAsync(uri);
       const wb = xlsxRead(text, {
-        type: 'string'
+        type: 'string',
       });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = xlsxUtils.sheet_to_json(sheet, {
         header: 1,
-        defval: ''
+        defval: '',
       });
       buffer = xlsxUtils.aoa_to_sheet(rows);
       // Re-wrap in workbook
       const wb2 = {
         SheetNames: ['Sheet1'],
         Sheets: {
-          Sheet1: buffer
-        }
+          Sheet1: buffer,
+        },
       };
       const out = xlsxUtils.sheet_to_csv(wb2.Sheets.Sheet1);
       const transactions = parseExcelBuffer(new TextEncoder().encode(out).buffer, bankHint);
       return {
         type: 'excel',
         canceled: false,
-        transactions
+        transactions,
       };
     } else {
       const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64
+        encoding: FileSystem.EncodingType.Base64,
       });
       const binary = atob(base64);
       const bytes = new Uint8Array(binary.length);
@@ -163,7 +170,7 @@ export const pickAndParseStatement = async onPdfPicked => {
       return {
         type: 'excel',
         canceled: false,
-        transactions
+        transactions,
       };
     }
   } catch (err) {
@@ -171,7 +178,7 @@ export const pickAndParseStatement = async onPdfPicked => {
       type: 'excel',
       canceled: false,
       error: err.message,
-      transactions: []
+      transactions: [],
     };
   }
 };
@@ -197,8 +204,6 @@ const detectBankFromName = (name = '') => {
 // ── Save with dedup ───────────────────────────────────────────────────────
 
 export const saveStatementTransactions = async (transactions, options) => {
-  const {
-    saveWithDedup
-  } = await import('./DeduplicationEngine');
+  const { saveWithDedup } = await import('./DeduplicationEngine');
   return await saveWithDedup(transactions, options);
 };

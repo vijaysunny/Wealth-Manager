@@ -19,7 +19,7 @@ export const collectPages = async (fetchPage, { pageSize = 500, maxTotal = 10000
     const page = await fetchPage(index, want);
     if (!Array.isArray(page)) throw new Error('Invalid SMS page');
     messages.push(...page);
-    if (page.length < want) return { messages, truncated: false };   // last page
+    if (page.length < want) return { messages, truncated: false }; // last page
     index += page.length;
   }
   return { messages, truncated: true };

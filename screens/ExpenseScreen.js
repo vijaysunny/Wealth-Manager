@@ -11,23 +11,30 @@ import { add } from '../data/TransactionRepo';
 import { parseAmount } from '../utils/Format';
 
 // Simple Chip Component for selection
-const Chip = ({
-  label,
-  selected,
-  onPress,
-  color = '#2196F3'
-}) => <TouchableOpacity onPress={onPress} style={[styles.chip, selected && {
-  backgroundColor: color,
-  borderColor: color
-}]}>
-    <Text style={[styles.chipText, selected && {
-    color: '#fff'
-  }]}>{label}</Text>
-  </TouchableOpacity>;
-export default function ExpenseScreen({
-  navigation,
-  route
-}) {
+const Chip = ({ label, selected, onPress, color = '#2196F3' }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={[
+      styles.chip,
+      selected && {
+        backgroundColor: color,
+        borderColor: color,
+      },
+    ]}
+  >
+    <Text
+      style={[
+        styles.chipText,
+        selected && {
+          color: '#fff',
+        },
+      ]}
+    >
+      {label}
+    </Text>
+  </TouchableOpacity>
+);
+export default function ExpenseScreen({ navigation, route }) {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [date, setDate] = useState(new Date());
@@ -43,15 +50,15 @@ export default function ExpenseScreen({
   const handleSave = async () => {
     const val = parseAmount(amount);
     if (val === null) {
-      Alert.alert("Error", "Enter a valid amount greater than 0");
+      Alert.alert('Error', 'Enter a valid amount greater than 0');
       return;
     }
     if (!category) {
-      Alert.alert("Error", "Select a category");
+      Alert.alert('Error', 'Select a category');
       return;
     }
     if (!selectedAccount) {
-      Alert.alert("Error", "Select an Account");
+      Alert.alert('Error', 'Select an Account');
       return;
     }
 
@@ -64,14 +71,14 @@ export default function ExpenseScreen({
       date: date.toLocaleDateString('en-IN', {
         day: 'numeric',
         month: 'short',
-        year: 'numeric'
+        year: 'numeric',
       }),
       category: category,
       account: selectedAccount.name,
       accountId: selectedAccount.id,
       fullDate: date.toISOString(),
       // --- SAVE THE FLAG ---
-      excludeFromReports: excludeFromBudget // If true, this is just a transfer/adjustment
+      excludeFromReports: excludeFromBudget, // If true, this is just a transfer/adjustment
     };
     await add(newTx);
     navigation.goBack();
@@ -86,149 +93,190 @@ export default function ExpenseScreen({
     let accounts = accJson ? JSON.parse(accJson) : [];
 
     // Filter only "Spokable" accounts
-    const spendable = accounts.filter(a => ['Bank Account', 'Credit Card', 'Cash', 'Wallet'].includes(a.type));
+    const spendable = accounts.filter((a) =>
+      ['Bank Account', 'Credit Card', 'Cash', 'Wallet'].includes(a.type)
+    );
     if (spendable.length === 0) {
       spendable.push({
         name: 'Cash',
         type: 'Cash',
         id: 'default_cash',
-        balance: 0
+        balance: 0,
       });
     }
     if (!accounts.length) await putAccount(spendable[0]);
     setAvailableAccounts(spendable);
-    if (spendable.length > 0) setSelectedAccount(previous => previous || spendable[0]);
+    if (spendable.length > 0) setSelectedAccount((previous) => previous || spendable[0]);
 
     // Handle Prefill (from SMS Scan)
     if (route.params?.prefill) {
-      const {
-        amount,
-        category,
-        date,
-        accountName
-      } = route.params.prefill;
+      const { amount, category, date, accountName } = route.params.prefill;
       setAmount(amount);
       setCategory(category);
       if (date) setDate(new Date(date));
       if (accountName) {
-        const match = spendable.find(a => a.name.toLowerCase().includes(accountName.toLowerCase()));
+        const match = spendable.find((a) => a.name.toLowerCase().includes(accountName.toLowerCase()));
         if (match) setSelectedAccount(match);
       }
       navigation.setParams({
-        prefill: null
+        prefill: null,
       });
     }
   }, [navigation, route.params]);
-  useFocusEffect(useCallback(() => {
-    loadData();
-  }, [loadData]));
-  return <SafeAreaView style={styles.container}>
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+  return (
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-         <TouchableOpacity onPress={() => navigation.goBack()}><Ionicons name="close" size={28} /></TouchableOpacity>
-         <Text style={styles.title}>Add Expense</Text>
-         <View style={{
-        width: 28
-      }} /> 
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="close" size={28} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Add Expense</Text>
+        <View
+          style={{
+            width: 28,
+          }}
+        />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        
-       {/* AMOUNT INPUT */}
-<Text style={styles.label}>AMOUNT</Text>
-<View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20
-      }}>
-  <Text style={styles.currency}>₹ </Text>
-  <TextInput style={styles.amountInput} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0" placeholderTextColor="#ccc" autoFocus={true} // Optional: automatically opens keyboard
-        />
-</View>
+        {/* AMOUNT INPUT */}
+        <Text style={styles.label}>AMOUNT</Text>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}
+        >
+          <Text style={styles.currency}>₹ </Text>
+          <TextInput
+            style={styles.amountInput}
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="decimal-pad"
+            placeholder="0"
+            placeholderTextColor="#ccc"
+            autoFocus={true} // Optional: automatically opens keyboard
+          />
+        </View>
 
         {/* ACCOUNT SELECTOR */}
         <Text style={styles.label}>DEDUCT FROM</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrollRow}>
-          {availableAccounts.map((acc, i) => <Chip key={i} label={acc.name} selected={selectedAccount?.name === acc.name} onPress={() => setSelectedAccount(acc)} color="#F44336" />)}
+          {availableAccounts.map((acc, i) => (
+            <Chip
+              key={i}
+              label={acc.name}
+              selected={selectedAccount?.name === acc.name}
+              onPress={() => setSelectedAccount(acc)}
+              color="#F44336"
+            />
+          ))}
         </ScrollView>
 
         {/* CATEGORY SELECTOR */}
         <Text style={styles.label}>CATEGORY</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrollRow}>
-          {categoriesList.map((cat, i) => <Chip key={i} label={cat} selected={category === cat} onPress={() => setCategory(cat)} color="#555" />)}
+          {categoriesList.map((cat, i) => (
+            <Chip
+              key={i}
+              label={cat}
+              selected={category === cat}
+              onPress={() => setCategory(cat)}
+              color="#555"
+            />
+          ))}
         </ScrollView>
 
         {/* DATE PICKER */}
         <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
-           <Ionicons name="calendar" size={20} color="#666" />
-           <Text style={styles.dateText}>{date.toDateString()}</Text>
+          <Ionicons name="calendar" size={20} color="#666" />
+          <Text style={styles.dateText}>{date.toDateString()}</Text>
         </TouchableOpacity>
-        {showDatePicker && <DateTimePicker value={date} mode="date" onChange={(e, d) => {
-        setShowDatePicker(false);
-        if (d) setDate(d);
-      }} />}
+        {showDatePicker && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            onChange={(e, d) => {
+              setShowDatePicker(false);
+              if (d) setDate(d);
+            }}
+          />
+        )}
 
         {/* --- EXCLUDE FROM BUDGET TOGGLE --- */}
         <View style={styles.toggleRow}>
-            <View style={{
-          flex: 1
-        }}>
-                <Text style={styles.toggleTitle}>Exclude from Reports?</Text>
-                <Text style={styles.toggleSub}>Mark as &quot;Not an Expense&quot; (e.g. Transfers)</Text>
-            </View>
-            <Switch value={excludeFromBudget} onValueChange={setExcludeFromBudget} trackColor={{
-          false: '#ddd',
-          true: '#FFCDD2'
-        }} thumbColor={excludeFromBudget ? '#F44336' : '#f4f3f4'} />
+          <View
+            style={{
+              flex: 1,
+            }}
+          >
+            <Text style={styles.toggleTitle}>Exclude from Reports?</Text>
+            <Text style={styles.toggleSub}>Mark as &quot;Not an Expense&quot; (e.g. Transfers)</Text>
+          </View>
+          <Switch
+            value={excludeFromBudget}
+            onValueChange={setExcludeFromBudget}
+            trackColor={{
+              false: '#ddd',
+              true: '#FFCDD2',
+            }}
+            thumbColor={excludeFromBudget ? '#F44336' : '#f4f3f4'}
+          />
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
           <Text style={styles.saveText}>Save Expense</Text>
         </TouchableOpacity>
-
       </ScrollView>
-    </SafeAreaView>;
+    </SafeAreaView>
+  );
 }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff'
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 20,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
   },
   content: {
-    padding: 20
+    padding: 20,
   },
   label: {
     color: '#999',
     fontSize: 12,
     fontWeight: 'bold',
     marginBottom: 10,
-    marginTop: 20
+    marginTop: 20,
   },
   currency: {
     fontSize: 24,
     color: '#333',
     fontWeight: 'bold',
-    marginBottom: 5
+    marginBottom: 5,
   },
   amountInput: {
     fontSize: 48,
-    color: '#000'
+    color: '#000',
   },
   hiddenInputArea: {
-    marginBottom: 20
+    marginBottom: 20,
   },
   scrollRow: {
     flexDirection: 'row',
-    marginBottom: 10
+    marginBottom: 10,
   },
   chip: {
     paddingVertical: 8,
@@ -237,11 +285,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eee',
     marginRight: 10,
-    marginBottom: 5
+    marginBottom: 5,
   },
   chipText: {
     fontWeight: '600',
-    color: '#333'
+    color: '#333',
   },
   dateBtn: {
     flexDirection: 'row',
@@ -249,12 +297,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9f9',
     padding: 15,
     borderRadius: 10,
-    marginTop: 10
+    marginTop: 10,
   },
   dateText: {
     marginLeft: 10,
     fontSize: 16,
-    color: '#333'
+    color: '#333',
   },
   // NEW STYLES FOR TOGGLE
   toggleRow: {
@@ -264,28 +312,28 @@ const styles = StyleSheet.create({
     marginTop: 20,
     backgroundColor: '#f9f9f9',
     padding: 15,
-    borderRadius: 10
+    borderRadius: 10,
   },
   toggleTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333'
+    color: '#333',
   },
   toggleSub: {
     fontSize: 12,
     color: '#999',
-    marginTop: 2
+    marginTop: 2,
   },
   saveBtn: {
     backgroundColor: '#F44336',
     padding: 15,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 30
+    marginTop: 30,
   },
   saveText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: 'bold'
-  }
+    fontWeight: 'bold',
+  },
 });

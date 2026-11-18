@@ -1,25 +1,51 @@
 import { View, Text } from './Theme';
-import React,{useEffect,useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, PermissionsAndroid, Platform } from 'react-native';
 import Storage from '../data/Storage';
 import { setSmsTracking } from '../utils/SmsTracking';
-export default function Onboarding({children}){
-  const [complete,setComplete]=useState(null),[busy,setBusy]=useState(false);
-  useEffect(()=>{Storage.getItem('onboarding_complete').then(value=>setComplete(value==='true')).catch(()=>setComplete(false));},[]);
-  const finish=async enable=>{
-    if(busy)return;
+export default function Onboarding({ children }) {
+  const [complete, setComplete] = useState(null),
+    [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Storage.getItem('onboarding_complete')
+      .then((value) => setComplete(value === 'true'))
+      .catch(() => setComplete(false));
+  }, []);
+  const finish = async (enable) => {
+    if (busy) return;
     setBusy(true);
-    try{
-      let allowed=false;
-      if(enable&&Platform.OS==='android'){
-        const result=await PermissionsAndroid.requestMultiple([PermissionsAndroid.PERMISSIONS.READ_SMS,PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS]);
-        allowed=result[PermissionsAndroid.PERMISSIONS.READ_SMS]==='granted'&&result[PermissionsAndroid.PERMISSIONS.RECEIVE_SMS]==='granted';
+    try {
+      let allowed = false;
+      if (enable && Platform.OS === 'android') {
+        const result = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.READ_SMS,
+          PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        ]);
+        allowed =
+          result[PermissionsAndroid.PERMISSIONS.READ_SMS] === 'granted' &&
+          result[PermissionsAndroid.PERMISSIONS.RECEIVE_SMS] === 'granted';
       }
       await setSmsTracking(allowed);
-      await Storage.setItem('onboarding_complete','true');setComplete(true);
-    }finally{setBusy(false);}
+      await Storage.setItem('onboarding_complete', 'true');
+      setComplete(true);
+    } finally {
+      setBusy(false);
+    }
   };
-  if(complete===null)return <View/>;
-  if(!complete)return <View style={{flex:1,justifyContent:'center',padding:24}}><Text style={{fontSize:26,fontWeight:'bold'}}>Welcome to WealthManager</Text><Text style={{marginVertical:20}}>Your finances stay on this device. SMS access lets the app capture bank payments and notifications show spending alerts. Gmail connects only when you choose it in Settings. You can use manual entry without SMS access.</Text><Button disabled={busy} title="Enable bank SMS tracking" onPress={()=>finish(true)}/><Button disabled={busy} title="Use manual entry" onPress={()=>finish(false)}/></View>;
+  if (complete === null) return <View />;
+  if (!complete)
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 26, fontWeight: 'bold' }}>Welcome to WealthManager</Text>
+        <Text style={{ marginVertical: 20 }}>
+          Your finances stay on this device. SMS access lets the app capture bank payments and notifications
+          show spending alerts. Gmail connects only when you choose it in Settings. You can use manual entry
+          without SMS access.
+        </Text>
+        <Button disabled={busy} title="Enable bank SMS tracking" onPress={() => finish(true)} />
+        <Button disabled={busy} title="Use manual entry" onPress={() => finish(false)} />
+      </View>
+    );
   return children;
 }

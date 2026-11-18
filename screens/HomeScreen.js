@@ -19,14 +19,12 @@ import { getCategoryIcon } from '../utils/icons';
 import { saveWithDedup, createDedupIndex } from '../utils/DeduplicationEngine';
 import { computeNetWorth, isReportable } from '../utils/BalanceService';
 import { shiftMonth } from '../utils/Format';
-export default function HomeScreen({
-  navigation
-}) {
+export default function HomeScreen({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
     income: 0,
     expense: 0,
-    savings: 0
+    savings: 0,
   });
   const [loading, setLoading] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -34,7 +32,7 @@ export default function HomeScreen({
   const [scannedTransactions, setScannedTransactions] = useState([]);
   const [userName, setUserName] = useState('');
   const [netWorth, setNetWorth] = useState(0);
-  const changeMonth = direction => {
+  const changeMonth = (direction) => {
     setCurrentDate(shiftMonth(currentDate, direction));
   };
   const handleManualScan = async () => {
@@ -61,7 +59,7 @@ export default function HomeScreen({
     const newItems = [];
     const dedup = createDedupIndex(existingTx); // built once per scan
 
-    foundSms.forEach(sms => {
+    foundSms.forEach((sms) => {
       if (!sms.amount) return;
       const item = {
         id: Date.now() + Math.random(),
@@ -74,13 +72,13 @@ export default function HomeScreen({
         date: new Date(sms.date).toLocaleDateString('en-IN', {
           day: 'numeric',
           month: 'short',
-          year: 'numeric'
+          year: 'numeric',
         }),
         category: sms.category,
         account: sms.bankName !== 'Unknown Bank' ? sms.bankName : 'Cash',
         tags: ['Auto-Sync'],
         fullDate: new Date(sms.date).toISOString(),
-        extractedBalance: sms.currentBalance ? parseFloat(sms.currentBalance) : null
+        extractedBalance: sms.currentBalance ? parseFloat(sms.currentBalance) : null,
       };
       if (!dedup.check(item)) newItems.push(item);
     });
@@ -95,11 +93,8 @@ export default function HomeScreen({
   };
   const confirmImport = async () => {
     if (scannedTransactions.length === 0) return;
-    const {
-      added,
-      skipped
-    } = await saveWithDedup(scannedTransactions, {
-      balanceMode: 'captured'
+    const { added, skipped } = await saveWithDedup(scannedTransactions, {
+      balanceMode: 'captured',
     });
 
     // Sync account balances from exactly the rows that were stored (bank balance if the
@@ -111,25 +106,28 @@ export default function HomeScreen({
   };
   const formattedDate = currentDate.toLocaleDateString('en-IN', {
     month: 'long',
-    year: 'numeric'
+    year: 'numeric',
   });
-  const savingsRate = summary.income > 0 ? Math.round(summary.savings / summary.income * 100) : 0;
-  const calculateMonthlyStats = useCallback(txs => {
-    const tm = currentDate.getMonth();
-    const ty = currentDate.getFullYear();
-    const monthTxs = txs.filter(t => {
-      if (!isReportable(t)) return false;
-      const d = new Date(t.fullDate || t.date);
-      return d.getMonth() === tm && d.getFullYear() === ty;
-    });
-    const income = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const expense = monthTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-    setSummary({
-      income,
-      expense,
-      savings: income - expense
-    });
-  }, [currentDate]);
+  const savingsRate = summary.income > 0 ? Math.round((summary.savings / summary.income) * 100) : 0;
+  const calculateMonthlyStats = useCallback(
+    (txs) => {
+      const tm = currentDate.getMonth();
+      const ty = currentDate.getFullYear();
+      const monthTxs = txs.filter((t) => {
+        if (!isReportable(t)) return false;
+        const d = new Date(t.fullDate || t.date);
+        return d.getMonth() === tm && d.getFullYear() === ty;
+      });
+      const income = monthTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+      const expense = monthTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      setSummary({
+        income,
+        expense,
+        savings: income - expense,
+      });
+    },
+    [currentDate]
+  );
   const loadData = useCallback(async () => {
     const name = await AsyncStorage.getItem('user_name');
     if (name) setUserName(name);
@@ -142,14 +140,18 @@ export default function HomeScreen({
     const accounts = wJson ? JSON.parse(wJson) : [];
     setNetWorth(computeNetWorth(accounts).netWorth);
   }, [calculateMonthlyStats]);
-  useFocusEffect(useCallback(() => {
-    loadData();
-  }, [loadData]));
-  return <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{
-      paddingBottom: 20
-    }}>
-
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: 20,
+        }}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View>
@@ -158,7 +160,9 @@ export default function HomeScreen({
           </View>
           <View style={styles.netWorthBadge}>
             <Text style={styles.nwLabel}>Net Worth</Text>
-            <Text style={styles.nwVal}>{netWorth < 0 ? '-' : ''}₹{Math.abs(netWorth / 1000).toFixed(1)}K</Text>
+            <Text style={styles.nwVal}>
+              {netWorth < 0 ? '-' : ''}₹{Math.abs(netWorth / 1000).toFixed(1)}K
+            </Text>
           </View>
         </View>
 
@@ -175,29 +179,63 @@ export default function HomeScreen({
 
         {/* Summary Cards */}
         <View style={styles.cardsRow}>
-          <View style={[styles.miniCard, {
-          backgroundColor: '#E8F5E9'
-        }]}>
+          <View
+            style={[
+              styles.miniCard,
+              {
+                backgroundColor: '#E8F5E9',
+              },
+            ]}
+          >
             <Text style={styles.miniLabel}>Income</Text>
-            <Text style={[styles.miniAmt, {
-            color: '#388E3C'
-          }]}>₹{(summary.income / 1000).toFixed(1)}K</Text>
+            <Text
+              style={[
+                styles.miniAmt,
+                {
+                  color: '#388E3C',
+                },
+              ]}
+            >
+              ₹{(summary.income / 1000).toFixed(1)}K
+            </Text>
           </View>
-          <View style={[styles.miniCard, {
-          backgroundColor: '#FFEBEE'
-        }]}>
+          <View
+            style={[
+              styles.miniCard,
+              {
+                backgroundColor: '#FFEBEE',
+              },
+            ]}
+          >
             <Text style={styles.miniLabel}>Spent</Text>
-            <Text style={[styles.miniAmt, {
-            color: '#C62828'
-          }]}>₹{(summary.expense / 1000).toFixed(1)}K</Text>
+            <Text
+              style={[
+                styles.miniAmt,
+                {
+                  color: '#C62828',
+                },
+              ]}
+            >
+              ₹{(summary.expense / 1000).toFixed(1)}K
+            </Text>
           </View>
-          <View style={[styles.miniCard, {
-          backgroundColor: '#E3F2FD'
-        }]}>
+          <View
+            style={[
+              styles.miniCard,
+              {
+                backgroundColor: '#E3F2FD',
+              },
+            ]}
+          >
             <Text style={styles.miniLabel}>Saved</Text>
-            <Text style={[styles.miniAmt, {
-            color: summary.savings >= 0 ? '#1565C0' : '#C62828'
-          }]}>
+            <Text
+              style={[
+                styles.miniAmt,
+                {
+                  color: summary.savings >= 0 ? '#1565C0' : '#C62828',
+                },
+              ]}
+            >
               {savingsRate}%
             </Text>
           </View>
@@ -205,111 +243,166 @@ export default function HomeScreen({
 
         {/* Scan Button */}
         <TouchableOpacity style={styles.syncBtn} onPress={handleManualScan} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <>
-                <Ionicons name="scan-outline" size={18} color="#fff" style={{
-            marginRight: 8
-          }} />
-                <Text style={styles.syncText}>Scan Bank SMS</Text>
-              </>}
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons
+                name="scan-outline"
+                size={18}
+                color="#fff"
+                style={{
+                  marginRight: 8,
+                }}
+              />
+              <Text style={styles.syncText}>Scan Bank SMS</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         {/* Action Grid */}
         <View style={styles.actions}>
-          {[{
-          label: 'Income',
-          icon: 'arrow-down',
-          color: '#4CAF50',
-          route: 'Income'
-        }, {
-          label: 'Expense',
-          icon: 'arrow-up',
-          color: '#F44336',
-          route: 'Expense'
-        }, {
-          label: 'Import',
-          icon: 'cloud-upload-outline',
-          color: '#2196F3',
-          route: 'Import'
-        }, {
-          label: 'History',
-          icon: 'list',
-          color: '#555',
-          route: 'AllTransactions'
-        }, {
-          label: 'Reports',
-          icon: 'stats-chart',
-          color: '#673AB7',
-          route: 'Analytics'
-        }, {
-          label: 'Savings',
-          icon: 'save-outline',
-          color: '#00BCD4',
-          route: 'Savings'
-        }, {
-          label: 'Recurring',
-          icon: 'repeat',
-          color: '#FF9800',
-          route: 'Recurring'
-        }, {
-          label: 'Wealth',
-          icon: 'wallet-outline',
-          color: '#009688',
-          route: 'WealthTab'
-        }].map(item => <TouchableOpacity key={item.label} style={styles.btn} onPress={() => navigation.navigate(item.route)}>
-              <View style={[styles.btnIcon, {
-            backgroundColor: item.color + '20'
-          }]}>
+          {[
+            {
+              label: 'Income',
+              icon: 'arrow-down',
+              color: '#4CAF50',
+              route: 'Income',
+            },
+            {
+              label: 'Expense',
+              icon: 'arrow-up',
+              color: '#F44336',
+              route: 'Expense',
+            },
+            {
+              label: 'Import',
+              icon: 'cloud-upload-outline',
+              color: '#2196F3',
+              route: 'Import',
+            },
+            {
+              label: 'History',
+              icon: 'list',
+              color: '#555',
+              route: 'AllTransactions',
+            },
+            {
+              label: 'Reports',
+              icon: 'stats-chart',
+              color: '#673AB7',
+              route: 'Analytics',
+            },
+            {
+              label: 'Savings',
+              icon: 'save-outline',
+              color: '#00BCD4',
+              route: 'Savings',
+            },
+            {
+              label: 'Recurring',
+              icon: 'repeat',
+              color: '#FF9800',
+              route: 'Recurring',
+            },
+            {
+              label: 'Wealth',
+              icon: 'wallet-outline',
+              color: '#009688',
+              route: 'WealthTab',
+            },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              style={styles.btn}
+              onPress={() => navigation.navigate(item.route)}
+            >
+              <View
+                style={[
+                  styles.btnIcon,
+                  {
+                    backgroundColor: item.color + '20',
+                  },
+                ]}
+              >
                 <Ionicons name={item.icon} size={20} color={item.color} />
               </View>
               <Text style={styles.btnText}>{item.label}</Text>
-            </TouchableOpacity>)}
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Recent */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Transactions</Text>
           <TouchableOpacity onPress={() => navigation.navigate('AllTransactions')}>
-            <Text style={{
-            color: '#2196F3',
-            fontWeight: 'bold'
-          }}>See All</Text>
+            <Text
+              style={{
+                color: '#2196F3',
+                fontWeight: 'bold',
+              }}
+            >
+              See All
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {transactions.slice(0, 8).map(item => {
-        const icon = item.customIcon ? {
-          name: item.customIcon,
-          color: item.customColor
-        } : getCategoryIcon(item.category);
-        return <TouchableOpacity key={item.id} style={styles.item} onPress={() => navigation.navigate('EditTransaction', {
-          transaction: item
-        })}>
-              <View style={[styles.iconBox, {
-            backgroundColor: icon.color + '20'
-          }]}>
+        {transactions.slice(0, 8).map((item) => {
+          const icon = item.customIcon
+            ? {
+                name: item.customIcon,
+                color: item.customColor,
+              }
+            : getCategoryIcon(item.category);
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.item}
+              onPress={() =>
+                navigation.navigate('EditTransaction', {
+                  transaction: item,
+                })
+              }
+            >
+              <View
+                style={[
+                  styles.iconBox,
+                  {
+                    backgroundColor: icon.color + '20',
+                  },
+                ]}
+              >
                 <Ionicons name={icon.name} size={20} color={icon.color} />
               </View>
-              <View style={{
-            flex: 1
-          }}>
+              <View
+                style={{
+                  flex: 1,
+                }}
+              >
                 <Text style={styles.itemTitle}>{item.title}</Text>
-                <Text style={styles.itemDate}>{item.date} • {item.account}</Text>
+                <Text style={styles.itemDate}>
+                  {item.date} • {item.account}
+                </Text>
               </View>
-              <Text style={{
-            fontWeight: 'bold',
-            color: item.type === 'income' ? '#388E3C' : '#C62828'
-          }}>
+              <Text
+                style={{
+                  fontWeight: 'bold',
+                  color: item.type === 'income' ? '#388E3C' : '#C62828',
+                }}
+              >
                 {item.type === 'income' ? '+' : '-'} ₹{item.amount.toLocaleString('en-IN')}
               </Text>
-            </TouchableOpacity>;
-      })}
+            </TouchableOpacity>
+          );
+        })}
 
-        {transactions.length === 0 && <View style={styles.emptyState}>
+        {transactions.length === 0 && (
+          <View style={styles.emptyState}>
             <Ionicons name="receipt-outline" size={50} color="#ccc" />
             <Text style={styles.emptyText}>No transactions yet</Text>
             <Text style={styles.emptySubText}>Add manually or scan your bank SMS</Text>
-          </View>}
-
+          </View>
+        )}
       </ScrollView>
 
       {/* Preview Modal */}
@@ -323,25 +416,40 @@ export default function HomeScreen({
           </View>
           <Text style={styles.modalSub}>Review and confirm to import. Duplicates will be skipped.</Text>
 
-          <FlatList data={scannedTransactions} keyExtractor={item => item.id.toString()} style={{
-          flex: 1
-        }} contentContainerStyle={{
-          paddingBottom: 20
-        }} renderItem={({
-          item
-        }) => <View style={styles.previewItem}>
-                <View style={{
-            flex: 1
-          }}>
+          <FlatList
+            data={scannedTransactions}
+            keyExtractor={(item) => item.id.toString()}
+            style={{
+              flex: 1,
+            }}
+            contentContainerStyle={{
+              paddingBottom: 20,
+            }}
+            renderItem={({ item }) => (
+              <View style={styles.previewItem}>
+                <View
+                  style={{
+                    flex: 1,
+                  }}
+                >
                   <Text style={styles.previewTitle}>{item.title}</Text>
-                  <Text style={styles.previewDate}>{item.date} • {item.account}</Text>
+                  <Text style={styles.previewDate}>
+                    {item.date} • {item.account}
+                  </Text>
                 </View>
-                <Text style={[styles.previewAmount, {
-            color: item.type === 'income' ? '#388E3C' : '#C62828'
-          }]}>
+                <Text
+                  style={[
+                    styles.previewAmount,
+                    {
+                      color: item.type === 'income' ? '#388E3C' : '#C62828',
+                    },
+                  ]}
+                >
                   {item.type === 'income' ? '+' : '-'} ₹{item.amount.toLocaleString('en-IN')}
                 </Text>
-              </View>} />
+              </View>
+            )}
+          />
 
           <View style={styles.modalActions}>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setPreviewModalVisible(false)}>
@@ -353,84 +461,85 @@ export default function HomeScreen({
           </View>
         </View>
       </Modal>
-    </SafeAreaView>;
+    </SafeAreaView>
+  );
 }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
-    paddingHorizontal: 16
+    paddingHorizontal: 16,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 16,
-    marginBottom: 12
+    marginBottom: 12,
   },
   greeting: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1A1A2E'
+    color: '#1A1A2E',
   },
   subGreet: {
     fontSize: 13,
     color: '#888',
-    marginTop: 2
+    marginTop: 2,
   },
   netWorthBadge: {
     backgroundColor: '#1A1A2E',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   nwLabel: {
     color: '#aaa',
-    fontSize: 10
+    fontSize: 10,
   },
   nwVal: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 16
+    fontSize: 16,
   },
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
-    marginBottom: 14
+    marginBottom: 14,
   },
   arrowBtn: {
     padding: 6,
     backgroundColor: '#fff',
     borderRadius: 20,
-    elevation: 1
+    elevation: 1,
   },
   monthLabel: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#333'
+    color: '#333',
   },
   cardsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14
+    marginBottom: 14,
   },
   miniCard: {
     flex: 1,
     borderRadius: 14,
     padding: 12,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   miniLabel: {
     fontSize: 11,
     color: '#666',
-    marginBottom: 4
+    marginBottom: 4,
   },
   miniAmt: {
     fontSize: 16,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
   },
   syncBtn: {
     flexDirection: 'row',
@@ -440,18 +549,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    elevation: 3
+    elevation: 3,
   },
   syncText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 15
+    fontSize: 15,
   },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 24
+    marginBottom: 24,
   },
   btn: {
     width: '22%',
@@ -459,7 +568,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#fff',
     borderRadius: 14,
-    elevation: 1
+    elevation: 1,
   },
   btnIcon: {
     width: 36,
@@ -467,24 +576,24 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6
+    marginBottom: 6,
   },
   btnText: {
     fontSize: 10,
     fontWeight: '600',
     color: '#333',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 12,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: '#1A1A2E'
+    color: '#1A1A2E',
   },
   item: {
     flexDirection: 'row',
@@ -495,7 +604,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 12,
     borderRadius: 10,
-    marginBottom: 6
+    marginBottom: 6,
   },
   iconBox: {
     width: 40,
@@ -503,80 +612,80 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12
+    marginRight: 12,
   },
   itemTitle: {
     fontWeight: '600',
     color: '#333',
-    fontSize: 15
+    fontSize: 15,
   },
   itemDate: {
     fontSize: 11,
     color: '#999',
-    marginTop: 2
+    marginTop: 2,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40
+    paddingVertical: 40,
   },
   emptyText: {
     fontSize: 18,
     color: '#bbb',
     marginTop: 12,
-    fontWeight: '600'
+    fontWeight: '600',
   },
   emptySubText: {
     color: '#ccc',
     fontSize: 13,
-    marginTop: 4
+    marginTop: 4,
   },
   // Modal
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff',
     padding: 20,
-    paddingTop: 50
+    paddingTop: 50,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6
+    marginBottom: 6,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
   },
   modalSub: {
     color: '#666',
-    marginBottom: 20
+    marginBottom: 20,
   },
   previewItem: {
     flexDirection: 'row',
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderColor: '#eee',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   previewTitle: {
     fontWeight: 'bold',
     fontSize: 15,
-    color: '#333'
+    color: '#333',
   },
   previewDate: {
     fontSize: 12,
     color: '#999',
-    marginTop: 2
+    marginTop: 2,
   },
   previewAmount: {
     fontWeight: 'bold',
-    fontSize: 15
+    fontSize: 15,
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 20,
-    marginBottom: 20
+    marginBottom: 20,
   },
   cancelBtn: {
     flex: 1,
@@ -584,7 +693,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     borderRadius: 10,
     marginRight: 10,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   confirmBtn: {
     flex: 1,
@@ -592,14 +701,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50',
     borderRadius: 10,
     marginLeft: 10,
-    alignItems: 'center'
+    alignItems: 'center',
   },
   cancelText: {
     fontWeight: 'bold',
-    color: '#555'
+    color: '#555',
   },
   confirmText: {
     fontWeight: 'bold',
-    color: '#fff'
-  }
+    color: '#fff',
+  },
 });

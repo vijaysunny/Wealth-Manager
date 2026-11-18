@@ -12,7 +12,6 @@
 import AsyncStorage from '../data/Storage';
 import { saveWithDedup } from './DeduplicationEngine';
 
-
 const LAST_RUN_KEY = 'recurring_last_run';
 const MAX_CATCH_UP = 1000; // safety cap per entry per run
 
@@ -54,7 +53,8 @@ export const firstDueOnOrAfter = (entry, from) => {
       const c = clampDate(f.getFullYear(), month, dom);
       return toKey(c) >= toKey(f) ? c : clampDate(f.getFullYear() + 1, month, dom);
     }
-    default: { // Monthly, Quarterly
+    default: {
+      // Monthly, Quarterly
       const c = clampDate(f.getFullYear(), f.getMonth(), dom);
       return toKey(c) >= toKey(f) ? c : clampDate(f.getFullYear(), f.getMonth() + 1, dom);
     }
@@ -65,11 +65,16 @@ export const firstDueOnOrAfter = (entry, from) => {
 export const advanceDue = (entry, due) => {
   const dom = domOf(entry);
   switch (entry.frequency) {
-    case 'Daily': return addDays(due, 1);
-    case 'Weekly': return addDays(due, 7);
-    case 'Quarterly': return clampDate(due.getFullYear(), due.getMonth() + 3, dom);
-    case 'Yearly': return clampDate(due.getFullYear() + 1, due.getMonth(), dom);
-    default: return clampDate(due.getFullYear(), due.getMonth() + 1, dom);
+    case 'Daily':
+      return addDays(due, 1);
+    case 'Weekly':
+      return addDays(due, 7);
+    case 'Quarterly':
+      return clampDate(due.getFullYear(), due.getMonth() + 3, dom);
+    case 'Yearly':
+      return clampDate(due.getFullYear() + 1, due.getMonth(), dom);
+    default:
+      return clampDate(due.getFullYear(), due.getMonth() + 1, dom);
   }
 };
 
@@ -147,12 +152,14 @@ export const processRecurringTransactions = async () => {
       if (!raw.active) return raw;
       const entry = migrateEntry(raw, today, lastRunStr);
       const { dates, nextDue } = dueDatesUpTo(entry, today);
-      dates.forEach(d => newTxs.push(buildTx(entry, d)));
+      dates.forEach((d) => newTxs.push(buildTx(entry, d)));
       return { ...entry, nextDue, lastProcessed: dates.length ? today.toISOString() : entry.lastProcessed };
     });
 
     // Transactions first (hard ID `rec_…` dedup makes a retry after a crash safe), then balances, then entries
-    const { addedTxs } = newTxs.length ? await saveWithDedup(newTxs, { balanceMode: 'delta' }) : { addedTxs: [] };
+    const { addedTxs } = newTxs.length
+      ? await saveWithDedup(newTxs, { balanceMode: 'delta' })
+      : { addedTxs: [] };
 
     await AsyncStorage.setItem('recurring_transactions', JSON.stringify(updated));
     await AsyncStorage.setItem(LAST_RUN_KEY, today.toISOString());

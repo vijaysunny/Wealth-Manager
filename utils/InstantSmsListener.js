@@ -35,7 +35,9 @@ export const startSmsListener = () => {
       smsId: buildSmsId(sender, smsMs, parsed.amount),
       bodyHash: hashText(body),
       refNo: parsed.refNo,
-      title: parsed.merchant || parsed.category, merchant: parsed.merchant, vpa: parsed.vpa,
+      title: parsed.merchant || parsed.category,
+      merchant: parsed.merchant,
+      vpa: parsed.vpa,
       amount: parsed.amount,
       type: parsed.type,
       date: smsDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -61,8 +63,14 @@ export const startSmsListener = () => {
       const mon = now.getMonth();
       const yr = now.getFullYear();
       const catSpent = updatedTx
-        .filter(t => isReportable(t) && t.category === parsed.category && t.type === 'expense' &&
-          new Date(t.fullDate).getMonth() === mon && new Date(t.fullDate).getFullYear() === yr)
+        .filter(
+          (t) =>
+            isReportable(t) &&
+            t.category === parsed.category &&
+            t.type === 'expense' &&
+            new Date(t.fullDate).getMonth() === mon &&
+            new Date(t.fullDate).getFullYear() === yr
+        )
         .reduce((s, t) => s + t.amount, 0);
 
       let notifBody = `${parsed.category} total this month: ₹${catSpent.toLocaleString('en-IN')}`;
@@ -77,6 +85,8 @@ export const startSmsListener = () => {
       await sendTransactionNotification('Income Credited 💰', `₹${parsed.amount} from ${bankName}`);
     }
   };
-  const subscription = SmsListener.addListener(message => {handleMessage(message).catch(error => console.warn('SMS capture failed:', error.message));});
+  const subscription = SmsListener.addListener((message) => {
+    handleMessage(message).catch((error) => console.warn('SMS capture failed:', error.message));
+  });
   return subscription;
 };

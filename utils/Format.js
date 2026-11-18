@@ -11,7 +11,9 @@
 export const parseAmount = (input) => {
   if (input === null || input === undefined) return null;
   if (typeof input === 'number') return Number.isFinite(input) && input > 0 ? input : null;
-  const cleaned = String(input).replace(/₹|rs\.?|inr/gi, '').replace(/[,\s]/g, '');
+  const cleaned = String(input)
+    .replace(/₹|rs\.?|inr/gi, '')
+    .replace(/[,\s]/g, '');
   if (!/^\d*\.?\d+$|^\d+\.$/.test(cleaned)) return null;
   const n = parseFloat(cleaned);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -20,7 +22,9 @@ export const parseAmount = (input) => {
 /** Like parseAmount but allows 0 (e.g. a 0% rate, an optional field). Null if invalid/negative. */
 export const parseNonNegative = (input) => {
   if (input === null || input === undefined || String(input).trim() === '') return null;
-  const cleaned = String(input).replace(/₹|rs\.?|inr/gi, '').replace(/[,\s]/g, '');
+  const cleaned = String(input)
+    .replace(/₹|rs\.?|inr/gi, '')
+    .replace(/[,\s]/g, '');
   if (!/^\d*\.?\d+$|^\d+\.$/.test(cleaned)) return null;
   const n = parseFloat(cleaned);
   return Number.isFinite(n) && n >= 0 ? n : null;

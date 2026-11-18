@@ -17,28 +17,42 @@ export default function EditAssetScreen({ navigation, route }) {
   const [name, setName] = useState(asset.name);
   // For Banks/Cash, 'balance' is what we edit. For Stocks/MF, 'quantity' is what we edit.
   const [value, setValue] = useState(
-      isQuantityAsset(asset)
-      ? (asset.quantity ? asset.quantity.toString() : '0') 
-      : (asset.balance ? asset.balance.toString() : '0')
+    isQuantityAsset(asset)
+      ? asset.quantity
+        ? asset.quantity.toString()
+        : '0'
+      : asset.balance
+        ? asset.balance.toString()
+        : '0'
   );
 
   const handleSave = async () => {
-    if (!name || !value) { Alert.alert("Error", "Fields cannot be empty"); return; }
+    if (!name || !value) {
+      Alert.alert('Error', 'Fields cannot be empty');
+      return;
+    }
 
-    const number = Number(String(value).replace(/,/g,''));
-    if(!Number.isFinite(number) || number < 0){Alert.alert('Error','Enter a valid non-negative value');return;}
-    const changes={name:name.trim(),[isQuantityAsset(asset)?'quantity':'balance']:number};
-    await updateAccount(asset.id,changes);
+    const number = Number(String(value).replace(/,/g, ''));
+    if (!Number.isFinite(number) || number < 0) {
+      Alert.alert('Error', 'Enter a valid non-negative value');
+      return;
+    }
+    const changes = { name: name.trim(), [isQuantityAsset(asset) ? 'quantity' : 'balance']: number };
+    await updateAccount(asset.id, changes);
     navigation.goBack();
   };
 
   const handleDelete = () => {
-    Alert.alert("Delete Asset", "Are you sure? This cannot be undone.", [
-        { text: "Cancel" },
-        { text: "Delete", style: 'destructive', onPress: async () => {
-            await deleteAccount(asset.id);
-            navigation.goBack();
-        }}
+    Alert.alert('Delete Asset', 'Are you sure? This cannot be undone.', [
+      { text: 'Cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteAccount(asset.id);
+          navigation.goBack();
+        },
+      },
     ]);
   };
 
@@ -48,37 +62,35 @@ export default function EditAssetScreen({ navigation, route }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#333"/>
+          <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Edit Asset</Text>
         <TouchableOpacity onPress={handleDelete}>
-            <Ionicons name="trash" size={24} color="red"/>
+          <Ionicons name="trash" size={24} color="red" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{padding: 20}}>
-          <Text style={styles.label}>ASSET NAME</Text>
-          <TextInput style={styles.input} value={name} onChangeText={setName} />
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <Text style={styles.label}>ASSET NAME</Text>
+        <TextInput style={styles.input} value={name} onChangeText={setName} />
 
-          <Text style={styles.label}>
-            {isInvestment ? 'UNITS / QUANTITY HELD' : 'CURRENT BALANCE (₹)'}
+        <Text style={styles.label}>{isInvestment ? 'UNITS / QUANTITY HELD' : 'CURRENT BALANCE (₹)'}</Text>
+        <TextInput
+          style={[styles.input, { fontSize: 24, fontWeight: 'bold' }]}
+          value={value}
+          onChangeText={setValue}
+          keyboardType="numeric"
+        />
+
+        {isInvestment && (
+          <Text style={styles.hint}>
+            * Updating quantity will auto-calculate the new value based on live market rates.
           </Text>
-          <TextInput 
-            style={[styles.input, {fontSize: 24, fontWeight: 'bold'}]} 
-            value={value} 
-            onChangeText={setValue} 
-            keyboardType="numeric"
-          />
-          
-          {isInvestment && (
-              <Text style={styles.hint}>
-                  * Updating quantity will auto-calculate the new value based on live market rates.
-              </Text>
-          )}
+        )}
 
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-              <Text style={styles.saveText}>Update Asset</Text>
-          </TouchableOpacity>
+        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+          <Text style={styles.saveText}>Update Asset</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -86,11 +98,18 @@ export default function EditAssetScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#eee', alignItems:'center' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+    alignItems: 'center',
+  },
   title: { fontSize: 20, fontWeight: 'bold' },
   label: { color: '#666', fontSize: 12, fontWeight: 'bold', marginTop: 20, marginBottom: 5 },
   input: { borderBottomWidth: 1, borderColor: '#ccc', fontSize: 18, paddingVertical: 10, color: '#333' },
   saveBtn: { backgroundColor: '#2196F3', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 40 },
   saveText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  hint: { color: '#999', fontSize: 12, marginTop: 10, fontStyle: 'italic' }
+  hint: { color: '#999', fontSize: 12, marginTop: 10, fontStyle: 'italic' },
 });

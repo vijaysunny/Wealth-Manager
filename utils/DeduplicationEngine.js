@@ -20,7 +20,15 @@ import { addMany } from '../data/TransactionRepo';
 
 const CROSS_SOURCE_TOLERANCE_MS = 5 * 60 * 1000;
 const SAME_SMS_TOLERANCE_MS = 10 * 60 * 1000;
-const GENERIC_BANKS = new Set(['', 'unknown', 'unknownbank', 'bank', 'cash', 'bankstatement', 'pdfstatement']);
+const GENERIC_BANKS = new Set([
+  '',
+  'unknown',
+  'unknownbank',
+  'bank',
+  'cash',
+  'bankstatement',
+  'pdfstatement',
+]);
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -37,14 +45,23 @@ export const hashText = (text = '') => {
  * manual scan: sms:<sender>:<epoch ms>:<amount>
  */
 export const buildSmsId = (address, dateMs, amount) => {
-  const addr = String(address || 'unknown').trim().toUpperCase().replace(/\s+/g, '');
+  const addr = String(address || 'unknown')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
   const ts = Math.round(Number(dateMs) || 0);
   const amt = Number(amount);
   return `sms:${addr}:${ts}:${Number.isFinite(amt) ? amt.toFixed(2) : '0.00'}`;
 };
 
-const bankKey = (name) => String(name || '').toLowerCase().replace(/\s+/g, '');
-const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const bankKey = (name) =>
+  String(name || '')
+    .toLowerCase()
+    .replace(/\s+/g, '');
+const norm = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 const toMs = (t) => {
   const ms = t.fullDate ? new Date(t.fullDate).getTime() : NaN;
   return Number.isFinite(ms) ? ms : Date.now();
@@ -56,7 +73,8 @@ const dayKey = (ms) => {
 /** Only SMS and Gmail carry a trustworthy time of day. */
 const hasRealTime = (t) => !!(t.smsId || t.gmailMsgId);
 const banksCompatible = (a, b) => {
-  const x = bankKey(a), y = bankKey(b);
+  const x = bankKey(a),
+    y = bankKey(b);
   return GENERIC_BANKS.has(x) || GENERIC_BANKS.has(y) || x === y;
 };
 const refOf = (t) => {
@@ -92,12 +110,15 @@ const bucketKey = (t, ms) => `${parseFloat(t.amount).toFixed(2)}|${t.type}|${day
  */
 export const createDedupIndex = (existing = []) => {
   const ids = new Set();
-  const bodies = new Map();   // bodyHash → [ms]
-  const buckets = new Map();  // amount|type|day → [slot]
+  const bodies = new Map(); // bodyHash → [ms]
+  const buckets = new Map(); // amount|type|day → [slot]
 
   const register = (t, consumed) => {
-    [t.smsId, t.gmailMsgId, typeof t.id === 'string' && t.id.startsWith('rec_') ? t.id : null]
-      .forEach(v => { if (v) ids.add(v); });
+    [t.smsId, t.gmailMsgId, typeof t.id === 'string' && t.id.startsWith('rec_') ? t.id : null].forEach(
+      (v) => {
+        if (v) ids.add(v);
+      }
+    );
     const ms = toMs(t);
     if (t.bodyHash) {
       if (!bodies.has(t.bodyHash)) bodies.set(t.bodyHash, []);
@@ -108,7 +129,7 @@ export const createDedupIndex = (existing = []) => {
     buckets.get(k).push({ tx: t, ms, consumed });
   };
 
-  existing.forEach(t => register(t, false));
+  existing.forEach((t) => register(t, false));
 
   const check = (c) => {
     // 1. Hard IDs
@@ -119,8 +140,12 @@ export const createDedupIndex = (existing = []) => {
     const cMs = toMs(c);
 
     // 2. Same SMS seen twice with slightly different timestamps
-    if (c.bodyHash && bodies.has(c.bodyHash) &&
-        bodies.get(c.bodyHash).some(ms => Math.abs(ms - cMs) <= SAME_SMS_TOLERANCE_MS)) return true;
+    if (
+      c.bodyHash &&
+      bodies.has(c.bodyHash) &&
+      bodies.get(c.bodyHash).some((ms) => Math.abs(ms - cMs) <= SAME_SMS_TOLERANCE_MS)
+    )
+      return true;
 
     // 3/4. Bucket match with occurrence counting
     const slots = buckets.get(bucketKey(c, cMs)) || [];
@@ -139,17 +164,21 @@ export const createDedupIndex = (existing = []) => {
       if (hasRealTime(c) && hasRealTime(t)) {
         // Both stamped: only SMS-vs-Gmail may merge. Two SMS (or two emails)
         // with different IDs are two different transactions.
-        const crossSource = (!!c.smsId !== !!t.smsId) || (!!c.gmailMsgId !== !!t.gmailMsgId);
-        if (crossSource) match = Math.abs(cMs - slot.ms) <= CROSS_SOURCE_TOLERANCE_MS || (!!cRef && cRef === tRef);
+        const crossSource = !!c.smsId !== !!t.smsId || !!c.gmailMsgId !== !!t.gmailMsgId;
+        if (crossSource)
+          match = Math.abs(cMs - slot.ms) <= CROSS_SOURCE_TOLERANCE_MS || (!!cRef && cRef === tRef);
       } else {
         const tBal = Number.isFinite(t.extractedBalance) ? t.extractedBalance : null;
-        const refHit = (cRef && cRef === tRef) ||
-          (cRef && textOf(t).includes(cRef)) || (tRef && textOf(c).includes(tRef));
+        const refHit =
+          (cRef && cRef === tRef) || (cRef && textOf(t).includes(cRef)) || (tRef && textOf(c).includes(tRef));
         const descHit = !!cDesc && cDesc === descOf(t);
         const balHit = cBal !== null && tBal !== null && Math.abs(cBal - tBal) < 0.005;
         match = refHit || descHit || balHit;
       }
-      if (match) { slot.consumed = true; return true; }
+      if (match) {
+        slot.consumed = true;
+        return true;
+      }
     }
 
     register(c, true);
@@ -168,7 +197,7 @@ export const isDuplicate = (candidate, existingTransactions = []) =>
 /** Candidates that are NOT already stored (and not repeated within the batch). */
 export const filterNew = (newTxs, existingTxs = []) => {
   const index = createDedupIndex(existingTxs);
-  return newTxs.filter(tx => !index.check(tx));
+  return newTxs.filter((tx) => !index.check(tx));
 };
 
 /**

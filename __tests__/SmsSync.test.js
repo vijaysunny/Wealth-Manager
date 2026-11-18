@@ -1,7 +1,8 @@
 import { syncSms, computeSyncStart, SMS_FLAG_KEY, LAST_SYNC_KEY } from '../utils/SmsSync';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
 jest.mock('../components/RealSmsReader', () => ({ scanBankSms: jest.fn() }));
 jest.mock('../utils/NotificationService', () => ({ sendTransactionNotification: jest.fn() }));
 
@@ -10,20 +11,38 @@ const NOW = new Date('2026-10-11T10:00:00Z').getTime();
 
 const mem = (init = {}) => {
   const m = { ...init };
-  return { m, getItem: async (k) => (k in m ? m[k] : null), setItem: async (k, v) => { m[k] = v; } };
+  return {
+    m,
+    getItem: async (k) => (k in m ? m[k] : null),
+    setItem: async (k, v) => {
+      m[k] = v;
+    },
+  };
 };
 const sms = (o = {}) => ({
-  smsId: `sms:AX-HDFCBK:${NOW - HOUR}:500`, bodyHash: 'h1', refNo: null, date: NOW - HOUR,
-  amount: 500, type: 'expense', category: 'Food', bankName: 'HDFC Bank', currentBalance: 9000, ...o,
+  smsId: `sms:AX-HDFCBK:${NOW - HOUR}:500`,
+  bodyHash: 'h1',
+  refNo: null,
+  date: NOW - HOUR,
+  amount: 500,
+  type: 'expense',
+  category: 'Food',
+  bankName: 'HDFC Bank',
+  currentBalance: 9000,
+  ...o,
 });
 const deps = (storage, scanResult) => ({
   scan: jest.fn().mockResolvedValue(scanResult),
-  storage, notify: jest.fn().mockResolvedValue(), applyBalances: jest.fn().mockResolvedValue(), now: () => NOW,
+  storage,
+  notify: jest.fn().mockResolvedValue(),
+  applyBalances: jest.fn().mockResolvedValue(),
+  now: () => NOW,
 });
 
 describe('computeSyncStart', () => {
   test('first run looks back 24h', () => expect(computeSyncStart(null, NOW)).toBe(NOW - 24 * HOUR));
-  test('uses stored marker', () => expect(computeSyncStart(String(NOW - 3 * HOUR), NOW)).toBe(NOW - 3 * HOUR));
+  test('uses stored marker', () =>
+    expect(computeSyncStart(String(NOW - 3 * HOUR), NOW)).toBe(NOW - 3 * HOUR));
   test('caps at 90 days', () => expect(computeSyncStart('1000', NOW)).toBe(NOW - 90 * 24 * HOUR));
   test('future / garbage markers are safe', () => {
     expect(computeSyncStart(String(NOW + HOUR), NOW)).toBe(NOW);
@@ -54,7 +73,17 @@ describe('syncSms', () => {
   });
 
   test('marker advances when everything found was already stored', async () => {
-    const existing = [{ id: 1, smsId: sms().smsId, amount: 500, type: 'expense', fullDate: new Date(NOW - HOUR).toISOString(), category: 'Food', account: 'HDFC Bank' }];
+    const existing = [
+      {
+        id: 1,
+        smsId: sms().smsId,
+        amount: 500,
+        type: 'expense',
+        fullDate: new Date(NOW - HOUR).toISOString(),
+        category: 'Food',
+        account: 'HDFC Bank',
+      },
+    ];
     const st = mem({ user_transactions: JSON.stringify(existing), [LAST_SYNC_KEY]: String(NOW - 5 * HOUR) });
     const r = await syncSms(deps(st, { ok: true, items: [sms()] }));
     expect(r.added).toBe(0);
@@ -88,7 +117,9 @@ describe('syncSms', () => {
 
   test('more than 3 new → one summary notification', async () => {
     const st = mem();
-    const items = [1, 2, 3, 4].map(i => sms({ smsId: `sms:X:${i}:${i}00`, bodyHash: `h${i}`, amount: i * 100, date: NOW - i * HOUR }));
+    const items = [1, 2, 3, 4].map((i) =>
+      sms({ smsId: `sms:X:${i}:${i}00`, bodyHash: `h${i}`, amount: i * 100, date: NOW - i * HOUR })
+    );
     const d = deps(st, { ok: true, items });
     await syncSms(d);
     expect(d.notify).toHaveBeenCalledTimes(1);

@@ -1,6 +1,12 @@
 import AsyncStorage from '../data/Storage';
 import {
-  isDuplicate, filterNew, mergeTransactions, saveWithDedup, buildSmsId, hashText, createDedupIndex,
+  isDuplicate,
+  filterNew,
+  mergeTransactions,
+  saveWithDedup,
+  buildSmsId,
+  hashText,
+  createDedupIndex,
 } from '../utils/DeduplicationEngine';
 import { parseStatementRows, parseTransactionText, extractRefNo } from '../utils/TransactionParser';
 
@@ -10,8 +16,14 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 );
 
 const at = (iso, extra = {}) => ({
-  id: Math.random(), amount: 100, type: 'expense', account: 'HDFC Bank', category: 'Food',
-  title: 'Food', fullDate: new Date(iso).toISOString(), ...extra,
+  id: Math.random(),
+  amount: 100,
+  type: 'expense',
+  account: 'HDFC Bank',
+  category: 'Food',
+  title: 'Food',
+  fullDate: new Date(iso).toISOString(),
+  ...extra,
 });
 const sms = (iso, amount, address = 'VK-HDFCBK', extra = {}) => {
   const ms = new Date(iso).getTime();
@@ -44,8 +56,12 @@ describe('smsId (C6)', () => {
 
 describe('never drop a real transaction (C5)', () => {
   test('two ₹100 UPI payments on one day are both kept (different SMS)', () => {
-    const first = sms('2024-01-05T10:00:00Z', 100, 'VK-HDFCBK', { bodyHash: hashText('Rs 100 debited ... Bal 900') });
-    const second = sms('2024-01-05T10:02:00Z', 100, 'VK-HDFCBK', { bodyHash: hashText('Rs 100 debited ... Bal 800') });
+    const first = sms('2024-01-05T10:00:00Z', 100, 'VK-HDFCBK', {
+      bodyHash: hashText('Rs 100 debited ... Bal 900'),
+    });
+    const second = sms('2024-01-05T10:02:00Z', 100, 'VK-HDFCBK', {
+      bodyHash: hashText('Rs 100 debited ... Bal 800'),
+    });
     expect(isDuplicate(second, [first])).toBe(false);
     expect(filterNew([first, second], [])).toHaveLength(2);
   });
@@ -63,8 +79,18 @@ describe('never drop a real transaction (C5)', () => {
   });
 
   test('two ₹499 subscriptions with different merchants both survive', () => {
-    const netflix = at('2024-01-05T05:00:00Z', { amount: 499, title: 'Netflix', category: 'Bills', id: 'rec_1_1' });
-    const hotstar = at('2024-01-05T05:00:00Z', { amount: 499, title: 'Hotstar', category: 'Bills', id: 'rec_2_1' });
+    const netflix = at('2024-01-05T05:00:00Z', {
+      amount: 499,
+      title: 'Netflix',
+      category: 'Bills',
+      id: 'rec_1_1',
+    });
+    const hotstar = at('2024-01-05T05:00:00Z', {
+      amount: 499,
+      title: 'Hotstar',
+      category: 'Bills',
+      id: 'rec_2_1',
+    });
     expect(filterNew([netflix, hotstar], [])).toHaveLength(2);
     expect(filterNew([hotstar], [netflix])).toHaveLength(1);
   });
@@ -97,7 +123,10 @@ describe('never double-count the same transaction', () => {
   test('bank statement row matches an SMS by reference', () => {
     const s = sms('2024-01-05T10:00:00Z', 450, 'VK-HDFCBK', { refNo: '401234567890' });
     const stmt = at('2024-01-05T12:00:00Z', {
-      amount: 450, title: 'UPI/401234567890/ZOMATO', source: 'statement', refNo: '401234567890',
+      amount: 450,
+      title: 'UPI/401234567890/ZOMATO',
+      source: 'statement',
+      refNo: '401234567890',
     });
     expect(isDuplicate(stmt, [s])).toBe(true);
   });
@@ -125,14 +154,20 @@ describe('statement imports', () => {
     const [r1, r2] = parse();
     const identical = { ...r2, extractedBalance: null };
     const stored = [{ ...r1, extractedBalance: null }];
-    const { added, merged } = mergeTransactions([ { ...r1, extractedBalance: null }, identical ], stored);
+    const { added, merged } = mergeTransactions([{ ...r1, extractedBalance: null }, identical], stored);
     expect(added).toBe(1);
     expect(merged).toHaveLength(2);
   });
 
   test('two identical rows imported into an empty store are both kept', () => {
     const [r1, r2] = parse();
-    const { added } = mergeTransactions([{ ...r1, extractedBalance: null }, { ...r2, extractedBalance: null }], []);
+    const { added } = mergeTransactions(
+      [
+        { ...r1, extractedBalance: null },
+        { ...r2, extractedBalance: null },
+      ],
+      []
+    );
     expect(added).toBe(2);
   });
 });
@@ -149,7 +184,8 @@ describe('saveWithDedup persistence + index', () => {
 
   test('index handles a large store quickly (no O(n×m) scan)', () => {
     const existing = Array.from({ length: 5000 }, (_, i) =>
-      at(new Date(2024, 0, 1 + (i % 28), 10, 0, 0).toISOString(), { amount: 10 + i, title: `T${i}` }));
+      at(new Date(2024, 0, 1 + (i % 28), 10, 0, 0).toISOString(), { amount: 10 + i, title: `T${i}` })
+    );
     const t0 = Date.now();
     const idx = createDedupIndex(existing);
     for (let i = 0; i < 2000; i++) idx.check(at('2024-02-01T10:00:00Z', { amount: 9000 + i }));
@@ -159,9 +195,11 @@ describe('saveWithDedup persistence + index', () => {
 
 describe('ref extraction feeds dedup', () => {
   test('SMS parse exposes refNo', () => {
-    const r = parseTransactionText('ICICI Bank Acct XX123 debited for Rs 500.00; UPI:401234567890. Avl Bal Rs 12,345.67', { sender: 'VK-ICICIB' });
+    const r = parseTransactionText(
+      'ICICI Bank Acct XX123 debited for Rs 500.00; UPI:401234567890. Avl Bal Rs 12,345.67',
+      { sender: 'VK-ICICIB' }
+    );
     expect(r.refNo).toBe('401234567890');
     expect(extractRefNo('no reference here')).toBeNull();
   });
 });
-

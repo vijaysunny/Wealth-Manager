@@ -1,11 +1,20 @@
 import {
-  parseTransactionText, detectDirection, detectBank, extractAmount, extractBalance,
-  detectColumns, parseStatementRows, parsePdfText, parseDate, guessCategory,
+  parseTransactionText,
+  detectDirection,
+  detectBank,
+  extractAmount,
+  extractBalance,
+  detectColumns,
+  parseStatementRows,
+  parsePdfText,
+  parseDate,
+  guessCategory,
 } from '../utils/TransactionParser';
 
 describe('SMS classification (C7)', () => {
   test('ICICI debit mentioning "credited" in Info is an expense', () => {
-    const sms = 'ICICI Bank Acct XX123 debited for Rs 500.00 on 05-Jan-24; Rahul credited. UPI:401234567890. Avl Bal Rs 12,345.67';
+    const sms =
+      'ICICI Bank Acct XX123 debited for Rs 500.00 on 05-Jan-24; Rahul credited. UPI:401234567890. Avl Bal Rs 12,345.67';
     const r = parseTransactionText(sms, { sender: 'VK-ICICIB' });
     expect(r.type).toBe('expense');
     expect(r.amount).toBe(500);
@@ -14,7 +23,10 @@ describe('SMS classification (C7)', () => {
   });
 
   test('genuine credit is income', () => {
-    const r = parseTransactionText('Rs 25,000.00 credited to your A/c XX4321 on 01-Jan-24 by ACME Salary. Avl Bal Rs 30,000.00', { sender: 'AD-HDFCBK' });
+    const r = parseTransactionText(
+      'Rs 25,000.00 credited to your A/c XX4321 on 01-Jan-24 by ACME Salary. Avl Bal Rs 30,000.00',
+      { sender: 'AD-HDFCBK' }
+    );
     expect(r.type).toBe('income');
     expect(r.amount).toBe(25000);
     expect(r.category).toBe('Salary');
@@ -22,7 +34,9 @@ describe('SMS classification (C7)', () => {
   });
 
   test('UPI "Sent" and "Received"', () => {
-    expect(parseTransactionText('Sent Rs.250.00 From HDFC Bank A/C *1234 To SWIGGY On 02/01/24 Ref 401', {}).type).toBe('expense');
+    expect(
+      parseTransactionText('Sent Rs.250.00 From HDFC Bank A/C *1234 To SWIGGY On 02/01/24 Ref 401', {}).type
+    ).toBe('expense');
     expect(parseTransactionText('Received Rs.700.00 in your A/c from Amit via UPI', {}).type).toBe('income');
   });
 
@@ -56,19 +70,35 @@ describe('SMS classification (C7)', () => {
 
   test('category guessing avoids substring false positives', () => {
     expect(guessCategory('automatic payment')).not.toBe('Transport'); // "auto" inside a word
-    expect(guessCategory('Kolkata trip')).not.toBe('Transport');      // "ola" inside a word
+    expect(guessCategory('Kolkata trip')).not.toBe('Transport'); // "ola" inside a word
     expect(guessCategory('Zomato order')).toBe('Food');
   });
 });
 
 describe('statement column detection (C4)', () => {
   test('SBI-style headers: Description is not a credit column', () => {
-    const cols = detectColumns(['Txn Date', 'Value Date', 'Description', 'Ref No./Cheque No.', 'Debit', 'Credit', 'Balance']);
+    const cols = detectColumns([
+      'Txn Date',
+      'Value Date',
+      'Description',
+      'Ref No./Cheque No.',
+      'Debit',
+      'Credit',
+      'Balance',
+    ]);
     expect(cols).toEqual({ date: 0, narration: 2, refNo: 3, debit: 4, credit: 5, balance: 6 });
   });
 
   test('column index 0 is valid and first date column wins', () => {
-    const cols = detectColumns(['Date', 'Narration', 'Chq./Ref.No.', 'Value Dt', 'Withdrawal Amt.', 'Deposit Amt.', 'Closing Balance']);
+    const cols = detectColumns([
+      'Date',
+      'Narration',
+      'Chq./Ref.No.',
+      'Value Dt',
+      'Withdrawal Amt.',
+      'Deposit Amt.',
+      'Closing Balance',
+    ]);
     expect(cols.date).toBe(0);
     expect(cols.debit).toBe(4);
     expect(cols.credit).toBe(5);
@@ -104,7 +134,10 @@ describe('statement column detection (C4)', () => {
       ['06/01/24', 'NEFT-REFUND', '402', '06/01/24', '', '299.00', '10,299.00'],
     ];
     const txs = parseStatementRows(rows, 'HDFC Bank');
-    expect(txs.map(t => [t.amount, t.type])).toEqual([[1299, 'expense'], [299, 'income']]);
+    expect(txs.map((t) => [t.amount, t.type])).toEqual([
+      [1299, 'expense'],
+      [299, 'income'],
+    ]);
   });
 });
 
@@ -131,11 +164,11 @@ describe('PDF text lines (C3)', () => {
 
   test('one transaction per row, direction from running balance', () => {
     const txs = parsePdfText(text, 'HDFC Bank');
-    expect(txs.map(t => [t.amount, t.type])).toEqual([
-      [450, 'expense'],      // no previous balance → narration keywords → expense
-      [50000, 'income'],     // balance rose
-      [2000, 'expense'],     // balance fell
-      [12.5, 'income'],      // explicit Cr marker
+    expect(txs.map((t) => [t.amount, t.type])).toEqual([
+      [450, 'expense'], // no previous balance → narration keywords → expense
+      [50000, 'income'], // balance rose
+      [2000, 'expense'], // balance fell
+      [12.5, 'income'], // explicit Cr marker
     ]);
     expect(txs[0].category).toBe('Food');
     expect(txs[3].fullDate.slice(0, 10)).toBe('2024-01-04');

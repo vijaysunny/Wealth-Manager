@@ -82,7 +82,7 @@ function MainTabs() {
 }
 
 function AppContent() {
-  const {dark}=useAppTheme();
+  const { dark } = useAppTheme();
   const [ready, setReady] = useState(false);
   const [storageError, setStorageError] = useState('');
   useEffect(() => {
@@ -96,7 +96,9 @@ function AppContent() {
         await syncSms();
         await processRecurringTransactions();
         await saveNetWorthSnapshot();
-      } catch (err) { console.warn('Catch-up error:', err); }
+      } catch (err) {
+        console.warn('Catch-up error:', err);
+      }
     };
 
     async function setupApp() {
@@ -112,7 +114,7 @@ function AppContent() {
       await catchUp();
     }
 
-    setupApp().catch(error => setStorageError(error.message));
+    setupApp().catch((error) => setStorageError(error.message));
 
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') catchUp();
@@ -124,21 +126,45 @@ function AppContent() {
     };
   }, []);
 
-  if (!ready) return <View style={{flex:1, justifyContent:'center', padding:24}}><Text>{storageError || 'Preparing your saved data…'}</Text>{storageError ? <Button title="Retry" onPress={() => { setStorageError(''); getDatabase().then(() => setReady(true)).catch(error => setStorageError(error.message)); }} /> : null}</View>;
+  if (!ready)
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+        <Text>{storageError || 'Preparing your saved data…'}</Text>
+        {storageError ? (
+          <Button
+            title="Retry"
+            onPress={() => {
+              setStorageError('');
+              getDatabase()
+                .then(() => setReady(true))
+                .catch((error) => setStorageError(error.message));
+            }}
+          />
+        ) : null}
+      </View>
+    );
   return (
-    <NavigationContainer theme={dark?DarkTheme:DefaultTheme}>
+    <NavigationContainer theme={dark ? DarkTheme : DefaultTheme}>
       <StatusBar style="auto" />
       <Stack.Navigator initialRouteName="Main">
         <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Tools" component={ToolsScreen} options={{headerShown:false}} />
+        <Stack.Screen name="Tools" component={ToolsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Income" component={IncomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Expense" component={ExpenseScreen} options={{ headerShown: false }} />
         <Stack.Screen name="AddAsset" component={AddAssetScreen} options={{ headerShown: false }} />
         <Stack.Screen name="EditAsset" component={EditAssetScreen} options={{ headerShown: false }} />
         <Stack.Screen name="SearchAsset" component={SearchAssetScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="EditTransaction" component={EditTransactionScreen} options={{ headerShown: false }} />
+        <Stack.Screen
+          name="AllTransactions"
+          component={AllTransactionsScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="EditTransaction"
+          component={EditTransactionScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen name="AddGoal" component={AddGoalScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Import" component={ImportScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Savings" component={SavingsScreen} options={{ headerShown: false }} />
@@ -147,11 +173,39 @@ function AppContent() {
     </NavigationContainer>
   );
 }
-function Bootstrap({children}) {
-  const [ready,setReady]=useState(false),[error,setError]=useState('');
-  const start=React.useCallback(()=>{setError('');getDatabase().then(()=>setReady(true)).catch(e=>setError(e.message));},[]);
-  useEffect(()=>{start();},[start]);
-  if(!ready)return <View style={{flex:1,justifyContent:'center',padding:24}}><Text>{error||'Preparing your saved data…'}</Text>{error?<Button title="Retry migration" onPress={start}/>:null}</View>;
+function Bootstrap({ children }) {
+  const [ready, setReady] = useState(false),
+    [error, setError] = useState('');
+  const start = React.useCallback(() => {
+    setError('');
+    getDatabase()
+      .then(() => setReady(true))
+      .catch((e) => setError(e.message));
+  }, []);
+  useEffect(() => {
+    start();
+  }, [start]);
+  if (!ready)
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+        <Text>{error || 'Preparing your saved data…'}</Text>
+        {error ? <Button title="Retry migration" onPress={start} /> : null}
+      </View>
+    );
   return children;
 }
-export default function App(){return <ErrorBoundary><Bootstrap><ThemeProvider><AppLock><Onboarding><AppContent/></Onboarding></AppLock></ThemeProvider></Bootstrap></ErrorBoundary>;}
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <Bootstrap>
+        <ThemeProvider>
+          <AppLock>
+            <Onboarding>
+              <AppContent />
+            </Onboarding>
+          </AppLock>
+        </ThemeProvider>
+      </Bootstrap>
+    </ErrorBoundary>
+  );
+}

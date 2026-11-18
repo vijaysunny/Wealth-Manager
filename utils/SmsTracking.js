@@ -14,13 +14,17 @@ export const isTrackingActive = () => subscription !== null;
 
 export const stopTracking = () => {
   if (subscription) {
-    try { subscription.remove(); } catch (e) { console.log('Listener remove error:', e); }
+    try {
+      subscription.remove();
+    } catch (e) {
+      console.log('Listener remove error:', e);
+    }
     subscription = null;
   }
 };
 
 export const startTracking = () => {
-  if (subscription) return;                 // never register two listeners
+  if (subscription) return; // never register two listeners
   subscription = startSmsListener();
 };
 
@@ -34,7 +38,9 @@ const hasReceivePermission = async () => {
       PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS),
     ]);
     return read && recv;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 };
 
 /** Make the listener match (saved flag AND permission). Returns whether it is now running. */

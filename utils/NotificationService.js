@@ -8,8 +8,8 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
     // Replaces shouldShowAlert
     shouldPlaySound: true,
-    shouldSetBadge: false
-  })
+    shouldSetBadge: false,
+  }),
 });
 
 // VARIABLES TO TRACK LAST NOTIFICATION
@@ -25,7 +25,7 @@ export async function sendTransactionNotification(title, body) {
 
   // BLOCK if identical message sent within last 2 seconds
   if (contentKey === lastNotifContent && now - lastNotifTime < 2000) {
-    console.log("🚫 Duplicate Notification Blocked:", title);
+    console.log('🚫 Duplicate Notification Blocked:', title);
     return;
   }
 
@@ -37,9 +37,9 @@ export async function sendTransactionNotification(title, body) {
       title: title,
       body: body,
       sound: true,
-      priority: Notifications.AndroidNotificationPriority.HIGH
+      priority: Notifications.AndroidNotificationPriority.HIGH,
     },
-    trigger: null // Send Immediately
+    trigger: null, // Send Immediately
   });
 }
 
@@ -47,22 +47,22 @@ export async function sendTransactionNotification(title, body) {
 export async function scheduleDailySummary() {
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    const hasDaily = scheduled.some(n => n.content.title === "Daily Spending Summary");
+    const hasDaily = scheduled.some((n) => n.content.title === 'Daily Spending Summary');
     if (!hasDaily) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: "Daily Spending Summary",
-          body: "Tap to view your total spending for today."
+          title: 'Daily Spending Summary',
+          body: 'Tap to view your total spending for today.',
         },
         // expo-notifications 0.32 requires an explicit trigger type
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour: 21,
           // 9:00 PM
-          minute: 0
-        }
+          minute: 0,
+        },
       });
-      console.log("✅ Daily 9PM Summary Scheduled");
+      console.log('✅ Daily 9PM Summary Scheduled');
     }
   } catch (e) {
     console.warn('Daily summary scheduling failed:', e?.message || e);
@@ -76,10 +76,10 @@ export async function sendBudgetAlert(message, force = false) {
   if (!force && lastAlertDate === today) return;
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "⚠️ Budget Warning",
-      body: message
+      title: '⚠️ Budget Warning',
+      body: message,
     },
-    trigger: null
+    trigger: null,
   });
   if (!force) await AsyncStorage.setItem('last_budget_alert_date', today);
 }

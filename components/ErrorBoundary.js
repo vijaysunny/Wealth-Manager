@@ -2,7 +2,18 @@ import { View, Text } from './Theme';
 import React from 'react';
 import { Button } from 'react-native';
 export default class ErrorBoundary extends React.Component {
-  state={error:null};
-  static getDerivedStateFromError(error){return {error};}
-  render(){return this.state.error?<View style={{flex:1,justifyContent:'center',padding:24}}><Text>Something went wrong while opening this screen. Your saved data is retained.</Text><Button title="Try again" onPress={()=>this.setState({error:null})}/></View>:this.props.children;}
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    return this.state.error ? (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+        <Text>Something went wrong while opening this screen. Your saved data is retained.</Text>
+        <Button title="Try again" onPress={() => this.setState({ error: null })} />
+      </View>
+    ) : (
+      this.props.children
+    );
+  }
 }

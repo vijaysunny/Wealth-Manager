@@ -23,8 +23,8 @@ export const SMS_FLAG_KEY = 'sms_auto_track_enabled';
 export const LAST_SYNC_KEY = 'last_bg_sync_time';
 
 const HOUR = 60 * 60 * 1000;
-const DEFAULT_LOOKBACK_MS = 24 * HOUR;        // first ever run
-const MAX_LOOKBACK_MS = 90 * 24 * HOUR;       // never scan further back than this automatically
+const DEFAULT_LOOKBACK_MS = 24 * HOUR; // first ever run
+const MAX_LOOKBACK_MS = 90 * 24 * HOUR; // never scan further back than this automatically
 const NOTIFY_INDIVIDUALLY_UP_TO = 3;
 
 /** Epoch ms to scan from, given the stored marker (string|null) and "now". */
@@ -41,7 +41,9 @@ export const smsToTransaction = (sms) => {
     smsId: sms.smsId,
     bodyHash: sms.bodyHash,
     refNo: sms.refNo,
-    title: sms.merchant || sms.category, merchant: sms.merchant, vpa: sms.vpa,
+    title: sms.merchant || sms.category,
+    merchant: sms.merchant,
+    vpa: sms.vpa,
     amount: parseFloat(sms.amount),
     type: sms.type,
     date: when.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -54,8 +56,15 @@ export const smsToTransaction = (sms) => {
 };
 
 const monthSpent = (txs, category, now) =>
-  txs.filter(t => isReportable(t) && t.type === 'expense' && t.category === category &&
-    new Date(t.fullDate).getMonth() === now.getMonth() && new Date(t.fullDate).getFullYear() === now.getFullYear())
+  txs
+    .filter(
+      (t) =>
+        isReportable(t) &&
+        t.type === 'expense' &&
+        t.category === category &&
+        new Date(t.fullDate).getMonth() === now.getMonth() &&
+        new Date(t.fullDate).getFullYear() === now.getFullYear()
+    )
     .reduce((s, t) => s + t.amount, 0);
 
 const notifyOne = async (tx, spentBefore, limit, notify) => {
@@ -65,7 +74,8 @@ const notifyOne = async (tx, spentBefore, limit, notify) => {
   }
   const total = spentBefore + tx.amount;
   let body = `Total ${tx.category} spend: ${formatMoney(total)}`;
-  if (limit > 0) body = `You've spent ${formatMoney(total)} out of ${formatMoney(limit)} (${Math.round((total / limit) * 100)}%)`;
+  if (limit > 0)
+    body = `You've spent ${formatMoney(total)} out of ${formatMoney(limit)} (${Math.round((total / limit) * 100)}%)`;
   await notify(`Spent ${formatMoney(tx.amount)} on ${tx.category}`, body);
 };
 
@@ -75,7 +85,7 @@ const run = async ({ scan, storage, notify, applyBalances, now }) => {
   const startedAt = now();
   const minDate = computeSyncStart(await storage.getItem(LAST_SYNC_KEY), startedAt);
   const res = await scan(minDate);
-  if (!res.ok) return { status: 'scan_failed', reason: res.reason, added: 0 };   // marker NOT advanced
+  if (!res.ok) return { status: 'scan_failed', reason: res.reason, added: 0 }; // marker NOT advanced
 
   const txJson = await storage.getItem('user_transactions');
   const currentTx = txJson ? JSON.parse(txJson) : [];
@@ -95,7 +105,7 @@ const run = async ({ scan, storage, notify, applyBalances, now }) => {
     if (storage === AsyncStorage) {
       fresh = (await saveWithDedup(fresh, { balanceMode: 'captured' })).addedTxs;
     } else {
-      const updated = [...fresh, ...currentTx].sort((a,b) => new Date(b.fullDate)-new Date(a.fullDate));
+      const updated = [...fresh, ...currentTx].sort((a, b) => new Date(b.fullDate) - new Date(a.fullDate));
       await storage.setItem('user_transactions', JSON.stringify(updated));
       await applyBalances(fresh);
     }
@@ -110,12 +120,15 @@ const run = async ({ scan, storage, notify, applyBalances, now }) => {
       } else {
         const nowDate = new Date(startedAt);
         const running = [...currentTx];
-        for (const tx of [...fresh].reverse()) {          // oldest first so running totals build up
+        for (const tx of [...fresh].reverse()) {
+          // oldest first so running totals build up
           await notifyOne(tx, monthSpent(running, tx.category, nowDate), catLimits[tx.category] || 0, notify);
           running.push(tx);
         }
       }
-    } catch (e) { console.log('Notification error:', e); }   // never let a notification failure undo the sync
+    } catch (e) {
+      console.log('Notification error:', e);
+    } // never let a notification failure undo the sync
   }
   return { status: 'ok', added: fresh.length };
 };
@@ -134,7 +147,12 @@ export const syncSms = (deps = {}) => {
     ...deps,
   };
   inFlight = run(d)
-    .catch((e) => { console.log('SMS sync error:', e); return { status: 'error', added: 0 }; })
-    .finally(() => { inFlight = null; });
+    .catch((e) => {
+      console.log('SMS sync error:', e);
+      return { status: 'error', added: 0 };
+    })
+    .finally(() => {
+      inFlight = null;
+    });
   return inFlight;
 };

@@ -7,28 +7,29 @@ import AsyncStorage from '../data/Storage';
 import { Alert } from 'react-native';
 export const importAxioData = async () => {
   try {
-    console.log("--- STARTING IMPORT ---");
+    console.log('--- STARTING IMPORT ---');
     const result = await DocumentPicker.getDocumentAsync({
       type: '*/*',
-      copyToCacheDirectory: true
+      copyToCacheDirectory: true,
     });
-    if (result.canceled) return {
-      success: false
-    };
+    if (result.canceled)
+      return {
+        success: false,
+      };
     const uri = result.assets[0].uri;
     const fileContent = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64
+      encoding: FileSystem.EncodingType.Base64,
     });
     const workbook = XLSX.read(fileContent, {
-      type: 'base64'
+      type: 'base64',
     });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const rawData = XLSX.utils.sheet_to_json(sheet);
     if (rawData.length === 0) {
-      Alert.alert("Error", "File appears empty.");
+      Alert.alert('Error', 'File appears empty.');
       return {
-        success: false
+        success: false,
       };
     }
 
@@ -46,10 +47,10 @@ export const importAxioData = async () => {
     let importedCount = 0;
     let skippedCount = 0;
     let catsUpdated = false;
-    rawData.forEach(row => {
+    rawData.forEach((row) => {
       const dateStr = row.DATE;
       const amountVal = row.AMOUNT;
-      const note = row.PLACE || row.NOTE || row.Narration || "Imported Txn";
+      const note = row.PLACE || row.NOTE || row.Narration || 'Imported Txn';
       const typeRaw = row['DR/CR'];
       const accountName = row.ACCOUNT || 'Cash';
       let rawCat = row.CATEGORY === 'UNKNOWN' ? 'General' : row.CATEGORY || 'General';
@@ -92,13 +93,13 @@ export const importAxioData = async () => {
         date: dateObj.toLocaleDateString('en-IN', {
           day: 'numeric',
           month: 'short',
-          year: 'numeric'
+          year: 'numeric',
         }),
         fullDate: dateObj.toISOString(),
         category: rawCat,
         account: accountName,
         tags: ['Axio-Import'],
-        imported: true
+        imported: true,
       };
       transactions.push(newTx);
       newAccounts.add(accountName);
@@ -107,38 +108,42 @@ export const importAxioData = async () => {
 
     // 5. SAVE & SORT (FIXED)
 
-    const saved = await addMany(transactions, {balanceMode:'none'});
+    const saved = await addMany(transactions, { balanceMode: 'none' });
     skippedCount += saved.skipped;
     importedCount = saved.added;
 
     // 6. Save Accounts
     let accUpdated = false;
-    newAccounts.forEach(accName => {
-      if (!existingAcc.some(a => a.name === accName)) {
+    newAccounts.forEach((accName) => {
+      if (!existingAcc.some((a) => a.name === accName)) {
         existingAcc.push({
           id: Date.now() + Math.random(),
           name: accName,
           type: 'Bank Account',
           // Default
-          balance: 0
+          balance: 0,
         });
         accUpdated = true;
       }
     });
     if (accUpdated) {
-      await mutateList('user_wealth_accounts',current=>{const names=new Set(current.map(a=>a.name));return [...current,...existingAcc.filter(a=>!names.has(a.name))];});
+      await mutateList('user_wealth_accounts', (current) => {
+        const names = new Set(current.map((a) => a.name));
+        return [...current, ...existingAcc.filter((a) => !names.has(a.name))];
+      });
     }
     if (catsUpdated) {
-      await mutateList('user_categories',current=>[...new Set([...current,...existingCats])]);
+      await mutateList('user_categories', (current) => [...new Set([...current, ...existingCats])]);
     }
     return {
       success: true,
-      count: importedCount, skipped: skippedCount
+      count: importedCount,
+      skipped: skippedCount,
     };
   } catch (error) {
-    console.log("Import Error:", error);
+    console.log('Import Error:', error);
     return {
-      success: false
+      success: false,
     };
   }
 };

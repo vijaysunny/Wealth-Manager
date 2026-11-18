@@ -1,4 +1,10 @@
-import { buildBackup, validateBackup, summarizeBackup, restoreBackup, BACKUP_FIELDS } from '../utils/BackupService';
+import {
+  buildBackup,
+  validateBackup,
+  summarizeBackup,
+  restoreBackup,
+  BACKUP_FIELDS,
+} from '../utils/BackupService';
 import { BACKUP_VERSION } from '../utils/appInfo';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -10,13 +16,21 @@ const memStorage = (init = {}) => {
   return {
     m,
     getItem: async (k) => (k in m ? m[k] : null),
-    setItem: async (k, v) => { m[k] = v; },
-    multiSet: async (pairs) => { pairs.forEach(([k, v]) => { m[k] = v; }); },
+    setItem: async (k, v) => {
+      m[k] = v;
+    },
+    multiSet: async (pairs) => {
+      pairs.forEach(([k, v]) => {
+        m[k] = v;
+      });
+    },
   };
 };
 
 const full = () => ({
-  user_transactions: JSON.stringify([{ id: 1, amount: 100, type: 'expense', category: 'Food', fullDate:'2026-10-10T12:00:00Z' }]),
+  user_transactions: JSON.stringify([
+    { id: 1, amount: 100, type: 'expense', category: 'Food', fullDate: '2026-10-10T12:00:00Z' },
+  ]),
   user_categories: JSON.stringify(['Food']),
   user_wealth_accounts: JSON.stringify([{ id: 1, type: 'Bank Account', name: 'HDFC', balance: 5000 }]),
   user_goals: JSON.stringify([{ id: 1, name: 'Car', targetAmount: 500000 }]),
@@ -27,9 +41,9 @@ const full = () => ({
   savings_goal_pct: '25',
   user_name: 'Vijay',
   rejected_sources: JSON.stringify([]),
-  monthly_budgets: JSON.stringify({'2026-10':{limit:40000}}),
-  category_rules: JSON.stringify([{id:1,pattern:'swiggy',category:'Food'}]),
-  networth_history: JSON.stringify([{date:'2026-10-11',netWorth:5000}]),
+  monthly_budgets: JSON.stringify({ '2026-10': { limit: 40000 } }),
+  category_rules: JSON.stringify([{ id: 1, pattern: 'swiggy', category: 'Food' }]),
+  networth_history: JSON.stringify([{ date: '2026-10-11', netWorth: 5000 }]),
 });
 
 describe('backup round trip', () => {
@@ -73,7 +87,9 @@ describe('backup round trip', () => {
 });
 
 describe('validateBackup refuses unknown shapes', () => {
-  test.each([[null], ['text'], [[1, 2]], [42]])('non-object %p', (d) => expect(validateBackup(d).ok).toBe(false));
+  test.each([[null], ['text'], [[1, 2]], [42]])('non-object %p', (d) =>
+    expect(validateBackup(d).ok).toBe(false)
+  );
   test('object with no known fields', () => expect(validateBackup({ hello: 1 }).ok).toBe(false));
   test('wrong field types', () => {
     expect(validateBackup({ transactions: {} }).ok).toBe(false);
@@ -97,15 +113,30 @@ describe('validateBackup refuses unknown shapes', () => {
 
 describe('summary + partial restore', () => {
   test('summary counts', () => {
-    const s = summarizeBackup({ transactions: [1, 2, 3], budgets: { a: 1 }, monthlyBudget: '5000', userName: 'V' });
-    expect(s).toEqual(expect.arrayContaining([
-      { label: 'Transactions', count: 3 }, { label: 'Category budgets', count: 1 },
-      { label: 'Monthly budget', count: '₹5000' }, { label: 'Name', count: 'V' },
-    ]));
+    const s = summarizeBackup({
+      transactions: [1, 2, 3],
+      budgets: { a: 1 },
+      monthlyBudget: '5000',
+      userName: 'V',
+    });
+    expect(s).toEqual(
+      expect.arrayContaining([
+        { label: 'Transactions', count: 3 },
+        { label: 'Category budgets', count: 1 },
+        { label: 'Monthly budget', count: '₹5000' },
+        { label: 'Name', count: 'V' },
+      ])
+    );
   });
   test('old backup only overwrites what it contains', async () => {
     const st = memStorage({ user_budget_limit: '1000', user_name: 'Keep' });
-    const n = await restoreBackup({ version: '2.0', transactions: [{ id: 1, amount: 1, type: 'income', fullDate:'2026-10-10T12:00:00Z' }] }, st);
+    const n = await restoreBackup(
+      {
+        version: '2.0',
+        transactions: [{ id: 1, amount: 1, type: 'income', fullDate: '2026-10-10T12:00:00Z' }],
+      },
+      st
+    );
     expect(n).toBe(1);
     expect(st.m.user_budget_limit).toBe('1000');
     expect(st.m.user_name).toBe('Keep');
