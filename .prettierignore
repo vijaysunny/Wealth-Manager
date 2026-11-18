@@ -1,0 +1,9 @@
+node_modules/
+package-lock.json
+assets/
+android/
+ios/
+coverage/
+docs/
+__fixtures__/
+*.md
