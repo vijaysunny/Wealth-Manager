@@ -25,6 +25,7 @@ import {
   isGmailConnected,
   syncGmailTransactions,
 } from '../utils/GmailTracker';
+import { isGmailEnabled } from '../utils/Features';
 const DEFAULT_CATS = [
   'Food',
   'Transport',
@@ -96,7 +97,7 @@ export default function SettingsScreen({ navigation }) {
     setCategories(savedCats ? JSON.parse(savedCats) : DEFAULT_CATS);
     const savedWealth = await AsyncStorage.getItem('user_wealth_accounts');
     setAccounts(savedWealth ? JSON.parse(savedWealth) : []);
-    const gmailOk = await isGmailConnected();
+    const gmailOk = isGmailEnabled() && (await isGmailConnected());
     setGmailConnected(gmailOk);
     const smsEnabled = await AsyncStorage.getItem('sms_auto_track_enabled');
     setSmsAutoTrack(smsEnabled !== 'false');
@@ -411,21 +412,23 @@ export default function SettingsScreen({ navigation }) {
           </View>
           <View style={styles.divider} />
 
-          {/* Gmail */}
-          <RowButton
-            icon="mail"
-            color={gmailConnected ? '#4CAF50' : '#2196F3'}
-            label={gmailConnected ? 'Gmail Connected ✓' : 'Connect Gmail'}
-            onPress={handleGmailConnect}
-            right={
-              gmailConnected ? (
-                <TouchableOpacity onPress={handleGmailSync} disabled={gmailSyncing}>
-                  <Text style={styles.syncNowText}>{gmailSyncing ? 'Syncing…' : 'Sync Now'}</Text>
-                </TouchableOpacity>
-              ) : null
-            }
-          />
-          {gmailConnected && (
+          {/* Gmail (feature-flagged off, plan B1) */}
+          {isGmailEnabled() && (
+            <RowButton
+              icon="mail"
+              color={gmailConnected ? '#4CAF50' : '#2196F3'}
+              label={gmailConnected ? 'Gmail Connected ✓' : 'Connect Gmail'}
+              onPress={handleGmailConnect}
+              right={
+                gmailConnected ? (
+                  <TouchableOpacity onPress={handleGmailSync} disabled={gmailSyncing}>
+                    <Text style={styles.syncNowText}>{gmailSyncing ? 'Syncing…' : 'Sync Now'}</Text>
+                  </TouchableOpacity>
+                ) : null
+              }
+            />
+          )}
+          {isGmailEnabled() && gmailConnected && (
             <Text style={styles.gmailNote}>
               Auto-reads bank transaction emails. Duplicates are skipped automatically.
             </Text>

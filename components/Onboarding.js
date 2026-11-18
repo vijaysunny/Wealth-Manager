@@ -40,8 +40,7 @@ export default function Onboarding({ children }) {
         <Text style={{ fontSize: 26, fontWeight: 'bold' }}>Welcome to WealthManager</Text>
         <Text style={{ marginVertical: 20 }}>
           Your finances stay on this device. SMS access lets the app capture bank payments and notifications
-          show spending alerts. Gmail connects only when you choose it in Settings. You can use manual entry
-          without SMS access.
+          show spending alerts. You can use manual entry without SMS access.
         </Text>
         <Button disabled={busy} title="Enable bank SMS tracking" onPress={() => finish(true)} />
         <Button disabled={busy} title="Use manual entry" onPress={() => finish(false)} />

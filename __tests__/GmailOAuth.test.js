@@ -28,10 +28,12 @@ jest.mock('../utils/NotificationService', () => ({ sendTransactionNotification: 
 let tracker;
 beforeAll(() => {
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID = 'test-client';
+  process.env.EXPO_PUBLIC_ENABLE_GMAIL = 'true';
   tracker = require('../utils/GmailTracker');
 });
 afterAll(() => {
   delete process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
+  delete process.env.EXPO_PUBLIC_ENABLE_GMAIL;
 });
 beforeEach(() => {
   jest.clearAllMocks();

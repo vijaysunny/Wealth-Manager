@@ -5,6 +5,7 @@ import AsyncStorage from '../data/Storage';
 import { saveWithDedup } from './DeduplicationEngine';
 import { parseTransactionText } from './TransactionParser';
 import { capturedFields } from './CaptureMapper';
+import { isGmailEnabled } from './Features';
 import { extractEmailText } from './GmailMime';
 WebBrowser.maybeCompleteAuthSession();
 const KEY = 'gmail_oauth_credentials';
@@ -34,7 +35,7 @@ const store = async (response, previous = {}) => {
   return tokens;
 };
 export const signInWithGoogle = async () => {
-  if (!clientId) return { success: false, error: 'not_configured' };
+  if (!clientId || !isGmailEnabled()) return { success: false, error: 'not_configured' };
   try {
     const request = new AuthSession.AuthRequest({
       clientId,
@@ -117,7 +118,7 @@ const gmailFetch = async (path) => {
   return response.json();
 };
 const runSync = async () => {
-  if (!clientId) return { success: false, error: 'not_configured' };
+  if (!clientId || !isGmailEnabled()) return { success: false, error: 'not_configured' };
   try {
     const startedAt = Date.now();
     const last = await AsyncStorage.getItem(SYNC);
