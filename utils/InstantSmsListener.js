@@ -10,6 +10,7 @@ import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, buildSmsId, hashText } from './DeduplicationEngine';
 import { isReportable } from './BalanceService';
 import { parseTransactionText } from './TransactionParser';
+import { capturedFields } from './CaptureMapper';
 
 // ── Main listener ─────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ export const startSmsListener = () => {
       account: bankName,
       tags: ['Auto-SMS'],
       extractedBalance: parsed.balance,
+      ...capturedFields(parsed),
     };
 
     // ── Load existing & deduplicate ────────────────────────────────────────
@@ -81,6 +83,11 @@ export const startSmsListener = () => {
         if (pct >= 100) notifBody = `🚨 ${notifBody} — Budget exceeded!`;
       }
       await sendTransactionNotification(`Spent ₹${parsed.amount} on ${parsed.category}`, notifBody);
+    } else if (parsed.type === 'transfer') {
+      await sendTransactionNotification(
+        'Transfer captured',
+        `₹${parsed.amount} · ${parsed.category} · ${bankName}`
+      );
     } else {
       await sendTransactionNotification('Income Credited 💰', `₹${parsed.amount} from ${bankName}`);
     }

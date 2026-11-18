@@ -92,6 +92,7 @@ const BANKS = [
   [/FEDERAL|\bFEDBK\b/, 'Federal Bank'],
   [/CANARA|\bCNRB\b/, 'Canara Bank'],
   [/UNION BANK/, 'Union Bank'],
+  [/EQUITAS/, 'Equitas Small Finance Bank'],
   [/PAYTM/, 'Paytm Bank'],
   [/AIRTEL (?:PAYMENTS )?BANK|AIRTEL PAYMENTS/, 'Airtel Payments Bank'],
   [/AMAZON|\bAMZN\b/, 'Amazon Pay'],
@@ -211,7 +212,7 @@ export const detectDirection = (text = '') => {
 const CATEGORY_RULES = [
   [
     'Food',
-    /zomato|swiggy|dominos|pizza|burger|restaurant|\bfood\b|\bcafe\b|\bkfc\b|\bmcd\b|mcdonald|blinkit|zepto|grofer|dunzo|bigbasket/i,
+    /zomato|swiggy|dominos|pizza|burger|restaurant|\bfood\b|\bcafe\b|\bkfc\b|\bmcd\b|mcdonald|blinkit|zepto|grofer|dunzo|bigbasket|ananda ?bhavan|\ba2b\b/i,
   ],
   [
     'Transport',
@@ -227,9 +228,15 @@ const CATEGORY_RULES = [
     /zerodha|groww|\bmf\b|\bsip\b|\bstocks?\b|mutual fund|upstox|angel|smallcase|demat|\bnse\b|\bbse\b/i,
   ],
   ['Salary', /salary|sal cr|payroll|stipend|pay credit/i],
-  ['Health', /hospital|pharmacy|medical|doctor|clinic|apollo|netmeds|\b1mg\b|medplus|practo|\bhealth\b/i],
+  [
+    'Health',
+    // "PRADHANMANTRIBHARTIYAJ" = Pradhan Mantri Bhartiya Janaushadhi Kendra (truncated by the card network)
+    /hospital|pharmacy|medical|doctor|clinic|apollo|netmeds|\b1mg\b|medplus|practo|\bhealth\b|jan ?aushadhi|pradhan ?mantri ?bh[a]?r[a]?tiya ?j/i,
+  ],
   ['Loan/EMI', /\bemi\b|loan repay|home loan|car loan|personal loan/i],
   ['Insurance', /insurance|\blic\b|premium|star health|hdfc ergo|tata aig/i],
+  // Recurring mandate debits ("A/c has been debited towards Google ...", e-mandate, autopay)
+  ['Subscriptions', /\bauto ?pay\b|\be-?mandate\b|\bmandate\b|standing instruction|debited towards/i],
   ['Rent', /\brent\b|maintenance|society|\bpg\b|hostel/i],
   ['Education', /school|college|university|\bfees?\b|tuition|education|\bcourse\b|udemy|coursera/i],
   ['UPI Transfer', /\bupi\b|\bvpa\b|\bneft\b|\brtgs\b|\bimps\b|transfer|\btrf\b/i],
@@ -248,13 +255,75 @@ export const guessCategory = (text = '') => {
  * Used by the dedup engine to match the same payment across SMS, Gmail and
  * statements. Returns null when no reliable reference is present.
  */
+// Up to 40 chars: UPI Lite references are ~35 digits ("Ref no. 0100710261640900517940...")
 const REF_LABELLED_RE =
-  /(?:\bupi(?:\s*ref(?:erence)?)?|\bref(?:erence)?(?:\s*(?:no|number|num|id))?|\brrn|\butr|\btxn\s*(?:id|no)|\btransaction\s*(?:id|no))\s*[:.#\-/]*\s*([A-Za-z]*\d{6,22})/i;
-const REF_BARE_RE = /\b(\d{12})\b/;
+  /(?:\bupi(?:\s*ref(?:erence)?)?|\bref(?:erence)?(?:\s*(?:no|number|num|id))?|\brrn|\butr|\btxn\s*(?:id|no)|\btransaction\s*(?:id|no))\s*[:.#\-/]*\s*([A-Za-z]*\d{6,40})/i;
+// Slash narration used by Axis and others: "IMPS/P2A/632013023016/baja", "UPI/P2M/630969451444/GROWW INVEST TECH P"
+const CHANNEL_SLASH_RE = /\b(IMPS|UPI|NEFT|RTGS)\/(?:(P2A|P2M|P2P)\/)?([A-Za-z]*\d{6,40})\/([^\n/]{1,60})/i;
+// A bare 12-digit number right after "+", "to " or "call" is a phone number (helpline / "SMS BLOCK ... to 91..."), not a ref
+const PHONE_BEFORE_RE = /(?:\+|\bto\s*\+?|\bcall\s*:?\s*\+?)$/i;
 export const extractRefNo = (text = '') => {
-  const m = String(text).match(REF_LABELLED_RE) || String(text).match(REF_BARE_RE);
-  return m ? m[1].toUpperCase() : null;
+  const s = String(text);
+  const slash = s.match(CHANNEL_SLASH_RE);
+  if (slash) return slash[3].toUpperCase();
+  const labelled = s.match(REF_LABELLED_RE);
+  if (labelled) return labelled[1].toUpperCase();
+  const bare = /\b(\d{12})\b/g;
+  let m;
+  while ((m = bare.exec(s)) !== null) {
+    if (!PHONE_BEFORE_RE.test(s.slice(Math.max(0, m.index - 10), m.index))) return m[1];
+  }
+  return null;
 };
+
+/**
+ * Payment rail and counterparty: { channel: 'IMPS'|'UPI'|'NEFT'|'RTGS'|'BBPS'|'NACH'|null,
+ * mode: 'P2A'|'P2M'|'P2P'|null, counterparty: string|null }.
+ */
+export const extractChannel = (text = '') => {
+  const s = String(text);
+  const slash = s.match(CHANNEL_SLASH_RE);
+  if (slash)
+    return {
+      channel: slash[1].toUpperCase(),
+      mode: slash[2]?.toUpperCase() || null,
+      counterparty: slash[4].trim(),
+    };
+  const named =
+    s.match(/\bvia\s+(UPI|IMPS|NEFT|RTGS|BBPS|NACH)\b/i) || s.match(/\b(IMPS|NEFT|RTGS|BBPS|NACH|UPI)\b/i);
+  return { channel: named ? named[1].toUpperCase() : null, mode: null, counterparty: null };
+};
+
+// Masked account / card digits: "A/c no. XX0973", "A/C *1234", "Equitas A/c 1246", "ending 1987", "Card no. XX9070"
+const LAST4_PATTERNS = [
+  /\bending(?:\s+(?:with|in))?\s*[X*]*\s*(\d{3,18})\b/i,
+  /\b(?:a\/c|acct|account|card)\b\.?\s*(?:no\.?|number)?\s*[:.]?\s*[X*]*\s*(\d{3,18})\b/i,
+  /\b[X*]{2,}(\d{3,18})\b/i,
+];
+/** Last 4 digits of the account/card the message is about (3 if the bank masks to 3), or null. */
+export const extractLast4 = (text = '') => {
+  for (const re of LAST4_PATTERNS) {
+    const m = String(text).match(re);
+    if (m) return m[1].slice(-4);
+  }
+  return null;
+};
+
+const LIMIT_RE =
+  /(?:avl|avbl|available)\.?\s*(?:credit\s*|cr\.?\s*)?limit\s*(?:is\s*)?[:\-\s]*(?:rs\.?|inr|₹)?\s*\.?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
+/** Credit-card available limit ("Avl limit: INR 275541.19"), or null. Never a balance. */
+export const extractAvailableLimit = (text = '') => {
+  const m = String(text).match(LIMIT_RE);
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+};
+
+// "We have received payment of Rs.5,770.00 via BBPS & the same has been credited to your SBI Credit Card"
+const CC_PAYMENT_RE = /\bpayment\b[^.]*\b(?:received|credited)\b|\b(?:received|credited)\b[^.]*\bpayment\b/i;
+const NOT_CC_PAYMENT_RE = /\brefund|\breversal|\bcashback|\bspent\b|\bpurchase\b/i;
+const isCardPayment = (body, accountType) =>
+  accountType === 'Credit Card' && CC_PAYMENT_RE.test(body) && !NOT_CC_PAYMENT_RE.test(body);
 // Statement "Ref No" cells: keep only values long enough to be a real reference
 const normRef = (v) => {
   const r = String(v || '')
@@ -263,22 +332,36 @@ const normRef = (v) => {
   return r.length >= 6 ? r : null;
 };
 
+const MERCHANT_RE =
+  /\b(?:paid to|sent to|received from|towards|at|to)\s+([a-z][a-z0-9 .&_-]{1,60}?)(?=\s+(?:on|via|using|ref|upi|avl|available|bal|from|for)\b|[.;\n]|$)/i;
+// "credited to your SBI Credit Card" names the account, not a merchant
+const NOT_MERCHANT_RE = /^(?:your|you|the|a\/c|ac|acct|account)\b/i;
+export const extractMerchant = (text = '') => {
+  const s = String(text);
+  const vpa = s.match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
+  const slash = s.match(CHANNEL_SLASH_RE);
+  let merchant = slash ? slash[4].trim() : null;
+  if (!merchant) {
+    const candidate = s.match(MERCHANT_RE)?.[1]?.trim();
+    if (candidate && !NOT_MERCHANT_RE.test(candidate)) merchant = candidate;
+  }
+  return { merchant: merchant || vpa, vpa };
+};
+
+const TRANSFER_RAILS = ['IMPS', 'NEFT', 'RTGS'];
+
 /**
  * Parse an SMS or email body. Returns null if it is not a transaction.
- * @param {string} body
- * @param {{sender?: string, bankFallback?: string}} opts
- * @returns {{amount:number,type:'income'|'expense',category:string,bankName:string,balance:number|null,accountType:string,refNo:string|null}|null}
+ *
+ * type: 'income' | 'expense' | 'transfer'. A transfer is ONE side of a money move that
+ * does not change net worth (card bill payment, wallet top-up). `flow` says which way
+ * money moved for the account this message is about ('in' | 'out'), so the pipeline can
+ * apply that leg even before the other account is known.
+ *
+ * needsAccountReview: the message names no account digits and is not about a card, so
+ * the bank may have several matching accounts (pipeline decides).
+ * transferCandidate: IMPS/NEFT/RTGS debit to a person/account - possibly a self-transfer.
  */
-export const extractMerchant = (text = '') => {
-  const vpa = String(text).match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
-  const merchant =
-    String(text)
-      .match(
-        /(?:paid to|sent to|received from|at|to)\s+([a-z][a-z0-9 .&_-]{1,60}?)(?=\s+(?:on|via|using|ref|upi|avl|available|bal|from|for)\b|[.;]|$)/i
-      )?.[1]
-      ?.trim() || vpa;
-  return { merchant, vpa };
-};
 export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknown Bank' } = {}) => {
   if (!body) return null;
   if (IGNORE_RE.test(body)) return null;
@@ -287,15 +370,40 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
   const amount = extractAmount(body);
   if (amount === null || amount <= 0) return null;
 
+  const accountType = detectAccountType(body);
+  const last4 = extractLast4(body);
+  const { channel, mode, counterparty } = extractChannel(body);
+  let type = detectDirection(body);
+  let category = guessCategory(body);
+  let kind = null;
+  let flow = null;
+  if (isCardPayment(body, accountType)) {
+    type = 'transfer';
+    kind = 'cc_payment';
+    flow = 'in';
+    category = 'Card Payment';
+  }
+  const merchantInfo = extractMerchant(body);
+
   return {
     amount,
-    ...extractMerchant(body),
-    type: detectDirection(body),
-    category: guessCategory(body),
+    ...merchantInfo,
+    merchant: kind === 'cc_payment' ? null : merchantInfo.merchant,
+    type,
+    kind,
+    flow,
+    category,
     bankName: detectBank(sender, body) || bankFallback,
     balance: extractBalance(body),
-    accountType: detectAccountType(body),
+    availableLimit: extractAvailableLimit(body),
+    accountType,
+    last4,
+    channel,
+    channelMode: mode,
+    counterparty,
     refNo: extractRefNo(body),
+    needsAccountReview: !last4 && accountType !== 'Credit Card',
+    transferCandidate: type === 'expense' && TRANSFER_RAILS.includes(channel) && mode !== 'P2M',
   };
 };
 

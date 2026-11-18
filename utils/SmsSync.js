@@ -52,6 +52,7 @@ export const smsToTransaction = (sms) => {
     account: sms.bankName,
     tags: ['Auto-Sync'],
     extractedBalance: sms.currentBalance,
+    ...(sms.captured || {}),
   };
 };
 
@@ -68,6 +69,10 @@ const monthSpent = (txs, category, now) =>
     .reduce((s, t) => s + t.amount, 0);
 
 const notifyOne = async (tx, spentBefore, limit, notify) => {
+  if (tx.type === 'transfer') {
+    await notify('Transfer captured', `${formatMoney(tx.amount)} · ${tx.category} · ${tx.account}`);
+    return;
+  }
   if (tx.type === 'income') {
     await notify('Income Credited', `${formatMoney(tx.amount)} credited to ${tx.account}`);
     return;

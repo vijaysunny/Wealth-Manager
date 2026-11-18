@@ -3,6 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { parseTransactionText, isTransactionalSender } from '../utils/TransactionParser';
 import { buildSmsId, hashText } from '../utils/DeduplicationEngine';
 import { collectPages } from '../utils/SmsScan';
+import { capturedFields } from '../utils/CaptureMapper';
 
 const PAGE_SIZE = 500;
 const MAX_MESSAGES = 10000; // safety ceiling per scan (≈ years of inbox for a normal phone)
@@ -98,6 +99,7 @@ const parseData = (messages) => {
       bankName: parsed.bankName,
       currentBalance: parsed.balance,
       accountType: parsed.accountType,
+      captured: capturedFields(parsed),
     });
   });
 

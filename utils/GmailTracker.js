@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '../data/Storage';
 import { saveWithDedup } from './DeduplicationEngine';
 import { parseTransactionText } from './TransactionParser';
+import { capturedFields } from './CaptureMapper';
 import { extractEmailText } from './GmailMime';
 WebBrowser.maybeCompleteAuthSession();
 const KEY = 'gmail_oauth_credentials';
@@ -150,6 +151,7 @@ const runSync = async () => {
             tags: ['Gmail-Sync'],
             refNo: parsed.refNo,
             extractedBalance: parsed.balance,
+            ...capturedFields(parsed),
           });
       }
       pageToken = page.nextPageToken || '';

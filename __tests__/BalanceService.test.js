@@ -121,3 +121,44 @@ describe('net worth (C10) and report filter (C11)', () => {
     expect(isReportable(null)).toBe(false);
   });
 });
+
+describe('one-sided captured transfers (card payment / wallet top-up before the other account is linked)', () => {
+  const {
+    applyToAccounts: apply,
+    reverseOnAccounts: reverse,
+    applyCapturedToAccounts: applyCaptured,
+  } = require('../utils/BalanceService');
+  const accts = [
+    { id: 1, name: 'Axis Bank', type: 'Bank Account', balance: 10000 },
+    { id: 2, name: 'SBI', type: 'Credit Card', balance: 6000 },
+  ];
+  const ccPay = {
+    type: 'transfer',
+    transferKind: 'cc_payment',
+    flow: 'in',
+    amount: 5770,
+    account: 'SBI',
+    fullDate: '2026-11-10T10:00:00Z',
+  };
+
+  test('card payment lowers card debt and does not throw', () => {
+    const next = apply(accts, ccPay);
+    expect(next.find((a) => a.id === 2).balance).toBe(230);
+    expect(next.find((a) => a.id === 1).balance).toBe(10000);
+  });
+  test('apply then reverse is identity', () => {
+    expect(reverse(apply(accts, ccPay), ccPay)).toEqual(accts);
+  });
+  test('outgoing leg (wallet top-up from bank) lowers the bank', () => {
+    const topup = { ...ccPay, transferKind: 'wallet_topup', flow: 'out', amount: 500, account: 'Axis Bank' };
+    expect(apply(accts, topup).find((a) => a.id === 1).balance).toBe(9500);
+  });
+  test('captured path applies it too', () => {
+    expect(applyCaptured(accts, [ccPay]).find((a) => a.id === 2).balance).toBe(230);
+  });
+  test('a manual transfer with no destination still throws (Tools screen validation)', () => {
+    expect(() => apply(accts, { type: 'transfer', amount: 1, accountId: 1 })).toThrow(
+      'Choose two different accounts'
+    );
+  });
+});

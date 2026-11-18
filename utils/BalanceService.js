@@ -89,7 +89,20 @@ export const balanceDelta = (account, tx) => {
   return isIncome ? amt : -amt;
 };
 
+/**
+ * A captured transfer (card bill payment, wallet top-up) whose other account is not linked
+ * yet: only the leg of the account the message was about can move. `flow` is 'in' or 'out'
+ * for that account.
+ */
+const isOneSidedCapture = (tx) =>
+  (tx.toAccountId === undefined || tx.toAccountId === null) &&
+  !!tx.transferKind &&
+  (tx.flow === 'in' || tx.flow === 'out');
+
 const move = (accounts, tx, direction) => {
+  if (tx?.type === 'transfer' && isOneSidedCapture(tx)) {
+    return move(accounts, { ...tx, type: tx.flow === 'in' ? 'income' : 'expense' }, direction);
+  }
   if (tx?.type === 'transfer') {
     const destination = accounts.find((a) => String(a.id) === String(tx.toAccountId));
     if (

@@ -10,19 +10,16 @@
 import fs from 'fs';
 import path from 'path';
 import { parseTransactionText } from '../../utils/TransactionParser';
+import { applyCategoryRules } from '../../utils/FinanceTools';
 
 const FIXTURE_DIR = path.join(__dirname, '..', '..', '__fixtures__', 'sms');
+// Owner's category rules run after parsing, as TransactionRepo.persistMany does for SMS captures
+const { rules: OWNER_RULES } = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', '..', '__fixtures__', 'category_rules.owner.json'), 'utf8')
+);
 
 const KNOWN_FAILING = new Set([
-  'axis-cc-spend-01.last4',
-  'axis-cc-spend-01.refNo',
-  'axis-cc-spend-01.availableLimit',
-  'axis-autopay-google-01.needsAccountReview',
-  'axis-autopay-google-01.merchant',
-  'axis-autopay-google-01.category',
-  'axis-imps-debit-178.last4',
-  'axis-imps-debit-178.channel',
-  'axis-imps-debit-178.counterparty',
+  // UPI Lite top-up: phase A2 (wallet classifier)
   'axis-upilite-topup-500.parsed',
   'axis-upilite-topup-500.type',
   'axis-upilite-topup-500.kind',
@@ -32,29 +29,6 @@ const KNOWN_FAILING = new Set([
   'axis-upilite-topup-500.last4',
   'axis-upilite-topup-500.refNo',
   'axis-upilite-topup-500.balance',
-  'axis-upi-groww-5050.last4',
-  'axis-upi-groww-5050.merchant',
-  'axis-imps-debit-42000.last4',
-  'axis-imps-debit-42000.channel',
-  'axis-imps-debit-42000.counterparty',
-  'axis-imps-debit-42000.transferCandidate',
-  'equitas-upi-96.bank',
-  'equitas-upi-96.last4',
-  'equitas-upi-25.bank',
-  'equitas-upi-25.last4',
-  'sbi-cc-spend-143.last4',
-  'sbi-cc-spend-143.category',
-  'sbi-cc-payment-5770.type',
-  'sbi-cc-payment-5770.kind',
-  'sbi-cc-payment-5770.availableLimit',
-  'sbi-cc-payment-5770.channel',
-  'sbi-cc-spend-86.last4',
-  'sbi-cc-spend-86.category',
-  'sbi-cc-spend-600.last4',
-  'sbi-cc-spend-600.category',
-  'sbi-cc-spend-353.last4',
-  'syn-hdfc-salary-credit.last4',
-  'syn-hdfc-upi-sent.last4',
 ]);
 
 // Fixture key → parser output key, where the names differ.
@@ -78,7 +52,10 @@ test('fixture ids are unique', () => {
 });
 
 describe.each(fixtures.map((f) => [f.id, f]))('%s', (id, fx) => {
-  const parse = () => parseTransactionText(fx.body, { sender: fx.sender || '' });
+  const parse = () => {
+    const p = parseTransactionText(fx.body, { sender: fx.sender || '' });
+    return p && applyCategoryRules({ ...p, title: p.merchant || p.category }, OWNER_RULES);
+  };
   const { parsed: shouldParse = true, ...fields } = fx.expected;
 
   const t = (name, fn) => (KNOWN_FAILING.has(`${id}.${name}`) ? test.failing(name, fn) : test(name, fn));

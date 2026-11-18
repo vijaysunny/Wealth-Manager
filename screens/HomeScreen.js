@@ -79,6 +79,7 @@ export default function HomeScreen({ navigation }) {
         tags: ['Auto-Sync'],
         fullDate: new Date(sms.date).toISOString(),
         extractedBalance: sms.currentBalance ? parseFloat(sms.currentBalance) : null,
+        ...(sms.captured || {}),
       };
       if (!dedup.check(item)) newItems.push(item);
     });
