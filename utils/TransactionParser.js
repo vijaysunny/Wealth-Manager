@@ -325,7 +325,7 @@ const CATEGORY_RULES = [
     // "PRADHANMANTRIBHARTIYAJ" = Pradhan Mantri Bhartiya Janaushadhi Kendra (truncated by the card network)
     /hospital|pharmacy|medical|doctor|clinic|apollo|netmeds|\b1mg\b|medplus|practo|\bhealth\b|jan ?aushadhi|pradhan ?mantri ?bh[a]?r[a]?tiya ?j/i,
   ],
-  ['Loan/EMI', /\bemi\b|loan repay|home loan|car loan|personal loan/i],
+  ['Loan/EMI', /\bemi\b|loan repay|home loan|car loan|personal loan|bajaj ?fin/i],
   ['Insurance', /insurance|\blic\b|premium|star health|hdfc ergo|tata aig/i],
   // Recurring mandate debits ("A/c has been debited towards Google ...", e-mandate, autopay)
   ['Subscriptions', /\bauto ?pay\b|\be-?mandate\b|\bmandate\b|standing instruction|debited towards/i],

@@ -1,4 +1,16 @@
 {
   "_note": "Owner-specific merchant → category rules, applied after parsing exactly like the in-app Category rules (Tools screen). Seed these in the app via Tools → Category rules.",
-  "rules": [{ "id": "owner-bangalorepalace", "pattern": "bangalorepalace", "category": "Food" }]
+  "rules": [
+    {
+      "id": "owner-bangalorepalace",
+      "pattern": "bangalorepalace",
+      "category": "Food"
+    },
+    {
+      "id": "owner-bajaj",
+      "pattern": "baja",
+      "category": "Loan/EMI",
+      "_why": "Bajaj loan: principal paid by IMPS (narration truncates to 'baja'); interest auto-deducted"
+    }
+  ]
 }

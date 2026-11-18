@@ -72,7 +72,10 @@ export const filterHistory = (
 export const applyCategoryRules = (tx, rules) => {
   const text = [tx.title, tx.merchant, tx.vpa, tx.note].join(' ').toLowerCase();
   const hit = rules.find((rule) => rule.pattern?.trim() && text.includes(rule.pattern.toLowerCase()));
-  return hit ? { ...tx, category: hit.category } : tx;
+  if (!hit) return tx;
+  // A merchant the owner has named is a known payee, not a possible self-transfer
+  const { transferCandidate, ...rest } = tx;
+  return { ...rest, category: hit.category };
 };
 export const escapeCsv = (value) => {
   const safe = String(value ?? '').replace(/^[=+@-]/, (match) => "'" + match);

@@ -45,9 +45,12 @@
         "last4": "0973",
         "channel": "IMPS",
         "counterparty": "baja",
-        "refNo": "632013023016"
+        "refNo": "632013023016",
+        "category": "Loan/EMI",
+        "transferCandidate": false
       },
-      "currentlyWrong": "last4 not extracted"
+      "currentlyWrong": "last4 not extracted",
+      "ownerNote": "'baja' = Bajaj loan account (owner, 2026-11-18): loan principal paid via IMPS. Not a self-transfer."
     },
     {
       "id": "axis-upilite-topup-500",
@@ -92,9 +95,11 @@
         "channel": "IMPS",
         "counterparty": "baja",
         "refNo": "632012808676",
-        "transferCandidate": true
+        "transferCandidate": false,
+        "category": "Loan/EMI"
       },
-      "currentlyWrong": "no self-transfer detection"
+      "currentlyWrong": "no self-transfer detection",
+      "ownerNote": "'baja' = Bajaj loan account (owner, 2026-11-18): loan principal paid via IMPS. Not a self-transfer."
     },
     {
       "id": "equitas-upi-96",

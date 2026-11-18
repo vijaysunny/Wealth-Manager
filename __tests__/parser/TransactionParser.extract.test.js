@@ -141,3 +141,8 @@ describe('review hints', () => {
     ).toBe(false);
   });
 });
+
+test('Bajaj Finance / Finserv is a loan payment (generic)', () => {
+  expect(guessCategory('IMPS/P2A/632012808676/BAJAJ FINANCE LTD')).toBe('Loan/EMI');
+  expect(guessCategory('NACH debit BAJAJ FINSERV')).toBe('Loan/EMI');
+});

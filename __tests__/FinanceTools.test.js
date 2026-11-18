@@ -65,3 +65,11 @@ test('history combines account, amount, date and merchant search; CSV protects f
   expect(historyCsv(rows)).toContain("'=formula");
   expect(applyCategoryRules(rows[0], [{ pattern: 'swiggy', category: 'Food' }]).category).toBe('Food');
 });
+
+test('a category rule hit clears the self-transfer hint (owner named the payee)', () => {
+  const tx = { merchant: 'baja', category: 'UPI Transfer', transferCandidate: true };
+  const out = applyCategoryRules(tx, [{ pattern: 'baja', category: 'Loan/EMI' }]);
+  expect(out.category).toBe('Loan/EMI');
+  expect(out.transferCandidate).toBeUndefined();
+  expect(applyCategoryRules(tx, [{ pattern: 'zzz', category: 'X' }])).toBe(tx);
+});

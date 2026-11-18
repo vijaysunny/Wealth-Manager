@@ -63,6 +63,7 @@ describe.each(fixtures.map((f) => [f.id, f]))('%s', (id, fx) => {
       const actual = got[FIELD_MAP[key] || key];
       if (typeof want === 'number') expect(actual).toBeCloseTo(want, 2);
       else if (want === null) expect(actual ?? null).toBeNull();
+      else if (want === false) expect(actual ?? false).toBe(false); // absent flag = false
       else expect(actual).toEqual(want);
     });
   });
