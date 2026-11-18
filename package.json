@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "prebuild": "expo prebuild --clean",
     "test": "jest",
+    "test:tz": "TZ=Asia/Kolkata jest --runInBand && TZ=UTC jest --runInBand",
     "lint": "eslint .",
     "vendor:pdf": "node scripts/vendor-pdf.cjs",
     "format": "prettier --write \"**/*.{js,cjs,json}\"",

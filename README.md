@@ -20,6 +20,15 @@ Standard backups and authenticated encrypted backups include transactions, accou
 
 The app lock protects the app UI, including when the app returns from the background. It does not encrypt the SQLite database; Android device storage protection applies. Biometric enrollment must remain available to unlock.
 
+## Privacy
+
+- All data stays on this phone in an SQLite database. Nothing is uploaded; the only network calls are price lookups (MF NAV / Yahoo) that send the scheme code or ticker.
+- The database is **not encrypted** by the app. Anyone who can unlock and read the phone's app storage (root, adb backup on debuggable builds) can read it. The app lock hides the UI only.
+- A plain backup is readable JSON. Use the encrypted backup for anything you store in cloud drives or send through chat apps.
+- SMS bodies are parsed on the device; the app stores only the extracted fields plus the sender and an SMS id for de-duplication. Logs avoid full SMS bodies, account numbers and balances.
+- Gmail import is off by default (`EXPO_PUBLIC_ENABLE_GMAIL`).
+- Uninstalling the app deletes everything not exported: back up regularly (Home warns after 30 days).
+
 PDF parsing embeds PDF.js and its worker locally (Apache-2.0 license in assets/pdfjs-LICENSE.txt). It needs an up-to-date Android System WebView and a text-based PDF. Scanned/password-protected documents may need conversion or unlocking first. To refresh the vendored parser after updating pdfjs-dist, run `npm run vendor:pdf` and re-test offline extraction.
 
 ## Verification and remaining device checks
