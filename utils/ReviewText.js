@@ -40,3 +40,11 @@ export const reviewHint = (tx) => {
     return 'Bank transfer to a person/account. If it went to your own account, edit it into a transfer.';
   return null;
 };
+
+/** History subtitle for a transfer: "Axis Bank → UPI Lite", or null when it is not one. */
+export const transferRoute = (tx) => {
+  if (!tx || tx.type !== 'transfer') return null;
+  const from = tx.flow === 'in' && !tx.toAccount ? 'other account' : tx.account || '—';
+  const to = tx.toAccount || (tx.flow === 'in' ? tx.account || '—' : 'other account');
+  return `${from} → ${to}`;
+};

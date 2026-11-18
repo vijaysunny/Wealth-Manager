@@ -98,3 +98,11 @@ test('invalid input rolls back: nothing stored, balances untouched', async () =>
   );
   expect((await getAll()).map((t) => t.id)).toEqual(['recon_g']);
 });
+
+test('needsReconcile: only a wallet below zero (A7.9)', () => {
+  const { needsReconcile } = require('../../utils/WalletReconcile');
+  expect(needsReconcile({ type: 'Wallet', balance: -20 })).toBe(true);
+  expect(needsReconcile({ type: 'Wallet', balance: 0 })).toBe(false);
+  expect(needsReconcile({ type: 'Bank Account', balance: -20 })).toBe(false);
+  expect(needsReconcile(null)).toBe(false);
+});

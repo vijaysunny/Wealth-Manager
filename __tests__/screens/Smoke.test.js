@@ -101,6 +101,55 @@ describe('WealthScreen (A6)', () => {
   });
 });
 
+describe('A7.9 / History transfers', () => {
+  test('a wallet below zero is flagged for reconcile', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([ACCOUNTS[0], { ...ACCOUNTS[1], balance: -40 }])
+    );
+    const WealthScreen = require('../../screens/WealthScreen').default;
+    render(<WealthScreen navigation={nav()} />);
+    expect(await screen.findByText('Below zero - reconcile')).toBeTruthy();
+  });
+
+  test('History shows a transfer with its route and keeps it out of spending', async () => {
+    const { addMany } = require('../../data/TransactionRepo');
+    const now = new Date().toISOString();
+    await addMany(
+      [
+        {
+          id: 'tr1',
+          type: 'transfer',
+          amount: 500,
+          title: 'UPI Lite top-up',
+          accountId: 'axis',
+          account: 'Axis Bank',
+          toAccountId: 'lite',
+          toAccount: 'UPI Lite',
+          fullDate: now,
+          category: 'Wallet Top-up',
+        },
+        {
+          id: 'ex1',
+          type: 'expense',
+          amount: 120,
+          title: 'Chai',
+          accountId: 'lite',
+          account: 'UPI Lite',
+          fullDate: now,
+          category: 'Food',
+        },
+      ],
+      { dedup: false }
+    );
+    const AllTransactionsScreen = require('../../screens/AllTransactionsScreen').default;
+    render(<AllTransactionsScreen navigation={nav()} route={{ params: {} }} />);
+    expect(await screen.findByText('Axis Bank → UPI Lite · not counted in spending')).toBeTruthy();
+    expect(screen.getByText('Chai')).toBeTruthy();
+    expect(screen.queryByText(/620/)).toBeNull(); // spending total is 120, never 620
+  });
+});
+
 describe('AddAssetScreen (A6)', () => {
   const AddAssetScreen = require('../../screens/AddAssetScreen').default;
   test('choosing Wallet shows wallet type, provider and funding-bank choices', async () => {

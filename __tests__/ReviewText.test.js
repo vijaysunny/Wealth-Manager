@@ -32,3 +32,19 @@ test('hints', () => {
   expect(reviewHint({ transferCandidate: true })).toMatch(/own account/);
   expect(reviewHint({})).toBeNull();
 });
+
+describe('transferRoute (History subtitle)', () => {
+  const { transferRoute } = require('../utils/ReviewText');
+  test('linked, one-sided out, one-sided in, non-transfer', () => {
+    expect(transferRoute({ type: 'transfer', account: 'Axis Bank', toAccount: 'UPI Lite' })).toBe(
+      'Axis Bank → UPI Lite'
+    );
+    expect(transferRoute({ type: 'transfer', flow: 'out', account: 'Axis Bank' })).toBe(
+      'Axis Bank → other account'
+    );
+    expect(transferRoute({ type: 'transfer', flow: 'in', account: 'SBI Card' })).toBe(
+      'other account → SBI Card'
+    );
+    expect(transferRoute({ type: 'expense', account: 'Axis Bank' })).toBeNull();
+  });
+});

@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { getCategoryIcon } from '../utils/icons';
 import { isReportable } from '../utils/BalanceService';
 import { parseAmount, shiftMonth, formatMoney } from '../utils/Format';
+import { transferRoute } from '../utils/ReviewText';
 export default function AllTransactionsScreen({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -183,6 +184,11 @@ export default function AllTransactionsScreen({ navigation }) {
           <Text style={styles.txTitle} numberOfLines={1}>
             {item.title}
           </Text>
+          {!!transferRoute(item) && (
+            <Text style={{ fontSize: 12, color: '#1976D2' }} numberOfLines={1}>
+              {transferRoute(item)} · not counted in spending
+            </Text>
+          )}
           {item.tags && item.tags.length > 0 && (
             <View
               style={{
@@ -210,9 +216,15 @@ export default function AllTransactionsScreen({ navigation }) {
           >
             <Text style={styles.txAmount}>{formatMoney(item.amount)}</Text>
             <Ionicons
-              name={item.type === 'income' ? 'arrow-down-circle' : 'arrow-up-circle'}
+              name={
+                item.type === 'transfer'
+                  ? 'swap-horizontal'
+                  : item.type === 'income'
+                    ? 'arrow-down-circle'
+                    : 'arrow-up-circle'
+              }
               size={14}
-              color={item.type === 'income' ? '#4CAF50' : '#757575'}
+              color={item.type === 'transfer' ? '#1976D2' : item.type === 'income' ? '#4CAF50' : '#757575'}
               style={{
                 marginLeft: 4,
               }}

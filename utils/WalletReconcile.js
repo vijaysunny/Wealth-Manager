@@ -54,3 +54,7 @@ export const reconcileTransaction = (
   }
   return { ...base, type: 'income', title: 'Wallet correction', category: category || 'Wallet correction' };
 };
+
+/** A7.9: a wallet below zero means spends/top-ups were missed - prompt a reconcile. Never throws. */
+export const needsReconcile = (account) =>
+  !!account && account.type === 'Wallet' && Number(account.balance) < 0;

@@ -9,7 +9,7 @@ import { fetchMutualFundNAV, fetchStockPrice } from '../utils/InvestmentApi';
 import { calculateOutstandingBalance } from '../utils/LoanCalculator'; // <--- Import Calculator
 import { useFocusEffect } from '@react-navigation/native';
 import { computeNetWorth, isWallet } from '../utils/BalanceService';
-import { computeReconcile } from '../utils/WalletReconcile';
+import { computeReconcile, needsReconcile } from '../utils/WalletReconcile';
 import { reconcileWallet } from '../utils/FeatureService';
 import { formatMoney } from '../utils/Format';
 import { priceStatusLabel } from '../utils/PriceStatus';
@@ -277,6 +277,9 @@ export default function WealthScreen({ navigation }) {
           )}
           {isWallet(item) && (
             <View style={{ flexDirection: 'row', marginTop: 4 }}>
+              {needsReconcile(item) && (
+                <Text style={{ color: '#C62828', marginRight: 12 }}>Below zero - reconcile</Text>
+              )}
               <TouchableOpacity onPress={() => startReconcile(item)} style={{ marginRight: 16 }}>
                 <Text style={{ color: '#1976D2', fontWeight: '600' }}>Reconcile</Text>
               </TouchableOpacity>
