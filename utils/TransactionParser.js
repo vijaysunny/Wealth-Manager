@@ -636,6 +636,60 @@ export const detectColumns = (headers) => {
 const hasUsableColumns = (c) =>
   c.date !== undefined && (c.amount !== undefined || (c.debit !== undefined && c.credit !== undefined));
 
+// ── Statement row helpers (plan A5, B8) ───────────────────────────────────
+
+// UNVERIFIED-SAMPLE: bank-statement narration for UPI Lite top-ups / withdrawals
+const STATEMENT_LITE_RE = /upi[\s-]?lite|upilite|lite[\s-]?top[\s-]?up/i;
+
+/**
+ * A statement row whose narration says UPI Lite is money moving between the bank and the
+ * wallet: a debit is a top-up (transfer out of the bank), a credit a withdrawal back.
+ * Returns the fields to merge into the row, or null.
+ */
+export const statementWalletFields = (narration, type) => {
+  if (!STATEMENT_LITE_RE.test(String(narration || ''))) return null;
+  const topup = type !== 'income';
+  return {
+    type: 'transfer',
+    transferKind: topup ? 'wallet_topup' : 'wallet_withdraw',
+    flow: topup ? 'out' : 'in',
+    walletSubType: 'UPI Lite',
+    category: topup ? 'Wallet Top-up' : 'Wallet Withdrawal',
+  };
+};
+
+// FNV-1a: tiny deterministic string hash (no imports, so the parser stays pure)
+const fnv1a = (str) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+};
+
+/**
+ * Deterministic row IDs (B8): the same row in a re-imported file gets the same ID, and two
+ * identical rows in one file differ by occurrence index. Call once per file.
+ */
+export const makeRowIdFactory = (prefix, account = '') => {
+  const seen = new Map();
+  return ({ date, amount, refNo, narration }) => {
+    const key = [
+      account,
+      date.toISOString().slice(0, 10),
+      Number(amount).toFixed(2),
+      refNo || '',
+      narration || '',
+    ]
+      .join('|')
+      .toLowerCase();
+    const n = seen.get(key) || 0;
+    seen.set(key, n + 1);
+    return `${prefix}_${date.toISOString().slice(0, 10).replace(/-/g, '')}_${fnv1a(key)}_${n}`;
+  };
+};
+
 const guessType = (drCr, narration = '') => {
   if (drCr) {
     const dc = drCr.trim().toUpperCase();
@@ -651,6 +705,7 @@ const guessType = (drCr, narration = '') => {
  * Pure: the caller does the file reading / xlsx decoding.
  */
 export const parseStatementRows = (rawRows, bankHint = '') => {
+  const rowId = makeRowIdFactory('stmt', bankHint);
   // Header row = first row (within 30) that yields a usable column map
   let headerIdx = -1;
   for (let i = 0; i < Math.min(rawRows.length, 30); i++) {
@@ -706,9 +761,10 @@ export const parseStatementRows = (rawRows, bankHint = '') => {
     const balance = cols.balance !== undefined ? parseAmount(row[cols.balance]) : null;
     const refNo = cols.refNo !== undefined ? String(row[cols.refNo] || '').trim() : null;
     const category = guessCategory(narration);
+    const wallet = statementWalletFields(narration, txType);
 
     transactions.push({
-      id: `stmt_${date.getTime()}_${amount}_${Math.random()}`,
+      id: rowId({ date, amount, refNo, narration }),
       title: narration || category,
       amount,
       type: txType,
@@ -721,6 +777,7 @@ export const parseStatementRows = (rawRows, bankHint = '') => {
       refNo: normRef(refNo) || extractRefNo(narration),
       extractedBalance: balance,
       source: 'statement',
+      ...(wallet || {}),
     });
   }
   return transactions;
@@ -740,6 +797,7 @@ const PDF_AMOUNT_RE = /(?:Rs\.?|INR|₹)?\s*([0-9][0-9,]*\.[0-9]{2})\b/g;
  * in running balance versus the previous row, then narration keywords.
  */
 export const parsePdfText = (text, bankHint = '') => {
+  const rowId = makeRowIdFactory('pdf', bankHint);
   const lines = text
     .split('\n')
     .map((l) => l.trim())
@@ -782,9 +840,10 @@ export const parsePdfText = (text, bankHint = '') => {
       .trim()
       .slice(0, 60);
     const category = guessCategory(narration);
+    const wallet = statementWalletFields(narration, type);
 
     transactions.push({
-      id: `pdf_${date.getTime()}_${amount}_${Math.random()}`,
+      id: rowId({ date, amount, refNo: null, narration: line }),
       title: narration || category,
       amount,
       type,
@@ -796,6 +855,7 @@ export const parsePdfText = (text, bankHint = '') => {
       refNo: extractRefNo(line.replace(PDF_DATE_RE, '')),
       extractedBalance: balance,
       source: 'pdf',
+      ...(wallet || {}),
     });
   }
   return transactions;

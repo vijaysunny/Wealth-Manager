@@ -280,3 +280,41 @@ export const resolveCaptures = (accounts, txs, { newId } = {}) => {
 /** Same account the same way: used to resolve all similar pending captures in one tap. */
 export const captureSignature = (tx) =>
   [typeFor(tx), lower(tx.bankName || tx.account), tx.last4 || '', lower(tx.walletProvider)].join('|');
+
+/**
+ * Statement import (plan A5): link UPI Lite transfer rows to the bank account being imported
+ * and its wallet. Never creates accounts - returns `missingWallet` (the suggested wallet) so
+ * the preview can ASK "Create wallet account?" first.
+ * Returns { rows, missingWallet: null | { name, type, subType, linkedBankId }, bank }.
+ */
+export const prepareStatementWallets = (rows, accounts, accountName) => {
+  const name = lower(accountName).trim();
+  const bank =
+    accounts.find((a) => a.type === 'Bank Account' && lower(a.name).trim() === name) ||
+    (() => {
+      const hits = accounts.filter((a) => a.type === 'Bank Account' && mentions(a, bankTokens(accountName)));
+      return hits.length === 1 ? hits[0] : null;
+    })();
+  const walletRows = rows.filter((r) => r.type === 'transfer' && /^wallet_/.test(r.transferKind || ''));
+  if (!walletRows.length || !bank) return { rows, missingWallet: null, bank };
+  let wallets = walletsFor(accounts, { subType: 'UPI Lite' });
+  if (wallets.length > 1) {
+    const linked = wallets.filter((w) => String(w.linkedBankId) === String(bank.id));
+    if (linked.length) wallets = linked;
+  }
+  if (wallets.length === 0)
+    return {
+      rows: rows.map((r) => (walletRows.includes(r) ? { ...r, accountId: bank.id, account: bank.name } : r)),
+      missingWallet: { name: 'UPI Lite', type: 'Wallet', subType: 'UPI Lite', linkedBankId: bank.id },
+      bank,
+    };
+  if (wallets.length > 1) return { rows, missingWallet: null, bank }; // ambiguous: leave one-sided
+  const wallet = wallets[0];
+  return {
+    rows: rows.map((r) =>
+      walletRows.includes(r) ? linkToCounter({ ...r, accountId: bank.id }, bank, wallet) : r
+    ),
+    missingWallet: null,
+    bank,
+  };
+};

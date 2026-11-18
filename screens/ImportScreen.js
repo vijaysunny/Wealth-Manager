@@ -12,6 +12,10 @@ import React, { useState, useRef } from 'react';
 import { StyleSheet, Alert, ActivityIndicator, FlatList, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import WebView from 'react-native-webview';
+import AsyncStorage from '../data/Storage';
+import { putAccount } from '../data/Collections';
+import { prepareStatementWallets, newAccountId } from '../utils/AccountResolver';
+import { walletFields } from '../utils/WalletAccounts';
 import {
   pickAndParseStatement,
   buildPdfParserHtml,
@@ -110,10 +114,37 @@ export default function ImportScreen({ navigation }) {
       }
     } catch (_) {}
   };
+  // A5: link UPI Lite rows to the wallet; if there is none, ASK before creating one
+  const prepareRows = async () => {
+    const accounts = JSON.parse((await AsyncStorage.getItem('user_wealth_accounts')) || '[]');
+    const accountName = parsedTxs[0]?.account || '';
+    const first = prepareStatementWallets(parsedTxs, accounts, accountName);
+    if (!first.missingWallet) return first.rows;
+    const create = await new Promise((resolve) =>
+      Alert.alert(
+        'Create wallet account?',
+        `This statement has UPI Lite top-ups from ${first.bank.name}. Create a "UPI Lite" wallet linked to it so they count as transfers into the wallet?`,
+        [
+          { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Create', onPress: () => resolve(true) },
+        ]
+      )
+    );
+    if (!create) return first.rows;
+    const wallet = {
+      id: newAccountId(),
+      ...first.missingWallet,
+      ...walletFields({ name: 'UPI Lite', walletSubType: 'UPI Lite', linkedBankId: first.bank.id }),
+      balance: 0,
+    };
+    await putAccount(wallet);
+    return prepareStatementWallets(parsedTxs, [...accounts, wallet], accountName).rows;
+  };
   const handleConfirmImport = async () => {
     setPhase('saving');
     try {
-      const { added, skipped } = await saveStatementTransactions(parsedTxs, {
+      const rows = await prepareRows();
+      const { added, skipped } = await saveStatementTransactions(rows, {
         balanceMode: adjustBalances ? 'delta' : 'none',
       });
       setStats({

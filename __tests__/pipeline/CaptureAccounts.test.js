@@ -379,3 +379,57 @@ describe('cross-source: SMS top-up then bank statement import (A7.3, D7/D8)', ()
     expect(again.added).toBe(0);
   });
 });
+
+describe('statement import with UPI Lite rows (A5, B8, C2)', () => {
+  const { parseStatementRows } = require('../../utils/TransactionParser');
+  const { prepareStatementWallets } = require('../../utils/AccountResolver');
+  const file = () => [
+    ['Tran Date', 'Particulars', 'Chq No', 'Debit', 'Credit', 'Balance'],
+    ['07-11-2026', 'UPI LITE TOPUP/010071026164', '', '500.00', '', '9500.00'],
+    ['08-11-2026', 'UPI/P2M/630969451444/GROWW INVEST TECH P', '', '5050.00', '', '4450.00'],
+  ];
+
+  test('no wallet yet → preview must ask; nothing is created silently', async () => {
+    const r = prepareStatementWallets(parseStatementRows(file(), 'Axis Bank'), await accounts(), 'Axis Bank');
+    expect(r.missingWallet).toMatchObject({ name: 'UPI Lite', type: 'Wallet', linkedBankId: 'axis' });
+    expect((await accounts()).some((a) => a.type === 'Wallet')).toBe(false);
+  });
+
+  test('with a wallet: top-up linked bank → wallet; delta import keeps net worth; re-import adds 0', async () => {
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([
+        ...OWNER(),
+        { id: 'lite', name: 'UPI Lite', type: 'Wallet', subType: 'UPI Lite', balance: 0 },
+      ])
+    );
+    const before = computeNetWorth(await accounts()).netWorth;
+    const { rows, missingWallet } = prepareStatementWallets(
+      parseStatementRows(file(), 'Axis Bank'),
+      await accounts(),
+      'Axis Bank'
+    );
+    expect(missingWallet).toBeNull();
+    expect(rows[0]).toMatchObject({ accountId: 'axis', toAccountId: 'lite' });
+    expect((await addMany(rows, { balanceMode: 'delta' })).added).toBe(2);
+    expect((await byId('lite')).balance).toBe(500);
+    expect(computeNetWorth(await accounts()).netWorth).toBe(before - 5050); // only the real expense
+    const again = prepareStatementWallets(
+      parseStatementRows(file(), 'Axis Bank'),
+      await accounts(),
+      'Axis Bank'
+    );
+    expect((await addMany(again.rows, { balanceMode: 'delta' })).added).toBe(0);
+  });
+
+  test('statement after the SMS top-up: the Lite row dedupes against the SMS transfer (A7.3)', async () => {
+    await save([capture(SMS.topup, { fullDate: '2026-11-07T04:16:28.000Z' })]);
+    const prepared = prepareStatementWallets(
+      parseStatementRows(file(), 'Axis Bank'),
+      await accounts(),
+      'Axis Bank'
+    );
+    const r = await addMany(prepared.rows, { balanceMode: 'delta' });
+    expect(r.added).toBe(1); // only the Groww row
+  });
+});
