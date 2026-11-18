@@ -16,7 +16,7 @@ import AsyncStorage from '../data/Storage';
 import { scanBankSms } from '../components/RealSmsReader';
 import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, createDedupIndex } from './DeduplicationEngine';
-import { applyCapturedTransactions, isReportable } from './BalanceService';
+import { isReportable } from './BalanceService';
 import { formatMoney } from './Format';
 
 export const SMS_FLAG_KEY = 'sms_auto_track_enabled';
@@ -84,7 +84,7 @@ const notifyOne = async (tx, spentBefore, limit, notify) => {
   await notify(`Spent ${formatMoney(tx.amount)} on ${tx.category}`, body);
 };
 
-const run = async ({ scan, storage, notify, applyBalances, now }) => {
+const run = async ({ scan, storage, notify, save, now }) => {
   if ((await storage.getItem(SMS_FLAG_KEY)) === 'false') return { status: 'disabled', added: 0 };
 
   const startedAt = now();
@@ -106,15 +106,9 @@ const run = async ({ scan, storage, notify, applyBalances, now }) => {
     fresh.push(tx);
   }
 
-  if (fresh.length > 0) {
-    if (storage === AsyncStorage) {
-      fresh = (await saveWithDedup(fresh, { balanceMode: 'captured' })).addedTxs;
-    } else {
-      const updated = [...fresh, ...currentTx].sort((a, b) => new Date(b.fullDate) - new Date(a.fullDate));
-      await storage.setItem('user_transactions', JSON.stringify(updated));
-      await applyBalances(fresh);
-    }
-  }
+  // ONE save path (B6): the repo re-checks duplicates, sets reviewStatus, resolves accounts
+  // and moves balances atomically. Only what it actually stored counts as added.
+  if (fresh.length > 0) fresh = (await save(fresh)).addedTxs;
   // Advance on every successful scan (found something or not)
   await storage.setItem(LAST_SYNC_KEY, String(startedAt));
 
@@ -147,7 +141,7 @@ export const syncSms = (deps = {}) => {
     scan: scanBankSms,
     storage: AsyncStorage,
     notify: sendTransactionNotification,
-    applyBalances: applyCapturedTransactions,
+    save: (txs) => saveWithDedup(txs, { balanceMode: 'captured' }),
     now: Date.now,
     ...deps,
   };

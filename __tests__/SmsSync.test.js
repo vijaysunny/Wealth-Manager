@@ -31,11 +31,16 @@ const sms = (o = {}) => ({
   currentBalance: 9000,
   ...o,
 });
+// Fake repo save: stores what it is given (the real one is covered by TransactionRepo tests)
 const deps = (storage, scanResult) => ({
   scan: jest.fn().mockResolvedValue(scanResult),
   storage,
   notify: jest.fn().mockResolvedValue(),
-  applyBalances: jest.fn().mockResolvedValue(),
+  save: jest.fn(async (txs) => {
+    const current = JSON.parse((await storage.getItem('user_transactions')) || '[]');
+    await storage.setItem('user_transactions', JSON.stringify([...txs, ...current]));
+    return { added: txs.length, skipped: 0, addedTxs: txs };
+  }),
   now: () => NOW,
 });
 
@@ -57,7 +62,7 @@ describe('syncSms', () => {
     const r = await syncSms(d);
     expect(r).toEqual({ status: 'ok', added: 1 });
     expect(JSON.parse(st.m.user_transactions)).toHaveLength(1);
-    expect(d.applyBalances).toHaveBeenCalledTimes(1);
+    expect(d.save).toHaveBeenCalledTimes(1);
     expect(st.m[LAST_SYNC_KEY]).toBe(String(NOW));
     expect(d.notify).toHaveBeenCalledTimes(1);
   });
@@ -69,7 +74,7 @@ describe('syncSms', () => {
     expect(r.added).toBe(0);
     expect(st.m[LAST_SYNC_KEY]).toBe(String(NOW));
     expect(d.scan).toHaveBeenCalledWith(NOW - 5 * HOUR);
-    expect(d.applyBalances).not.toHaveBeenCalled();
+    expect(d.save).not.toHaveBeenCalled();
   });
 
   test('marker advances when everything found was already stored', async () => {
@@ -141,6 +146,35 @@ describe('syncSms', () => {
     const [r1, r2] = await Promise.all([syncSms(d), syncSms(d)]);
     expect(r1).toBe(r2);
     expect(d.scan).toHaveBeenCalledTimes(1);
+  });
+
+  test('B6: always saves through the repo; only rows it stored count as added', async () => {
+    const st = mem();
+    const d = deps(st, { ok: true, items: [sms()] });
+    d.save.mockResolvedValue({ added: 0, skipped: 1, addedTxs: [] }); // e.g. a rejected capture
+    const r = await syncSms(d);
+    expect(d.save).toHaveBeenCalledTimes(1);
+    expect(d.save.mock.calls[0][0][0]).toMatchObject({ smsId: sms().smsId, amount: 500 });
+    expect(r).toEqual({ status: 'ok', added: 0 });
+    expect(d.notify).not.toHaveBeenCalled();
+    expect(st.m[LAST_SYNC_KEY]).toBe(String(NOW));
+  });
+
+  test('captured parser fields (last4, transfer kind) reach the saved transaction', async () => {
+    const st = mem();
+    const d = deps(st, {
+      ok: true,
+      items: [
+        sms({ type: 'transfer', captured: { last4: '0973', transferKind: 'wallet_topup', flow: 'out' } }),
+      ],
+    });
+    await syncSms(d);
+    expect(d.save.mock.calls[0][0][0]).toMatchObject({
+      last4: '0973',
+      transferKind: 'wallet_topup',
+      flow: 'out',
+    });
+    expect(d.notify.mock.calls[0][0]).toBe('Transfer captured');
   });
 
   test('scan throwing is reported as error, not thrown', async () => {
