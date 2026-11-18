@@ -358,3 +358,24 @@ describe('card bill payment seen twice → one transfer (UNVERIFIED-SAMPLE bank 
     expect(await getAll()).toHaveLength(2);
   });
 });
+
+describe('cross-source: SMS top-up then bank statement import (A7.3, D7/D8)', () => {
+  test('statement row for the same top-up adds nothing and moves no balance', async () => {
+    await save([capture(SMS.topup)]);
+    const before = await accounts();
+    const statementRow = {
+      id: 'stmt_topup',
+      type: 'expense',
+      amount: 500,
+      account: 'Axis Bank',
+      title: 'UPI LITE TOPUP 01007102616409005179',
+      category: 'UPI Transfer',
+      fullDate: '2026-11-01T12:00:00.000Z',
+    };
+    const r = await addMany([statementRow], { balanceMode: 'delta' });
+    expect(r.added).toBe(0);
+    expect(await accounts()).toEqual(before);
+    const again = await addMany([{ ...statementRow, id: 'stmt_topup_2' }], { balanceMode: 'delta' });
+    expect(again.added).toBe(0);
+  });
+});

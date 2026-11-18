@@ -97,7 +97,34 @@ export const generateFingerprint = (amount, bankName, type, dateMs) => {
   return `${cleanAmount}|${cleanBank}|${type}|${dayKey(dateMs)}`;
 };
 
-const bucketKey = (t, ms) => `${parseFloat(t.amount).toFixed(2)}|${t.type}|${dayKey(ms)}`;
+const bucketKey = (t, ms, type = t.type) => `${parseFloat(t.amount).toFixed(2)}|${type}|${dayKey(ms)}`;
+
+/**
+ * The account-level entries a transaction shows up as on statements (plan A3 dedup
+ * normalisation). A wallet top-up captured from SMS is a transfer, but the bank statement
+ * shows it as a plain debit, so a transfer is indexed under each of its legs:
+ *   one-sided (only the SMS's account known) → its own leg ('income' for flow in, else 'expense')
+ *   linked (two accounts)                    → 'expense' on the source, 'income' on the destination
+ * plus 'transfer' (shares the source leg's slot) so transfer rows still match each other.
+ */
+const legsOf = (t) => {
+  if (t.type !== 'transfer') return [{ types: [t.type], account: t.account }];
+  const linked = t.toAccountId !== undefined && t.toAccountId !== null;
+  if (!linked) return [{ types: ['transfer', t.flow === 'in' ? 'income' : 'expense'], account: t.account }];
+  return [
+    { types: ['transfer', 'expense'], account: t.account },
+    { types: ['income'], account: t.toAccount || '' },
+  ];
+};
+// UPI Lite wording on both sides is enough evidence for a no-time statement row (A3)
+const LITE_RE = /upi ?lite|upilite|lite ?top ?up/i;
+const isLite = (t) =>
+  /^wallet_/.test(t.transferKind || '') ||
+  t.walletSubType === 'UPI Lite' ||
+  LITE_RE.test(`${t.title || ''} ${t.note || ''} ${t.narration || ''}`);
+// Statements often print a shortened reference; a long ref containing the other is the same one
+const refsCompatible = (a, b) =>
+  a === b || (Math.min(a.length, b.length) >= 10 && (a.includes(b) || b.includes(a)));
 
 // ── Index ─────────────────────────────────────────────────────────────────
 
@@ -127,9 +154,14 @@ export const createDedupIndex = (existing = []) => {
       if (!bodies.has(t.bodyHash)) bodies.set(t.bodyHash, []);
       bodies.get(t.bodyHash).push(ms);
     }
-    const k = bucketKey(t, ms);
-    if (!buckets.has(k)) buckets.set(k, []);
-    buckets.get(k).push({ tx: t, ms, consumed });
+    for (const leg of legsOf(t)) {
+      const state = { consumed }; // one leg is matched at most once, under any of its keys
+      for (const type of leg.types) {
+        const k = bucketKey(t, ms, type);
+        if (!buckets.has(k)) buckets.set(k, []);
+        buckets.get(k).push({ tx: t, ms, state, account: leg.account });
+      }
+    }
   };
 
   existing.forEach((t) => register(t, false));
@@ -150,18 +182,22 @@ export const createDedupIndex = (existing = []) => {
     )
       return true;
 
-    // 3/4. Bucket match with occurrence counting
-    const slots = buckets.get(bucketKey(c, cMs)) || [];
+    // 3/4. Bucket match with occurrence counting (every leg of the candidate)
     const cRef = refOf(c);
     const cDesc = descOf(c);
     const cBal = Number.isFinite(c.extractedBalance) ? c.extractedBalance : null;
+    const slots = [];
+    for (const leg of legsOf(c))
+      for (const type of leg.types)
+        for (const slot of buckets.get(bucketKey(c, cMs, type)) || [])
+          slots.push({ slot, account: leg.account });
 
-    for (const slot of slots) {
-      if (slot.consumed) continue;
+    for (const { slot, account: cAccount } of slots) {
+      if (slot.state.consumed) continue;
       const t = slot.tx;
-      if (!banksCompatible(c.account, t.account)) continue;
+      if (!banksCompatible(cAccount, slot.account)) continue;
       const tRef = refOf(t);
-      if (cRef && tRef && cRef !== tRef) continue; // two different references = two payments
+      if (cRef && tRef && !refsCompatible(cRef, tRef)) continue; // two different references = two payments
 
       let match = false;
       if (hasRealTime(c) && hasRealTime(t)) {
@@ -176,10 +212,11 @@ export const createDedupIndex = (existing = []) => {
           (cRef && cRef === tRef) || (cRef && textOf(t).includes(cRef)) || (tRef && textOf(c).includes(tRef));
         const descHit = !!cDesc && cDesc === descOf(t);
         const balHit = cBal !== null && tBal !== null && Math.abs(cBal - tBal) < 0.005;
-        match = refHit || descHit || balHit;
+        const liteHit = isLite(c) && isLite(t);
+        match = refHit || descHit || balHit || liteHit || (!!cRef && !!tRef && refsCompatible(cRef, tRef));
       }
       if (match) {
-        slot.consumed = true;
+        slot.state.consumed = true;
         return true;
       }
     }
