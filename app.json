@@ -79,7 +79,8 @@
           "faceIDPermission": "Allow WealthManager to unlock with Face ID."
         }
       ],
-      "expo-system-ui"
+      "expo-system-ui",
+      "expo-font"
     ],
     "extra": {
       "eas": {

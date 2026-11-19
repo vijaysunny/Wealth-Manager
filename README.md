@@ -31,13 +31,26 @@ Standard backups and authenticated encrypted backups include transactions, accou
 
 The app lock protects the app UI, including when the app returns from the background. It does not encrypt the SQLite database; Android device storage protection applies. Biometric enrollment must remain available to unlock.
 
+## AI assistant (optional)
+
+Providers, tried in order with automatic fallback when one fails or hits its rate limit:
+
+1. **Google Gemini Flash** — free key from https://aistudio.google.com/apikey
+2. **Groq** — free tier, key from https://console.groq.com/keys
+3. **xAI Grok** — paid, key from https://console.x.ai (only used if a key is saved)
+
+Keys are typed into Settings → AI assistant and stored with expo-secure-store; they are never put in `.env` (any `EXPO_PUBLIC_` value is bundled into the APK in plain text). `.env` only holds `EXPO_PUBLIC_ENABLE_AI` and `EXPO_PUBLIC_AI_PROVIDER_ORDER`. Models are picked automatically from each provider's model list (a model name typed in Settings overrides it); "Test" shows the model in use.
+
+What AI does: reads bank SMS the parser missed (max 16 new per sync, each SMS sent once; rows land in Review as pending), categorizes new "General" rows, reads statements the parsers can't (preview before saving), and answers spending questions on the AI Assistant screen. An AI amount is accepted only if that number is written in the source text; reference numbers, last-4 digits and balances are always extracted on the phone.
+
 ## Privacy
 
-- All data stays on this phone in an SQLite database. Nothing is uploaded; the only network calls are price lookups (MF NAV / Yahoo) that send the scheme code or ticker.
+- All data stays on this phone in an SQLite database. Nothing is uploaded; the only network calls are price lookups (MF NAV / Yahoo) that send the scheme code or ticker, and — only if you switch AI on — the AI requests described below.
 - The database is **not encrypted** by the app. Anyone who can unlock and read the phone's app storage (root, adb backup on debuggable builds) can read it. The app lock hides the UI only.
 - A plain backup is readable JSON. Use the encrypted backup for anything you store in cloud drives or send through chat apps.
 - SMS bodies are parsed on the device; the app stores only the extracted fields plus the sender and an SMS id for de-duplication. Logs avoid full SMS bodies, account numbers and balances.
 - Gmail import is off by default (`EXPO_PUBLIC_ENABLE_GMAIL`).
+- AI is off until you turn on **Settings → AI assistant** and save a key. It then sends: bank SMS the regex parser could not read (9+ digit numbers masked), titles of transactions still in "General", statement text when the built-in parsers find no rows (you confirm the preview), and monthly totals for AI Assistant questions. Free providers' terms may allow them to use free-tier requests to improve their products.
 - Uninstalling the app deletes everything not exported: back up regularly (Home warns after 30 days).
 
 PDF parsing embeds PDF.js and its worker locally (Apache-2.0 license in assets/pdfjs-LICENSE.txt). It needs an up-to-date Android System WebView and a text-based PDF. Scanned/password-protected documents may need conversion or unlocking first. To refresh the vendored parser after updating pdfjs-dist, run `npm run vendor:pdf` and re-test offline extraction.

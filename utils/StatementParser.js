@@ -30,6 +30,16 @@ const parseExcelBuffer = (buffer, bankHint = '') => {
   return parseStatementRows(rawRows, bankHint);
 };
 
+/** First sheet as CSV text (for the AI fallback when no rows were recognised). */
+const sheetText = (buffer) => {
+  try {
+    const wb = xlsxRead(buffer, { type: 'array', cellDates: true });
+    return xlsxUtils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+  } catch {
+    return null;
+  }
+};
+
 // ── PDF.js HTML builder ───────────────────────────────────────────────────
 
 export const buildPdfParserHtml = (base64) => `
@@ -158,6 +168,8 @@ export const pickAndParseStatement = async (onPdfPicked) => {
         type: 'excel',
         canceled: false,
         transactions,
+        bankHint,
+        rawText: transactions.length ? null : out, // AI fallback input
       };
     } else {
       const base64 = await FileSystem.readAsStringAsync(uri, {
@@ -171,6 +183,8 @@ export const pickAndParseStatement = async (onPdfPicked) => {
         type: 'excel',
         canceled: false,
         transactions,
+        bankHint,
+        rawText: transactions.length ? null : sheetText(bytes.buffer), // AI fallback input
       };
     }
   } catch (err) {

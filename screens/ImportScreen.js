@@ -22,6 +22,8 @@ import {
   parsePdfText,
   saveStatementTransactions,
 } from '../utils/StatementParser';
+import { isAiReady } from '../utils/ai/AiConfig';
+import { aiParseStatement, DEFAULT_CATEGORIES } from '../utils/ai/AiTasks';
 const COLORS = {
   primary: '#2196F3',
   success: '#4CAF50',
@@ -72,7 +74,11 @@ export default function ImportScreen({ navigation }) {
           return;
         }
         if (!result.transactions || result.transactions.length === 0) {
-          Alert.alert('No Data', 'No transactions found. Check the file format.');
+          await offerAiParse(
+            result.rawText,
+            result.bankHint,
+            'No transactions found. Check the file format.'
+          );
           return;
         }
         setParsedTxs(result.transactions);
@@ -82,6 +88,46 @@ export default function ImportScreen({ navigation }) {
       setLoading(false);
       Alert.alert('Error', err.message);
     }
+  };
+  // AI fallback: only when the built-in parsers found nothing and AI is switched on.
+  // Rows go to the normal preview, so nothing is saved until the user confirms.
+  const offerAiParse = async (text, bankHint, message) => {
+    const canUseAi = !!(text && text.trim()) && (await isAiReady('statements').catch(() => false));
+    if (!canUseAi) {
+      setPhase('idle');
+      Alert.alert('No Transactions Found', message);
+      return;
+    }
+    Alert.alert(
+      'No Transactions Found',
+      `${message}\n\nTry reading it with AI? The statement text (long numbers masked) is sent to your AI provider.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => setPhase('idle') },
+        {
+          text: 'Try AI',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const categories =
+                JSON.parse((await AsyncStorage.getItem('user_categories')) || 'null') || DEFAULT_CATEGORIES;
+              const rows = await aiParseStatement(text, { bankHint, categories });
+              if (!rows.length) {
+                setPhase('idle');
+                Alert.alert('AI', 'AI could not find transactions in this file either.');
+              } else {
+                setParsedTxs(rows);
+                setPhase('preview');
+              }
+            } catch (e) {
+              setPhase('idle');
+              Alert.alert('AI Error', e.message);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
   const detectBankHint = (name) => {
     if (/hdfc/i.test(name)) return 'HDFC Bank';
@@ -99,8 +145,9 @@ export default function ImportScreen({ navigation }) {
         const txs = parsePdfText(msg.text, pdfBankHint);
         setPdfHtml(null);
         if (txs.length === 0) {
-          Alert.alert(
-            'No Transactions Found',
+          offerAiParse(
+            msg.text,
+            pdfBankHint,
             'Could not extract transactions from this PDF.\n\nTips:\n• Try converting to Excel first\n• Ensure it is a text-based (not scanned) PDF'
           );
         } else {

@@ -18,6 +18,7 @@ import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, createDedupIndex } from './DeduplicationEngine';
 import { isReportable } from './BalanceService';
 import { formatMoney } from './Format';
+import { aiParseUnparsed, aiCategorizeNew, defaultAiDeps } from './ai/AiSync';
 
 export const SMS_FLAG_KEY = 'sms_auto_track_enabled';
 export const LAST_SYNC_KEY = 'last_bg_sync_time';
@@ -84,7 +85,7 @@ const notifyOne = async (tx, spentBefore, limit, notify) => {
   await notify(`Spent ${formatMoney(tx.amount)} on ${tx.category}`, body);
 };
 
-const run = async ({ scan, storage, notify, save, now }) => {
+const run = async ({ scan, storage, notify, save, now, ai }) => {
   if ((await storage.getItem(SMS_FLAG_KEY)) === 'false') return { status: 'disabled', added: 0 };
 
   const startedAt = now();
@@ -105,6 +106,13 @@ const run = async ({ scan, storage, notify, save, now }) => {
     if (dedup.check(tx)) continue;
     fresh.push(tx);
   }
+  // Optional AI steps (Settings → AI assistant): read SMS the parser missed, categorize 'General'
+  for (const item of await aiParseUnparsed(res.unparsed, storage, ai)) {
+    const tx = { ...smsToTransaction(item), tags: ['Auto-Sync', 'AI'] };
+    if (dedup.check(tx)) continue;
+    fresh.push(tx);
+  }
+  if (fresh.length > 0) fresh = await aiCategorizeNew(fresh, storage, ai);
 
   // ONE save path (B6): the repo re-checks duplicates, sets reviewStatus, resolves accounts
   // and moves balances atomically. Only what it actually stored counts as added.
@@ -143,6 +151,7 @@ export const syncSms = (deps = {}) => {
     notify: sendTransactionNotification,
     save: (txs) => saveWithDedup(txs, { balanceMode: 'captured' }),
     now: Date.now,
+    ai: defaultAiDeps(),
     ...deps,
   };
   inFlight = run(d)

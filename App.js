@@ -44,6 +44,7 @@ import { processRecurringTransactions } from './utils/RecurringEngine';
 import Bootstrap from './components/Bootstrap';
 
 import ToolsScreen from './screens/ToolsScreen';
+import AiAssistantScreen from './screens/AiAssistantScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLock from './components/AppLock';
 import Onboarding from './components/Onboarding';
@@ -129,6 +130,7 @@ function AppContent() {
       <Stack.Navigator initialRouteName="Main">
         <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen name="Tools" component={ToolsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="AiAssistant" component={AiAssistantScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Income" component={IncomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Expense" component={ExpenseScreen} options={{ headerShown: false }} />

@@ -1,6 +1,7 @@
 import { putAccount, deleteAccount } from '../data/Collections';
 import { Text, View, TouchableOpacity, TextInput, ScrollView, SafeAreaView } from '../components/Theme';
 import SecurityPanel from '../components/SecurityPanel';
+import AiSettingsPanel from '../components/AiSettingsPanel';
 /**
  * SettingsScreen.js  (Enhanced v2)
  * Adds: Gmail OAuth sync, Import screen navigation, Gmail status indicator.
@@ -29,7 +30,7 @@ import {
   isGmailConnected,
   syncGmailTransactions,
 } from '../utils/GmailTracker';
-import { isGmailEnabled } from '../utils/Features';
+import { isGmailEnabled, isAiAvailable } from '../utils/Features';
 import { LAST_BACKUP_KEY } from '../utils/BackupReminder';
 const DEFAULT_CATS = [
   'Food',
@@ -410,6 +411,11 @@ export default function SettingsScreen({ navigation }) {
             onPress={() => navigation.navigate('Tools')}
           />
         </SectionCard>
+        {isAiAvailable() && (
+          <SectionCard title="AI assistant">
+            <AiSettingsPanel onOpenAssistant={() => navigation.navigate('AiAssistant')} />
+          </SectionCard>
+        )}
         {/* AUTO-SYNC */}
         <SectionCard title="Auto-Tracking">
           {/* SMS */}

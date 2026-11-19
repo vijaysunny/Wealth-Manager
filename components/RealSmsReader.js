@@ -1,6 +1,7 @@
 import SmsAndroid from 'react-native-get-sms-android';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { parseTransactionText, isTransactionalSender } from '../utils/TransactionParser';
+import { isAiSmsCandidate } from '../utils/ai/AiTasks';
 import { buildSmsId, hashText } from '../utils/DeduplicationEngine';
 import { collectPages } from '../utils/SmsScan';
 import { capturedFields } from '../utils/CaptureMapper';
@@ -66,7 +67,9 @@ export const scanBankSms = async (minDate = 0) => {
     if (truncated) console.log(`⚠️ SMS scan stopped at ${MAX_MESSAGES} messages`);
     const relevant = messages.filter((m) => isTransactionalSender(m.address));
     console.log(`📥 ${messages.length} SMS read, ${relevant.length} from bank-like senders`);
-    return { ok: true, reason: null, items: parseData(relevant) };
+    const unparsed = [];
+    const items = parseData(relevant, unparsed);
+    return { ok: true, reason: null, items, unparsed };
   } catch (err) {
     console.log('❌ Error reading SMS:', err);
     return { ok: false, reason: 'read_failed', items: [] };
@@ -76,12 +79,17 @@ export const scanBankSms = async (minDate = 0) => {
 /** Backwards-compatible: just the parsed messages ([] on any failure). */
 export const fetchRecentBankSms = async (lastSyncTime = 0) => (await scanBankSms(lastSyncTime)).items;
 
-const parseData = (messages) => {
+/** `unparsed` collects bank SMS the regex parser rejected but that look like money moved (AI input). */
+const parseData = (messages, unparsed = []) => {
   const results = [];
 
   messages.forEach((msg) => {
     const parsed = parseTransactionText(msg.body, { sender: msg.address, bankFallback: 'Unknown Bank' });
-    if (!parsed) return;
+    if (!parsed) {
+      if (isAiSmsCandidate(msg.body))
+        unparsed.push({ id: msg._id, body: msg.body, sender: msg.address, date: msg.date });
+      return;
+    }
 
     results.push({
       id: msg._id,
