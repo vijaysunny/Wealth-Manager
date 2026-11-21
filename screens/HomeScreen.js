@@ -22,11 +22,18 @@ import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import { Banner, Card, IconButton, TransactionRow } from '../components/ui';
 
-// "Scan bill" arrives with B1 (attachments); until then the third action scans old SMS.
+// Scan bill (B1): camera, then a new expense with the photo attached. Old SMS scan is in Settings.
 const QUICK = [
   { key: 'expense', label: 'Expense', icon: 'arrow-up', tone: 'expense', route: 'Expense' },
   { key: 'income', label: 'Income', icon: 'arrow-down', tone: 'income', route: 'Income' },
-  { key: 'scan', label: 'Scan SMS', icon: 'scan-outline', tone: 'primary', route: 'ScanSms' },
+  {
+    key: 'scan',
+    label: 'Scan bill',
+    icon: 'scan-outline',
+    tone: 'primary',
+    route: 'Expense',
+    params: { scanBill: true },
+  },
   { key: 'import', label: 'Import', icon: 'archive-outline', tone: 'text', route: 'Import' },
 ];
 
@@ -208,7 +215,7 @@ export default function HomeScreen({ navigation }) {
               key={q.key}
               accessibilityRole="button"
               accessibilityLabel={q.label}
-              onPress={() => navigation.navigate(q.route)}
+              onPress={() => navigation.navigate(q.route, q.params)}
               style={({ pressed }) => [
                 styles.quick,
                 { backgroundColor: t.card, borderColor: t.border, opacity: pressed ? 0.7 : 1 },

@@ -1,13 +1,15 @@
 import { putAccount } from '../data/Collections';
 import { Text, View, TouchableOpacity, ScrollView, TextInput, SafeAreaView } from '../components/Theme';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, Alert, Switch } from 'react-native'; // <--- Added Switch
 
 import AsyncStorage from '../data/Storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { add } from '../data/TransactionRepo';
+import { add, update } from '../data/TransactionRepo';
+import { addAttachment } from '../utils/Attachments';
+import { pickFromCamera } from '../utils/AttachmentPickers';
 import { parseAmount } from '../utils/Format';
 
 // Simple Chip Component for selection
@@ -47,6 +49,23 @@ export default function ExpenseScreen({ navigation, route }) {
   const [availableAccounts, setAvailableAccounts] = useState([]);
   const [categoriesList, setCategoriesList] = useState([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // B1 "Scan bill": the photo taken from Home, attached once the expense is saved
+  const [bill, setBill] = useState(null);
+  const takeBill = async () => {
+    try {
+      const picked = await pickFromCamera();
+      if (picked) setBill(picked);
+    } catch (e) {
+      Alert.alert('Camera', e.message);
+    }
+  };
+  useEffect(() => {
+    if (route.params?.scanBill) {
+      navigation.setParams({ scanBill: false });
+      takeBill();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.scanBill]);
   const handleSave = async () => {
     const val = parseAmount(amount);
     if (val === null) {
@@ -81,6 +100,14 @@ export default function ExpenseScreen({ navigation, route }) {
       excludeFromReports: excludeFromBudget, // If true, this is just a transfer/adjustment
     };
     await add(newTx);
+    if (bill) {
+      try {
+        const withFile = await addAttachment(newTx, bill);
+        await update(newTx.id, { attachments: withFile.attachments });
+      } catch (e) {
+        Alert.alert('Saved without the bill', e.message);
+      }
+    }
     navigation.goBack();
   };
   const loadData = useCallback(async () => {
@@ -163,6 +190,36 @@ export default function ExpenseScreen({ navigation, route }) {
             autoFocus={true} // Optional: automatically opens keyboard
           />
         </View>
+
+        {/* B1: bill photo */}
+        {bill ? (
+          <View
+            testID="bill-attached"
+            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}
+          >
+            <Ionicons name="attach" size={18} color="#1F4FD8" />
+            <Text style={{ flex: 1, marginLeft: 6, color: '#3A4456' }} numberOfLines={1}>
+              Bill attached: {bill.name}
+            </Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Remove bill"
+              onPress={() => setBill(null)}
+            >
+              <Text style={{ color: '#97212E', fontWeight: '600' }}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Photograph the bill"
+            onPress={takeBill}
+            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}
+          >
+            <Ionicons name="camera-outline" size={18} color="#1F4FD8" />
+            <Text style={{ marginLeft: 6, color: '#1F4FD8', fontWeight: '600' }}>Photograph the bill</Text>
+          </TouchableOpacity>
+        )}
 
         {/* ACCOUNT SELECTOR */}
         <Text style={styles.label}>DEDUCT FROM</Text>
