@@ -33,8 +33,10 @@ export const useAppTheme = () => {
   const ctx = useContext(ThemeContext);
   return ctx.t ? ctx : { ...ctx, t: ctx.dark ? tokens.dark : tokens.light };
 };
-// LEGACY: guesses dark colours from the hard-coded light ones. Only screens not yet rebuilt in
-// Phase 12 C5 still go through it; new components use tokens. Delete when C5 is finished.
+// LEGACY: guesses dark colours from the hard-coded light ones. The nine C5 screens use tokens;
+// screens outside C5 (Expense, Income, Add/Edit asset, Import, Analytics, Recurring, Savings,
+// MoneyTool, AddGoal, SearchAsset, Onboarding, AppLock, ...) still rely on it for dark mode.
+// Delete it once those are moved to tokens.
 const shade = (value, key) => {
   if (typeof value !== 'string' || !/^#[\da-f]{3,8}$/i.test(value)) return value;
   const full =
