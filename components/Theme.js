@@ -9,6 +9,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView as NativeSafeArea } from 'react-native-safe-area-context';
+import { tokens } from './tokens';
 const ThemeContext = createContext({ dark: false, setDark: () => {} });
 export const ThemeProvider = ({ children }) => {
   const [dark, setValue] = useState(false);
@@ -66,14 +67,18 @@ const themed = (Component) =>
         ? Object.fromEntries(Object.entries(flat).map(([key, value]) => [key, shade(value, key)]))
         : flat;
     };
-    const defaults =
-      dark && (Component === NativeText || Component === NativeInput) ? { color: '#E4E7EB' } : {};
+    const t = dark ? tokens.dark : tokens.light;
+    const isText = Component === NativeText || Component === NativeInput;
+    // Always set a text colour: with no colour, Android in system dark mode draws near-white text (A1).
+    const defaults = isText ? { color: t.text } : {};
     return (
       <Component
         {...props}
         style={[defaults, map(props.style)]}
         contentContainerStyle={props.contentContainerStyle ? map(props.contentContainerStyle) : undefined}
-        placeholderTextColor={Component === NativeInput ? (dark ? '#B8BEC8' : '#777') : undefined}
+        placeholderTextColor={
+          Component === NativeInput ? (props.placeholderTextColor ?? t.placeholder) : undefined
+        }
       />
     );
   };

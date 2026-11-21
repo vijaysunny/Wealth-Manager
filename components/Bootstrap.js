@@ -4,7 +4,8 @@
  * `open` is injectable for tests.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Button } from 'react-native';
+import { Button } from 'react-native';
+import { View, Text } from './Theme';
 import { getDatabase } from '../data/Database';
 
 export default function Bootstrap({ children, open = getDatabase }) {
