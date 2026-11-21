@@ -5,6 +5,8 @@ import { isAiSmsCandidate } from '../utils/ai/AiTasks';
 import { buildSmsId, hashText } from '../utils/DeduplicationEngine';
 import { collectPages } from '../utils/SmsScan';
 import { capturedFields } from '../utils/CaptureMapper';
+import Storage from '../data/Storage';
+import { smsPermissionState, SMS_PERMISSION_STATE_KEY } from '../utils/PermissionHealth';
 
 const PAGE_SIZE = 500;
 const MAX_MESSAGES = 10000; // safety ceiling per scan (≈ years of inbox for a normal phone)
@@ -19,18 +21,22 @@ export const hasSmsPermission = async () => {
   }
 };
 
-/** Shows the system dialog. Call ONLY from UI code (Settings, onboarding, manual scan). */
+/**
+ * Shows the system dialog. Call ONLY from UI code (Settings, onboarding, manual scan).
+ * Asks for READ_SMS and RECEIVE_SMS together: the live listener needs both (A8).
+ * Returns { granted, blocked, state }. blocked = Android answered never_ask_again, which on
+ * Android 13+ is the "restricted setting" for apps installed from an APK (no dialog appears).
+ */
 export const requestSmsPermission = async () => {
-  if (Platform.OS !== 'android') return false;
+  if (Platform.OS !== 'android') return { granted: false, blocked: false, state: 'denied' };
   try {
-    const res = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS, {
-      title: 'SMS Permission',
-      message: 'We need access to read bank SMS for auto-tracking.',
-      buttonPositive: 'OK',
-    });
-    return res === PermissionsAndroid.RESULTS.GRANTED;
+    const P = PermissionsAndroid.PERMISSIONS;
+    const res = await PermissionsAndroid.requestMultiple([P.READ_SMS, P.RECEIVE_SMS]);
+    const state = smsPermissionState(res);
+    await Storage.setItem(SMS_PERMISSION_STATE_KEY, state);
+    return { granted: state === 'granted', blocked: state === 'blocked', state };
   } catch {
-    return false;
+    return { granted: false, blocked: false, state: 'denied' };
   }
 };
 

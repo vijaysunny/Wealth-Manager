@@ -19,6 +19,8 @@ export const buttonColors = (variant, t) => {
       return { bg: t.card, pressed: t.primarySoft, border: t.primary, fg: t.primary, dashed: true };
     case 'danger':
       return { bg: t.dangerBg, pressed: t.dangerBorder, border: t.dangerBorder, fg: t.dangerText };
+    case 'dangerSolid':
+      return { bg: t.danger, pressed: t.dangerText, border: t.danger, fg: t.onPrimary };
     default:
       return { bg: t.primary, pressed: t.primaryPressed, border: t.primary, fg: t.onPrimary };
   }

@@ -7,6 +7,7 @@ import AsyncStorage from '../data/Storage';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { startSmsListener } from './InstantSmsListener';
 import { SMS_FLAG_KEY } from './SmsSync';
+import { SMS_PERMISSION_STATE_KEY } from './PermissionHealth';
 
 let subscription = null;
 
@@ -41,6 +42,16 @@ export const hasReceivePermission = async () => {
   } catch {
     return false;
   }
+};
+
+// A8: the last answer from Android, so Settings can keep showing "blocked" after the request
+export const recordSmsPermissionState = (state) =>
+  AsyncStorage.setItem(SMS_PERMISSION_STATE_KEY, String(state));
+/** 'granted' when both permissions are held now; otherwise the last recorded answer. */
+export const smsPermissionStatus = async () => {
+  if (await hasReceivePermission()) return 'granted';
+  const last = await AsyncStorage.getItem(SMS_PERMISSION_STATE_KEY);
+  return last === 'blocked' ? 'blocked' : 'denied';
 };
 
 /** Make the listener match (saved flag AND permission). Returns whether it is now running. */

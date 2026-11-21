@@ -8,7 +8,7 @@ import AiSettingsPanel from '../components/AiSettingsPanel';
  */
 
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Alert, Switch } from 'react-native';
+import { StyleSheet, Alert, Switch, AppState, Linking, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '../data/Storage';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -21,7 +21,14 @@ import {
 } from '../utils/NotificationService';
 import { importAxioData } from '../utils/AxioImporter';
 import { APP_VERSION } from '../utils/appInfo';
-import { setSmsTracking } from '../utils/SmsTracking';
+import {
+  setSmsTracking,
+  hasReceivePermission,
+  smsPermissionStatus,
+  syncTrackingWithFlag,
+} from '../utils/SmsTracking';
+import { smsBanner } from '../utils/PermissionHealth';
+import Banner from '../components/ui/Banner';
 import { requestSmsPermission } from '../components/RealSmsReader';
 import { buildBackup, validateBackup, formatSummary, restoreBackup } from '../utils/BackupService';
 import {
@@ -92,7 +99,21 @@ export default function SettingsScreen({ navigation }) {
   const [newAcc, setNewAcc] = useState('');
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailSyncing, setGmailSyncing] = useState(false);
-  const [smsAutoTrack, setSmsAutoTrack] = useState(true);
+  const [smsAutoTrack, setSmsAutoTrack] = useState(true); // the saved flag
+  const [smsPermission, setSmsPermission] = useState(false);
+  const [smsLastState, setSmsLastState] = useState('denied');
+  // A8: re-check when the owner comes back from App info, and start the listener if now allowed
+  const refreshSmsPermission = async () => {
+    setSmsPermission(await hasReceivePermission());
+    setSmsLastState(await smsPermissionStatus());
+    await syncTrackingWithFlag();
+  };
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshSmsPermission().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
   const [walletReminder, setWalletReminder] = useState(false);
   useEffect(() => {
     loadSettings();
@@ -109,6 +130,8 @@ export default function SettingsScreen({ navigation }) {
     setWalletReminder((await AsyncStorage.getItem(WALLET_REMINDER_KEY)) === 'true');
     const smsEnabled = await AsyncStorage.getItem('sms_auto_track_enabled');
     setSmsAutoTrack(smsEnabled !== 'false');
+    setSmsPermission(await hasReceivePermission());
+    setSmsLastState(await smsPermissionStatus());
   };
   const saveName = async () => {
     if (!name.trim()) return;
@@ -240,15 +263,13 @@ export default function SettingsScreen({ navigation }) {
   // ── SMS toggle ─────────────────────────────────────────────────────────
 
   const toggleSmsTracking = async (val) => {
-    if (val) {
-      // Turning ON: the permission prompt must come from the UI, not from background code
-      const ok = await requestSmsPermission();
-      if (!ok) {
-        setSmsAutoTrack(false);
-        await setSmsTracking(false);
-        Alert.alert('Permission needed', 'Allow SMS access in system settings to use auto-tracking.');
-        return;
-      }
+    if (val && !smsPermission) {
+      // Turning ON: the permission prompt must come from the UI, not from background code.
+      // Both READ_SMS and RECEIVE_SMS are needed; if Android blocks them, keep the owner's choice
+      // and show the banner with the steps instead of silently turning the switch off (A8).
+      const perm = await requestSmsPermission();
+      setSmsPermission(perm.granted);
+      setSmsLastState(perm.state);
     }
     setSmsAutoTrack(val);
     await setSmsTracking(val); // saves the flag and starts / stops the listener right now
@@ -365,6 +386,12 @@ export default function SettingsScreen({ navigation }) {
 
   // ── Render ─────────────────────────────────────────────────────────────
 
+  const smsBannerKind = smsBanner({
+    platform: Platform.OS,
+    flag: smsAutoTrack,
+    permission: smsPermission,
+    lastState: smsLastState,
+  });
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -373,6 +400,26 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        {smsBannerKind === 'blocked' && (
+          <Banner
+            testID="sms-blocked-banner"
+            tone="danger"
+            style={{ marginHorizontal: 16, marginTop: 8 }}
+            title="SMS tracking is blocked"
+            body="Android blocks SMS access for apps installed from an APK. Open App info, tap ⋮, then Allow restricted settings. Then allow SMS under Permissions."
+            action={{ label: 'Open App info', onPress: () => Linking.openSettings() }}
+          />
+        )}
+        {smsBannerKind === 'needed' && (
+          <Banner
+            testID="sms-needed-banner"
+            tone="warn"
+            style={{ marginHorizontal: 16, marginTop: 8 }}
+            title="SMS permission needed"
+            body="Auto-tracking is on but the app cannot read or receive SMS. Allow Read and Receive SMS."
+            action={{ label: 'Allow SMS', onPress: () => toggleSmsTracking(true) }}
+          />
+        )}
         {/* PROFILE */}
         <SectionCard title="Profile">
           <View style={styles.profileRow}>
@@ -421,18 +468,19 @@ export default function SettingsScreen({ navigation }) {
           {/* SMS */}
           <View style={styles.rowBtn}>
             <Ionicons name="chatbubble-ellipses" size={20} color="#4CAF50" />
-            <Text style={styles.rowBtnText}>SMS Auto-Tracking</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowBtnText}>Read bank SMS automatically</Text>
+              <Text style={{ fontSize: 12, color: '#5B6475', marginLeft: 12 }}>Needs Read + Receive SMS</Text>
+            </View>
             <Switch
-              style={{
-                marginLeft: 'auto',
-              }}
-              value={smsAutoTrack}
+              accessibilityLabel="Read bank SMS automatically"
+              value={smsAutoTrack && smsPermission}
               onValueChange={toggleSmsTracking}
               trackColor={{
-                false: '#ddd',
-                true: '#4CAF5080',
+                false: '#C5CBD6',
+                true: '#1F4FD8',
               }}
-              thumbColor={smsAutoTrack ? '#4CAF50' : '#999'}
+              thumbColor="#FFFFFF"
             />
           </View>
           <View style={styles.divider} />

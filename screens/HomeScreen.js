@@ -44,8 +44,14 @@ export default function HomeScreen({ navigation }) {
     setCurrentDate(shiftMonth(currentDate, direction));
   };
   const handleManualScan = async () => {
-    if (!(await requestSmsPermission())) {
-      Alert.alert('Permission needed', 'Allow SMS access to scan your bank messages.');
+    const perm = await requestSmsPermission();
+    if (!perm.granted) {
+      Alert.alert(
+        'Permission needed',
+        perm.blocked
+          ? 'Android blocked SMS access for this app. Open Settings in the app for the steps.'
+          : 'Allow SMS access to scan your bank messages.'
+      );
       return;
     }
     setLoading(true);

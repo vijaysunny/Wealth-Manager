@@ -28,7 +28,7 @@ jest.mock('expo-notifications', () => ({
 }));
 jest.mock('../../components/RealSmsReader', () => ({
   scanBankSms: jest.fn(async () => []),
-  requestSmsPermission: jest.fn(async () => false),
+  requestSmsPermission: jest.fn(async () => ({ granted: false, blocked: false, state: 'denied' })),
 }));
 
 const Storage = require('../../data/Storage').default;

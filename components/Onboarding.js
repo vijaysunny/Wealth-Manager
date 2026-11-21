@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
 import AppButton from './ui/AppButton';
 import Storage from '../data/Storage';
-import { setSmsTracking } from '../utils/SmsTracking';
+import { setSmsTracking, recordSmsPermissionState } from '../utils/SmsTracking';
+import { smsPermissionState } from '../utils/PermissionHealth';
 export default function Onboarding({ children }) {
   const [complete, setComplete] = useState(null),
     [busy, setBusy] = useState(false);
@@ -23,9 +24,9 @@ export default function Onboarding({ children }) {
           PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         ]);
-        allowed =
-          result[PermissionsAndroid.PERMISSIONS.READ_SMS] === 'granted' &&
-          result[PermissionsAndroid.PERMISSIONS.RECEIVE_SMS] === 'granted';
+        const state = smsPermissionState(result);
+        await recordSmsPermissionState(state);
+        allowed = state === 'granted';
       }
       await setSmsTracking(allowed);
       await Storage.setItem('onboarding_complete', 'true');
