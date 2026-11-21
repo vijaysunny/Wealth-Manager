@@ -13,3 +13,4 @@ export { default as Section } from './Section';
 export { default as Segmented } from './Segmented';
 export { default as TabBar, TAB_ICONS } from './TabBar';
 export { default as TransactionRow, payeeOf } from './TransactionRow';
+export { default as OptionSheet } from './OptionSheet';

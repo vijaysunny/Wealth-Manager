@@ -1,516 +1,555 @@
-import { Text, View, TouchableOpacity, TextInput, ScrollView, SafeAreaView } from '../components/Theme';
-import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, Alert, Switch } from 'react-native';
-import AsyncStorage from '../data/Storage';
+/**
+ * Transaction detail (Phase 12 C5.3, docs/design/Transaction detail files + tags.png).
+ * Close · delete. Card 1: type + large amount. Card 2: Payee, Paid from, Category, Date,
+ * Count in reports. Collapsibles (closed by default): Bills & files, Tags. Source note.
+ * Sticky Save changes. Transfers keep their amount, accounts and type (change them by
+ * deleting and recreating the transfer); payee, tags, date and files can still be edited.
+ */
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { AVAILABLE_ICONS } from '../utils/icons';
-import { update, remove } from '../data/TransactionRepo';
+import Storage from '../data/Storage';
+import { getAll, update, remove } from '../data/TransactionRepo';
 import { parseAmount } from '../utils/Format';
 import { resolveCaptureAccount } from '../utils/FeatureService';
+import { normalizeTag, recentTags, visibleTags, SYSTEM_TAGS } from '../utils/Tags';
+import { shortAccountName } from '../utils/TransactionList';
+import { payeeOf } from '../components/ui/TransactionRow';
+import { useTokens } from '../components/Theme';
+import { fonts, radius, space } from '../components/tokens';
+import {
+  AppButton,
+  AppSwitch,
+  Card,
+  Chip,
+  Collapsible,
+  IconButton,
+  ListRow,
+  OptionSheet,
+  ScreenHeader,
+  Segmented,
+} from '../components/ui';
 
-// NEW: Added the Chip Component for the Category selector
-const Chip = ({ label, selected, onPress, color = '#2196F3' }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    style={[
-      styles.chip,
-      selected && {
-        backgroundColor: color,
-        borderColor: color,
-      },
-    ]}
-  >
-    <Text
-      style={[
-        styles.chipText,
-        selected && {
-          color: '#fff',
-        },
-      ]}
-    >
-      {label}
-    </Text>
-  </TouchableOpacity>
-);
+const EXPENSE_CATS = ['Food', 'Transport', 'Shopping', 'Bills'];
+const INCOME_CATS = ['Salary', 'Business', 'Interest', 'Gift', 'Sold Item', 'Refund', 'Bonus'];
+const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
+
+const fmtDate = (d) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const sizeLabel = (bytes) =>
+  !Number.isFinite(bytes)
+    ? ''
+    : bytes >= 1048576
+      ? `${(bytes / 1048576).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 export default function EditTransactionScreen({ route, navigation }) {
+  const t = useTokens();
   const { transaction } = route.params;
-  const [amount, setAmount] = useState(transaction.amount.toString());
-  const [category, setCategory] = useState(transaction.title || transaction.category);
+  const isTransfer = transaction.type === 'transfer';
 
-  // NEW: State for categories list
-  const [categoriesList, setCategoriesList] = useState([]);
-  const [tags, setTags] = useState(transaction.tags || []);
-  const [tagInput, setTagInput] = useState('');
-
-  // Date & Account State
+  const [type, setType] = useState(transaction.type);
+  const [amount, setAmount] = useState(String(transaction.amount));
+  const [payee, setPayee] = useState(
+    payeeOf(transaction) === transaction.category ? '' : payeeOf(transaction)
+  );
+  const [category, setCategory] = useState(transaction.category || transaction.title || '');
   const [date, setDate] = useState(new Date(transaction.fullDate || Date.now()));
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState(transaction.account || 'Cash');
-  const [availableAccounts, setAvailableAccounts] = useState([]);
-  // A2: a capture from an account not added yet can create it right here
+  const [accountName, setAccountName] = useState(transaction.account || 'Cash');
+  const [countInReports, setCountInReports] = useState(!transaction.excludeFromReports);
+  const [tags, setTags] = useState(() => (transaction.tags || []).map(normalizeTag).filter(Boolean));
+  const [attachments, setAttachments] = useState(() => transaction.attachments || []);
+  const [tagInput, setTagInput] = useState('');
+  const [accounts, setAccounts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [usedTags, setUsedTags] = useState([]);
+  const [sheet, setSheet] = useState(null); // 'account' | 'category'
+  const [showDate, setShowDate] = useState(false);
   const [resolvedHere, setResolvedHere] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const suggested =
     transaction.accountUnresolved && !resolvedHere && transaction.suggestedAccount
       ? transaction.suggestedAccount
       : null;
 
-  // Exclude Toggle State
-  const [excludeFromReports, setExcludeFromReports] = useState(transaction.excludeFromReports || false);
+  const load = useCallback(async () => {
+    const accs = JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]').filter((a) =>
+      SPENDABLE.includes(a.type)
+    );
+    if (!accs.some((a) => a.name === 'Cash')) accs.push({ id: null, name: 'Cash', type: 'Cash' });
+    setAccounts(accs);
+    const saved = JSON.parse((await Storage.getItem('user_categories')) || 'null');
+    let cats = type === 'income' ? INCOME_CATS : saved || EXPENSE_CATS;
+    if (category && !cats.includes(category)) cats = [category, ...cats];
+    setCategories(cats);
+    setUsedTags(recentTags(await getAll(), 12));
+  }, [type, category]);
+  useEffect(() => {
+    load().catch((e) => Alert.alert('Load error', e.message));
+  }, [load]);
 
-  // Icon State
-  const [selectedIcon, setSelectedIcon] = useState(transaction.customIcon);
-  const [selectedColor, setSelectedColor] = useState(transaction.customColor);
-  const addTag = () => {
-    if (tagInput.trim() && !tags.includes(tagInput.trim())) setTags([...tags, tagInput.trim()]);
+  const account = accounts.find((a) => a.name === accountName);
+  const userTags = visibleTags(tags);
+  const suggestions = useMemo(() => usedTags.filter((g) => !tags.includes(g)).slice(0, 8), [usedTags, tags]);
+
+  const addTagText = (text) => {
+    const parts = String(text).split(',');
+    const done = parts.slice(0, -1);
+    const rest = parts[parts.length - 1];
+    const next = [...tags];
+    done.forEach((p) => {
+      const g = normalizeTag(p);
+      if (g && !next.includes(g)) next.push(g);
+    });
+    setTags(next);
+    setTagInput(rest);
+  };
+  const commitTagInput = () => {
+    const g = normalizeTag(tagInput);
+    if (g && !tags.includes(g)) setTags([...tags, g]);
     setTagInput('');
   };
+
+  const onType = (next) => {
+    if (next === type) return;
+    if (isTransfer || next === 'transfer') {
+      Alert.alert(
+        'Transfer',
+        isTransfer
+          ? 'To change a transfer, delete it and record it again.'
+          : 'To record money moved between your own accounts, use Settings → New transfer.'
+      );
+      return;
+    }
+    setType(next);
+  };
+
   const handleSave = async () => {
-    if (transaction.type === 'transfer') {
-      Alert.alert('Transfer', 'Transfers can be removed and recreated from Money tools.');
-      return;
-    }
-    const newAmount = parseAmount(amount);
+    const newAmount = isTransfer ? transaction.amount : parseAmount(amount);
     if (newAmount === null) {
-      Alert.alert('Error', 'Enter a valid amount greater than 0');
+      Alert.alert('Amount', 'Enter an amount greater than 0.');
       return;
     }
-    const picked = availableAccounts.find((a) => a.name === selectedAccount);
-    if (transaction.accountUnresolved && !resolvedHere && picked?.id) {
-      // Resolve through the review path so similar pending captures move too
-      try {
-        await resolveCaptureAccount(transaction.id, { accountId: picked.id });
-      } catch (e) {
-        Alert.alert('Account', e.message);
-        return;
+    setSaving(true);
+    try {
+      if (!isTransfer && transaction.accountUnresolved && !resolvedHere && account?.id) {
+        // Resolve through the review path so similar pending captures move too
+        await resolveCaptureAccount(transaction.id, { accountId: account.id });
       }
-    }
-    const json = await AsyncStorage.getItem('user_transactions');
-    let data = JSON.parse(json);
-    const idx = data.findIndex((t) => t.id === transaction.id);
-    if (idx > -1) {
-      const chosen = availableAccounts.find((a) => a.name === selectedAccount);
-      data[idx] = {
-        ...data[idx],
+      const pendingTag = normalizeTag(tagInput);
+      const finalTags = pendingTag && !tags.includes(pendingTag) ? [...tags, pendingTag] : tags;
+      const name = payee.trim();
+      await update(transaction.id, {
+        type: isTransfer ? transaction.type : type,
         amount: newAmount,
-        title: category,
+        merchant: name || null,
+        title: name || category,
         category,
-        tags,
-        account: selectedAccount,
-        accountId: chosen ? chosen.id : undefined,
-        date: date.toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        }),
+        tags: finalTags,
+        attachments,
+        ...(isTransfer ? {} : { account: accountName, accountId: account?.id ?? undefined }),
+        date: fmtDate(date),
         fullDate: date.toISOString(),
-        customIcon: selectedIcon,
-        customColor: selectedColor,
-        excludeFromReports: excludeFromReports,
-      };
-      await update(transaction.id, data[idx]);
-      // Edit = reverse the old effect, apply the new one
-
-      Alert.alert('Success', 'Transaction Updated');
-      navigation.goBack();
-    }
-  };
-  const handleDelete = () => {
-    Alert.alert('Delete', 'Are you sure?', [
-      {
-        text: 'Cancel',
-      },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await remove(transaction.id);
-          navigation.goBack();
-        },
-      },
-    ]);
-  };
-  const loadData = useCallback(async () => {
-    // 1. Load Accounts
-    const json = await AsyncStorage.getItem('user_wealth_accounts');
-    const accs = json ? JSON.parse(json) : [];
-    const valid = accs.filter((a) => ['Bank Account', 'Credit Card', 'Cash', 'Wallet'].includes(a.type));
-    if (!valid.some((a) => a.name === 'Cash')) {
-      valid.push({
-        name: 'Cash',
-        type: 'Cash',
+        excludeFromReports: !countInReports,
       });
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Could not save', e.message);
+    } finally {
+      setSaving(false);
     }
-    setAvailableAccounts(valid);
+  };
 
-    // 2. Load Categories based on transaction type
-    const catJson = await AsyncStorage.getItem('user_categories');
-    const defaultExpenseCats = ['Food', 'Transport', 'Shopping', 'Bills'];
-    const defaultIncomeCats = ['Salary', 'Business', 'Interest', 'Gift', 'Sold Item', 'Refund', 'Bonus'];
-    let catsToLoad = catJson ? JSON.parse(catJson) : defaultExpenseCats;
-    if (transaction.type === 'income') {
-      catsToLoad = defaultIncomeCats;
-    }
+  const handleDelete = () =>
+    Alert.alert(
+      'Delete transaction?',
+      attachments.length
+        ? `This also removes ${attachments.length} attached file${attachments.length === 1 ? '' : 's'}.`
+        : 'This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await remove(transaction.id);
+            navigation.goBack();
+          },
+        },
+      ]
+    );
 
-    // Ensure the current category is in the list (in case it's a custom one)
-    const currentCat = transaction.title || transaction.category;
-    if (currentCat && !catsToLoad.includes(currentCat)) {
-      catsToLoad = [currentCat, ...catsToLoad];
-    }
-    setCategoriesList(catsToLoad);
-  }, [transaction]);
-  useEffect(() => {
-    loadData(); // Renamed from loadAccounts
-  }, [loadData]);
+  const fromSms = !!transaction.smsId;
+  const source = fromSms
+    ? `From SMS · ${transaction.bankName || transaction.account || 'bank'}`
+    : transaction.gmailMsgId
+      ? 'From email'
+      : transaction.source === 'statement'
+        ? 'From a bank statement'
+        : null;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="close" size={28} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Edit Transaction</Text>
-          <TouchableOpacity onPress={handleDelete}>
-            <Ionicons name="trash" size={24} color="red" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.form}>
-          {/* AMOUNT */}
-          <Text style={styles.label}>Amount</Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                fontSize: 30,
-              },
-            ]}
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="numeric"
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
+      <ScreenHeader
+        title="Transaction"
+        onBack={() => navigation.goBack()}
+        backIcon="close"
+        backLabel="Close"
+        right={
+          <IconButton
+            icon="trash-outline"
+            label="Delete transaction"
+            color={t.danger}
+            onPress={handleDelete}
           />
-
-          {/* DATE PICKER */}
-          <Text style={styles.label}>Date</Text>
-          <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
-            <Ionicons name="calendar-outline" size={20} color="#333" />
-            <Text style={styles.dateText}>{date.toDateString()}</Text>
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              onChange={(e, d) => {
-                setShowDatePicker(false);
-                if (d) setDate(d);
-              }}
-            />
-          )}
-
-          {/* ACCOUNT SELECTOR */}
-          <Text style={styles.label}>Account / Payment Method</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.accountScroll}>
-            {suggested && (
-              <TouchableOpacity
-                testID="add-suggested-account"
-                accessibilityRole="button"
-                accessibilityLabel={`Add ${suggested.name}`}
-                style={[styles.accountChip, styles.suggestChip]}
-                onPress={async () => {
-                  try {
-                    await resolveCaptureAccount(transaction.id, { create: true });
-                    setResolvedHere(true);
-                    await loadData();
-                    setSelectedAccount(suggested.name);
-                  } catch (e) {
-                    Alert.alert('Account', e.message);
-                  }
-                }}
-              >
-                <Text style={[styles.accountText, { color: '#1F4FD8', fontWeight: '600' }]}>
-                  + Add {suggested.name}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {availableAccounts.map((acc, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[styles.accountChip, selectedAccount === acc.name && styles.activeAccount]}
-                onPress={() => setSelectedAccount(acc.name)}
-              >
-                <Text
-                  style={[
-                    styles.accountText,
-                    selectedAccount === acc.name && {
-                      color: '#fff',
-                    },
-                  ]}
-                >
-                  {acc.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* CATEGORY SELECTOR - REPLACED TEXT INPUT WITH CHIPS */}
-          <Text style={styles.label}>Category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrollRow}>
-            {categoriesList.map((cat, i) => (
-              <Chip
-                key={i}
-                label={cat}
-                selected={category === cat}
-                onPress={() => setCategory(cat)}
-                color={transaction.type === 'income' ? '#4CAF50' : '#F44336'}
-              />
-            ))}
-          </ScrollView>
-
-          {/* TAGS */}
-          <Text style={styles.label}>Tags</Text>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-          >
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  flex: 1,
-                },
+        }
+      />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: space.xxl }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Card 1: type + amount */}
+          <Card>
+            <Segmented
+              value={type}
+              onChange={onType}
+              options={[
+                { value: 'expense', label: 'Expense', color: t.expense },
+                { value: 'income', label: 'Income', color: t.income },
+                { value: 'transfer', label: 'Transfer' },
               ]}
-              value={tagInput}
-              onChangeText={setTagInput}
-              placeholder="Add tag..."
-              onSubmitEditing={addTag}
             />
-            <TouchableOpacity onPress={addTag}>
-              <Ionicons name="add-circle" size={32} />
-            </TouchableOpacity>
-          </View>
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              marginBottom: 20,
-            }}
-          >
-            {tags.map((t) => (
-              <TouchableOpacity
-                key={t}
-                onPress={() => setTags(tags.filter((tg) => tg !== t))}
-                style={styles.tag}
-              >
-                <Text>#{t}</Text>
-                <Ionicons
-                  name="close"
-                  size={14}
-                  style={{
-                    marginLeft: 4,
-                  }}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ICON PICKER */}
-          <Text style={styles.label}>Icon Override</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{
-              marginBottom: 20,
-            }}
-          >
-            {AVAILABLE_ICONS.map((ic, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => {
-                  setSelectedIcon(ic.name);
-                  setSelectedColor(ic.color);
-                }}
-                style={[
-                  styles.iconBtn,
-                  selectedIcon === ic.name && {
-                    borderWidth: 2,
-                    borderColor: ic.color,
-                  },
-                ]}
-              >
-                <Ionicons name={ic.name} size={24} color={ic.color} />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* EXCLUDE TOGGLE */}
-          <View style={styles.toggleRow}>
+            <Text style={{ color: t.muted, fontFamily: fonts.semibold, fontSize: 14, marginTop: space.lg }}>
+              Amount
+            </Text>
             <View
               style={{
-                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderBottomWidth: 2,
+                borderColor: isTransfer ? t.border : t.primary,
+                paddingBottom: space.xs,
               }}
             >
-              <Text style={styles.toggleTitle}>Exclude from Reports?</Text>
-              <Text style={styles.toggleSub}>
-                {transaction.type === 'expense'
-                  ? 'Mark as "Not an Expense" (e.g. Transfer)'
-                  : 'Mark as "Not Income" (e.g. Refund)'}
+              <Text
+                style={{ color: t.muted, fontFamily: fonts.display, fontSize: 28, marginRight: space.sm }}
+              >
+                ₹
               </Text>
+              <TextInput
+                testID="amount-input"
+                accessibilityLabel="Amount"
+                value={amount}
+                editable={!isTransfer}
+                onChangeText={setAmount}
+                keyboardType="decimal-pad"
+                style={{
+                  flex: 1,
+                  color: t.text,
+                  fontFamily: fonts.display,
+                  fontSize: 36,
+                  paddingVertical: space.xs,
+                }}
+              />
             </View>
-            <Switch
-              value={excludeFromReports}
-              onValueChange={setExcludeFromReports}
-              trackColor={{
-                false: '#ddd',
-                true: transaction.type === 'expense' ? '#FFCDD2' : '#C8E6C9',
-              }}
-              thumbColor={
-                excludeFromReports ? (transaction.type === 'expense' ? '#F44336' : '#4CAF50') : '#f4f3f4'
-              }
-            />
-          </View>
+          </Card>
 
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-            <Text
+          {/* Card 2: details */}
+          <Card style={{ paddingVertical: space.xs }}>
+            <View
               style={{
-                color: '#fff',
-                fontWeight: 'bold',
-                fontSize: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                minHeight: 52,
+                borderBottomWidth: 1,
+                borderColor: t.divider,
               }}
             >
-              Update
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+              <Text style={{ width: 108, color: t.muted, fontFamily: fonts.body, fontSize: 16 }}>Payee</Text>
+              <TextInput
+                testID="payee-input"
+                accessibilityLabel="Payee"
+                value={payee}
+                onChangeText={setPayee}
+                placeholder="Who was it?"
+                placeholderTextColor={t.placeholder}
+                style={{
+                  flex: 1,
+                  color: t.text,
+                  fontFamily: fonts.semibold,
+                  fontSize: 16,
+                  paddingVertical: space.md,
+                }}
+              />
+            </View>
+            {isTransfer ? (
+              <ListRow
+                divider
+                labelWidth={108}
+                label="Route"
+                value={`${shortAccountName(transaction.account)} → ${shortAccountName(transaction.toAccount || 'other account')}`}
+              />
+            ) : (
+              <ListRow
+                divider
+                labelWidth={108}
+                label={type === 'income' ? 'Paid into' : 'Paid from'}
+                value={shortAccountName(accountName, account?.last4)}
+                onPress={() => setSheet('account')}
+              />
+            )}
+            {suggested ? (
+              <View style={{ paddingVertical: space.sm, borderBottomWidth: 1, borderColor: t.divider }}>
+                <AppButton
+                  testID="add-suggested-account"
+                  variant="dashed"
+                  size="sm"
+                  icon="add"
+                  title={`Add ${suggested.name}`}
+                  accessibilityLabel={`Add ${suggested.name}`}
+                  onPress={async () => {
+                    try {
+                      await resolveCaptureAccount(transaction.id, { create: true });
+                      setResolvedHere(true);
+                      await load();
+                      setAccountName(suggested.name);
+                    } catch (e) {
+                      Alert.alert('Account', e.message);
+                    }
+                  }}
+                />
+              </View>
+            ) : null}
+            <ListRow
+              divider
+              labelWidth={108}
+              label="Category"
+              value={isTransfer ? 'Transfer' : category || 'Choose'}
+              onPress={isTransfer ? undefined : () => setSheet('category')}
+            />
+            <ListRow
+              divider
+              labelWidth={108}
+              label="Date"
+              value={fmtDate(date)}
+              onPress={() => setShowDate(true)}
+            />
+            <AppSwitch
+              label="Count in reports"
+              sublabel={countInReports ? null : 'Not counted in spending or budgets'}
+              value={countInReports}
+              onValueChange={setCountInReports}
+              disabled={isTransfer}
+            />
+          </Card>
+
+          {/* Bills & files (B1 adds Camera / Gallery / Any file) */}
+          <Collapsible
+            testID="files-section"
+            title="Bills & files"
+            badge={attachments.length || null}
+            summary={attachments.length ? null : 'No files yet'}
+            left={<Ionicons name="attach" size={22} color={t.text} />}
+          >
+            {attachments.length === 0 ? (
+              <Text style={{ color: t.muted, fontFamily: fonts.body }}>No files attached.</Text>
+            ) : (
+              attachments.map((f) => (
+                <View
+                  key={f.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    minHeight: 52,
+                    borderBottomWidth: 1,
+                    borderColor: t.divider,
+                  }}
+                >
+                  <Ionicons
+                    name={/pdf/i.test(f.mime || f.name) ? 'document-text-outline' : 'image-outline'}
+                    size={22}
+                    color={t.primary}
+                  />
+                  <View style={{ flex: 1, marginLeft: space.md }}>
+                    <Text numberOfLines={1} style={{ color: t.text, fontFamily: fonts.medium, fontSize: 15 }}>
+                      {f.name || 'File'}
+                    </Text>
+                    <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
+                      {[
+                        String(f.mime || '')
+                          .split('/')
+                          .pop()
+                          .toUpperCase(),
+                        sizeLabel(f.size),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                  <IconButton
+                    icon="close"
+                    label={`Remove ${f.name || 'file'}`}
+                    color={t.muted}
+                    onPress={() => setAttachments(attachments.filter((x) => x.id !== f.id))}
+                  />
+                </View>
+              ))
+            )}
+          </Collapsible>
+
+          {/* Tags */}
+          <Collapsible
+            testID="tags-section"
+            title="Tags"
+            summary={userTags.length ? userTags.map((g) => `#${g}`).join(' ') : 'No tags'}
+            left={
+              <Text
+                style={{
+                  color: t.text,
+                  fontFamily: fonts.display,
+                  fontSize: 22,
+                  width: 22,
+                  textAlign: 'center',
+                }}
+              >
+                #
+              </Text>
+            }
+          >
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {userTags.map((g) => (
+                <Chip
+                  key={g}
+                  tone="tag"
+                  label={`#${g}`}
+                  onRemove={() => setTags(tags.filter((x) => x !== g))}
+                />
+              ))}
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: t.inputBorder,
+                borderRadius: radius.md,
+                paddingHorizontal: space.md,
+                minHeight: 48,
+                marginTop: space.xs,
+              }}
+            >
+              <Text
+                style={{ color: t.muted, fontFamily: fonts.semibold, fontSize: 16, marginRight: space.xs }}
+              >
+                #
+              </Text>
+              <TextInput
+                testID="tag-input"
+                accessibilityLabel="Add a tag"
+                value={tagInput}
+                onChangeText={(v) => (v.includes(',') ? addTagText(v) : setTagInput(v))}
+                onSubmitEditing={commitTagInput}
+                blurOnSubmit={false}
+                returnKeyType="done"
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Add a tag"
+                placeholderTextColor={t.placeholder}
+                style={{ flex: 1, color: t.text, fontFamily: fonts.body, fontSize: 16 }}
+              />
+            </View>
+            {suggestions.length ? (
+              <>
+                <Text
+                  style={{
+                    color: t.muted,
+                    fontFamily: fonts.semibold,
+                    fontSize: 13,
+                    marginTop: space.md,
+                    marginBottom: space.sm,
+                  }}
+                >
+                  Used before
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                  {suggestions.map((g) => (
+                    <Chip key={g} label={`#${g}`} onPress={() => setTags([...tags, g])} />
+                  ))}
+                </View>
+              </>
+            ) : null}
+            {tags.some((g) => SYSTEM_TAGS.includes(g)) ? (
+              <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13, marginTop: space.sm }}>
+                Saved automatically from {tags.includes('auto-sms') ? 'SMS' : 'a scan'}.
+              </Text>
+            ) : null}
+          </Collapsible>
+
+          {source ? (
+            <View style={{ backgroundColor: t.divider, borderRadius: radius.lg, padding: space.lg }}>
+              <Text style={{ color: t.text2, fontFamily: fonts.semibold, fontSize: 14 }}>{source}</Text>
+              {transaction.refNo ? (
+                <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13, marginTop: 2 }}>
+                  Ref {transaction.refNo}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <View
+        style={{
+          padding: space.xl,
+          paddingTop: space.md,
+          borderTopWidth: 1,
+          borderColor: t.border,
+          backgroundColor: t.bg,
+        }}
+      >
+        <AppButton title="Save changes" size="lg" loading={saving} onPress={handleSave} />
+      </View>
+
+      {showDate && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          maximumDate={new Date()}
+          onChange={(_, picked) => {
+            setShowDate(false);
+            if (picked) setDate(picked);
+          }}
+        />
+      )}
+      <OptionSheet
+        visible={sheet === 'account'}
+        title={type === 'income' ? 'Paid into' : 'Paid from'}
+        value={accountName}
+        options={accounts.map((a) => ({
+          value: a.name,
+          label: shortAccountName(a.name, a.last4),
+          sublabel: a.type,
+        }))}
+        onSelect={(v) => {
+          setAccountName(v);
+          setSheet(null);
+        }}
+        onClose={() => setSheet(null)}
+      />
+      <OptionSheet
+        visible={sheet === 'category'}
+        title="Category"
+        value={category}
+        options={categories.map((c) => ({ value: c, label: c }))}
+        onSelect={(v) => {
+          setCategory(v);
+          setSheet(null);
+        }}
+        onClose={() => setSheet(null)}
+      />
     </SafeAreaView>
   );
 }
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  label: {
-    marginTop: 15,
-    color: '#666',
-    fontWeight: 'bold',
-    fontSize: 12,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
-    fontSize: 18,
-    paddingVertical: 5,
-  },
-  dateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    marginTop: 5,
-  },
-  dateText: {
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#333',
-  },
-  accountScroll: {
-    marginTop: 5,
-    marginBottom: 5,
-  },
-  accountChip: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#eee',
-    marginRight: 10,
-  },
-  suggestChip: { borderColor: '#1F4FD8', borderStyle: 'dashed', backgroundColor: '#E8EEFF' },
-  activeAccount: {
-    backgroundColor: '#2196F3',
-  },
-  accountText: {
-    color: '#333',
-    fontWeight: '500',
-  },
-  // NEW: Chip styles for categories
-  scrollRow: {
-    flexDirection: 'row',
-    marginTop: 5,
-    marginBottom: 10,
-  },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#eee',
-    marginRight: 10,
-    marginBottom: 5,
-  },
-  chipText: {
-    fontWeight: '600',
-    color: '#333',
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#eee',
-    padding: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
-    marginTop: 10,
-  },
-  iconBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#f9f9f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    marginBottom: 20,
-    backgroundColor: '#f9f9f9',
-    padding: 15,
-    borderRadius: 10,
-  },
-  toggleTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  toggleSub: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
-  saveBtn: {
-    backgroundColor: '#2196F3',
-    padding: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 50,
-  },
-});
