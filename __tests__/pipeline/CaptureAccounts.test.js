@@ -359,6 +359,41 @@ describe('card bill payment seen twice → one transfer (UNVERIFIED-SAMPLE bank 
   });
 });
 
+describe("A4: owner's real Axis card bill paid from Axis savings (cc_bill ↔ cc_payment)", () => {
+  const BILL =
+    'INR 9145.91 debited\nA/c no. XX0973\n05-07-26, 18:11:07\nUPI/P2M/600000000303/Amazon Pay Credit C\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank';
+  const PAID =
+    'Payment of INR 9145.91 has been received towards your Axis Bank Credit Card XX9070 on 06-07-26 - Axis Bank';
+  const netWorth = async () => computeNetWorth(await accounts()).netWorth;
+
+  test('bank side alone is a one-sided transfer out of savings, not an expense', async () => {
+    await save([capture(BILL)]);
+    const [row] = await getAll();
+    expect(row).toMatchObject({ type: 'transfer', transferKind: 'cc_bill', flow: 'out', accountId: 'axis' });
+    expect((await byId('axis')).balance).toBeCloseTo(10000 - 9145.91, 2);
+  });
+
+  test('then the card SMS: ONE transfer savings → card; net worth unchanged', async () => {
+    const before = await netWorth();
+    await save([capture(BILL)]);
+    await save([capture(PAID)]);
+    const rows = await getAll();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ type: 'transfer', accountId: 'axis', toAccountId: 'axiscc' });
+    expect((await byId('axis')).balance).toBeCloseTo(854.09, 2);
+    expect((await byId('axiscc')).balance).toBeCloseTo(1000 - 9145.91, 2);
+    expect(await netWorth()).toBeCloseTo(before, 2);
+  });
+
+  test('card SMS first, then the bank debit: also one transfer', async () => {
+    await save([capture(PAID)]);
+    await save([capture(BILL)]);
+    const rows = await getAll();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ accountId: 'axis', toAccountId: 'axiscc' });
+  });
+});
+
 describe('cross-source: SMS top-up then bank statement import (A7.3, D7/D8)', () => {
   test('statement row for the same top-up adds nothing and moves no balance', async () => {
     await save([capture(SMS.topup)]);

@@ -419,6 +419,13 @@ const CC_PAYMENT_RE =
 const NOT_CC_PAYMENT_RE = /\brefund|\breversal|\bcashback|\bspent\b|\bpurchase\b/i;
 const isCardPayment = (body, accountType) =>
   accountType === 'Credit Card' && CC_PAYMENT_RE.test(body) && !NOT_CC_PAYMENT_RE.test(body);
+// A4: a bank debit whose payee/narration is a credit-card bill ("UPI/P2M/.../Amazon Pay Credit C",
+// "CC BILL", "CRED Club", "BBPS ... card"). The card's own spends are already expenses, so the bill
+// is a transfer bank → card, not spending.
+export const CARD_BILL_PAYEE_RE =
+  /credit\s*c(?:ard)?\b|\bcc\s*(?:bill|payment)\b|cred\s*club|\bbbps\b.*card/i;
+const isCardBillFromBank = (payee, accountType, type) =>
+  accountType === 'Bank Account' && type === 'expense' && !!payee && CARD_BILL_PAYEE_RE.test(payee);
 // Statement "Ref No" cells: keep only values long enough to be a real reference
 const normRef = (v) => {
   const r = String(v || '')
@@ -514,6 +521,12 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
     category = 'Card Payment';
   }
   const merchantInfo = extractMerchant(body);
+  if (!wallet && isCardBillFromBank(counterparty || merchantInfo.merchant, accountType, type)) {
+    type = 'transfer';
+    kind = 'cc_bill';
+    flow = 'out';
+    category = 'Card Payment';
+  }
   const isTransfer = type === 'transfer';
   const bankName =
     wallet && wallet.perspective === 'wallet'

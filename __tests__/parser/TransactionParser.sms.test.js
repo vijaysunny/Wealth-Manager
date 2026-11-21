@@ -22,10 +22,6 @@ const KNOWN_FAILING = new Set([
   // A5: bank-named UPI Lite top-up must be the bank leg (bank → wallet)
   'axis-upilite-topup-01.flow',
   'axis-upilite-topup-01.accountType',
-  // A4: card bill paid from the bank is a transfer, not spending
-  'axis-debit-ccbill-amazon-01.type',
-  'axis-debit-ccbill-amazon-01.kind',
-  'axis-debit-ccbill-amazon-01.flow',
   // A7: Adyar Anand (Bhavan cut off by the card network) is Food
   'axis-cc-spend-adyar-01.category',
   // A7: card limit-change notice is not a transaction

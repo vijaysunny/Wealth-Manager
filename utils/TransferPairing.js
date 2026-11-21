@@ -1,7 +1,7 @@
 /**
  * TransferPairing.js - pure. Joins the two SMS of ONE money move into one transfer:
  * the card issuer's "payment received" (one-sided cc_payment into the card) and the
- * paying bank's debit SMS (a plain expense). Without this the card bill payment counts
+ * paying bank's debit SMS (a one-sided cc_bill transfer, or an older plain expense). Without this the card bill payment counts
  * as an expense AND the card spends count again.
  *
  * Conservative on purpose: same amount (to the paisa), within 3 days, both accounts known,
@@ -24,6 +24,17 @@ export const isOpenCardPayment = (t) =>
   (t.toAccountId === undefined || t.toAccountId === null) &&
   hasAccount(t);
 
+// A4: the parser now stores a bank debit for a card bill as a one-sided transfer (cc_bill, flow out)
+export const isOpenCardBill = (t) =>
+  t.type === 'transfer' &&
+  t.transferKind === 'cc_bill' &&
+  t.accountType !== 'Credit Card' &&
+  (t.toAccountId === undefined || t.toAccountId === null) &&
+  hasAccount(t);
+
+/** The bank side of a card bill payment: a cc_bill transfer, or an older expense with a card hint. */
+export const isBankSideOfCardBill = (t) => isOpenCardBill(t) || looksLikeCardPaymentDebit(t);
+
 export const looksLikeCardPaymentDebit = (t) =>
   t.type === 'expense' &&
   t.accountType !== 'Credit Card' &&
@@ -33,8 +44,8 @@ export const looksLikeCardPaymentDebit = (t) =>
 /** The stored row that pairs with `candidate`, closest in time, or null. */
 export const findTransferPair = (candidate, rows) => {
   let match;
-  if (isOpenCardPayment(candidate)) match = (r) => looksLikeCardPaymentDebit(r);
-  else if (looksLikeCardPaymentDebit(candidate)) match = (r) => isOpenCardPayment(r);
+  if (isOpenCardPayment(candidate)) match = (r) => isBankSideOfCardBill(r);
+  else if (isBankSideOfCardBill(candidate)) match = (r) => isOpenCardPayment(r);
   else return null;
   const cMs = ms(candidate);
   let best = null;
