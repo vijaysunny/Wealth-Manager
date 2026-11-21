@@ -67,7 +67,7 @@ export default function ToolsScreen({ navigation, route }) {
     [start, setStart] = useState(''),
     [end, setEnd] = useState(''),
     [selected, setSelected] = useState([]);
-  const [goalId, setGoalId] = useState(''),
+  const [goalId, setGoalId] = useState(route.params?.goalId ? String(route.params.goalId) : ''),
     [contribution, setContribution] = useState('');
   const [flows, setFlows] = useState(''),
     [principal, setPrincipal] = useState(''),

@@ -8,20 +8,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { parseAmount, parseNonNegative } from '../utils/Format';
 
 import { mutateList } from '../data/Collections';
+import { GOAL_TEMPLATES, deadlineIn } from '../utils/GoalMath';
 export default function AddGoalScreen({ navigation, route }) {
   const existing = route.params?.goal;
+  // C5.7: "Start from" templates prefill the name, date and expected return
+  const template = existing ? null : GOAL_TEMPLATES.find((g) => g.key === route.params?.template);
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState(existing?.accountId || '');
   useEffect(() => {
     AsyncStorage.getItem('user_wealth_accounts').then((raw) => setAccounts(JSON.parse(raw || '[]')));
   }, []);
-  const [name, setName] = useState(existing?.name || '');
+  const [name, setName] = useState(existing?.name || template?.name || '');
   const [target, setTarget] = useState(String(existing?.targetAmount || ''));
   const [saved, setSaved] = useState(String(existing?.savedAmount ?? '0'));
-  const [roi, setRoi] = useState(String(existing?.roi ?? 10)); // Default 10%
+  const [roi, setRoi] = useState(String(existing?.roi ?? template?.roi ?? 10)); // Default 10%
   const [assetName, setAssetName] = useState(existing?.linkedAsset || ''); // "Where did he save?"
   const [date, setDate] = useState(
-    existing ? new Date(existing.deadline) : new Date(new Date().setFullYear(new Date().getFullYear() + 1))
+    existing
+      ? new Date(existing.deadline)
+      : template
+        ? deadlineIn(template.months)
+        : new Date(new Date().setFullYear(new Date().getFullYear() + 1))
   ); // Default 1 year from now
   const [showPicker, setShowPicker] = useState(false);
 
