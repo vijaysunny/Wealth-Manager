@@ -1,3 +1,4 @@
+import { deleteAllFor } from './Attachments';
 import { atomic, insertRow, decodeRow, sourceId } from '../data/Database';
 import { readValue, writeValue } from '../data/Storage';
 import { getAll, updateInDb, removeInDb, writeRow, moveBalances } from '../data/TransactionRepo';
@@ -23,10 +24,12 @@ export const bulkUpdate = (ids, changes) =>
   atomic(async (db) => {
     for (const id of ids) await updateInDb(db, id, changes);
   });
-export const bulkDelete = (ids) =>
-  atomic(async (db) => {
+export const bulkDelete = async (ids) => {
+  await atomic(async (db) => {
     for (const id of ids) await removeInDb(db, id);
   });
+  for (const id of ids) await deleteAllFor(id).catch(() => {}); // B1: files go too
+};
 export const rejectCapture = (id) =>
   atomic(async (db) => {
     const row = await db.getFirstAsync('SELECT data FROM transactions WHERE id=?', String(id));

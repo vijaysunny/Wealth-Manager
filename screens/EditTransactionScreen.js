@@ -6,13 +6,25 @@
  * deleting and recreating the transfer); payee, tags, date and files can still be edited.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Storage from '../data/Storage';
 import { getAll, update, remove } from '../data/TransactionRepo';
 import { parseAmount } from '../utils/Format';
+import { addAttachment, removeAttachment, sizeLabel } from '../utils/Attachments';
+import { pickFromCamera, pickFromGallery, pickAnyFile, openAttachment } from '../utils/AttachmentPickers';
 import { resolveCaptureAccount } from '../utils/FeatureService';
 import { normalizeTag, recentTags, visibleTags, SYSTEM_TAGS } from '../utils/Tags';
 import { shortAccountName } from '../utils/TransactionList';
@@ -37,12 +49,6 @@ const INCOME_CATS = ['Salary', 'Business', 'Interest', 'Gift', 'Sold Item', 'Ref
 const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
 
 const fmtDate = (d) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-const sizeLabel = (bytes) =>
-  !Number.isFinite(bytes)
-    ? ''
-    : bytes >= 1048576
-      ? `${(bytes / 1048576).toFixed(1)} MB`
-      : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 export default function EditTransactionScreen({ route, navigation }) {
   const t = useTokens();
@@ -111,6 +117,39 @@ export default function EditTransactionScreen({ route, navigation }) {
     if (g && !tags.includes(g)) setTags([...tags, g]);
     setTagInput('');
   };
+
+  const [fileBusy, setFileBusy] = useState(null);
+  const attach = async (label, pick) => {
+    setFileBusy(label);
+    try {
+      const picked = await pick();
+      if (!picked) return;
+      const next = await addAttachment({ id: transaction.id, attachments }, picked);
+      await update(transaction.id, { attachments: next.attachments });
+      setAttachments(next.attachments);
+    } catch (e) {
+      Alert.alert('Could not attach', e.message);
+    } finally {
+      setFileBusy(null);
+    }
+  };
+  const confirmRemoveFile = (f) =>
+    Alert.alert('Remove file?', `${f.name || 'This file'} is deleted from the phone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const next = await removeAttachment({ id: transaction.id, attachments }, f.id);
+            await update(transaction.id, { attachments: next.attachments });
+            setAttachments(next.attachments);
+          } catch (e) {
+            Alert.alert('Could not remove', e.message);
+          }
+        },
+      },
+    ]);
 
   const onType = (next) => {
     if (next === type) return;
@@ -346,7 +385,7 @@ export default function EditTransactionScreen({ route, navigation }) {
             />
           </Card>
 
-          {/* Bills & files (B1 adds Camera / Gallery / Any file) */}
+          {/* Bills & files (B1): added and removed files are saved right away */}
           <Collapsible
             testID="files-section"
             title="Bills & files"
@@ -354,50 +393,100 @@ export default function EditTransactionScreen({ route, navigation }) {
             summary={attachments.length ? null : 'No files yet'}
             left={<Ionicons name="attach" size={22} color={t.text} />}
           >
-            {attachments.length === 0 ? (
-              <Text style={{ color: t.muted, fontFamily: fonts.body }}>No files attached.</Text>
-            ) : (
-              attachments.map((f) => (
+            {attachments.map((f) => {
+              const image = /^image\//.test(f.mime || '');
+              return (
                 <View
                   key={f.id}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    minHeight: 52,
+                    minHeight: 60,
                     borderBottomWidth: 1,
                     borderColor: t.divider,
                   }}
                 >
-                  <Ionicons
-                    name={/pdf/i.test(f.mime || f.name) ? 'document-text-outline' : 'image-outline'}
-                    size={22}
-                    color={t.primary}
-                  />
-                  <View style={{ flex: 1, marginLeft: space.md }}>
-                    <Text numberOfLines={1} style={{ color: t.text, fontFamily: fonts.medium, fontSize: 15 }}>
-                      {f.name || 'File'}
-                    </Text>
-                    <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
-                      {[
-                        String(f.mime || '')
-                          .split('/')
-                          .pop()
-                          .toUpperCase(),
-                        sizeLabel(f.size),
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Text>
-                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${f.name || 'file'}`}
+                    onPress={() => openAttachment(f).catch((e) => Alert.alert('Open file', e.message))}
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm }}
+                  >
+                    {image ? (
+                      <Image
+                        source={{ uri: f.uri }}
+                        style={{ width: 44, height: 44, borderRadius: radius.sm, backgroundColor: t.divider }}
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: radius.sm,
+                          backgroundColor: t.primarySoft,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons
+                          name={/pdf/i.test(f.mime || f.name) ? 'document-text-outline' : 'document-outline'}
+                          size={22}
+                          color={t.primary}
+                        />
+                      </View>
+                    )}
+                    <View style={{ flex: 1, marginLeft: space.md }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{ color: t.text, fontFamily: fonts.medium, fontSize: 15 }}
+                      >
+                        {f.name || 'File'}
+                      </Text>
+                      <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
+                        {[
+                          String(f.mime || '')
+                            .split('/')
+                            .pop()
+                            .toUpperCase(),
+                          sizeLabel(f.size),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    </View>
+                  </Pressable>
                   <IconButton
                     icon="close"
                     label={`Remove ${f.name || 'file'}`}
                     color={t.muted}
-                    onPress={() => setAttachments(attachments.filter((x) => x.id !== f.id))}
+                    onPress={() => confirmRemoveFile(f)}
                   />
                 </View>
-              ))
-            )}
+              );
+            })}
+            <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
+              {[
+                ['Camera', 'camera-outline', pickFromCamera],
+                ['Gallery', 'images-outline', pickFromGallery],
+                ['Any file', 'document-attach-outline', pickAnyFile],
+              ].map(([label, icon, pick]) => (
+                <AppButton
+                  key={label}
+                  title={label}
+                  icon={icon}
+                  variant="dashed"
+                  size="sm"
+                  style={{ flex: 1 }}
+                  accessibilityLabel={`Attach from ${label}`}
+                  loading={fileBusy === label}
+                  disabled={!!fileBusy}
+                  onPress={() => attach(label, pick)}
+                />
+              ))}
+            </View>
+            <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 12, marginTop: space.sm }}>
+              Up to 10 files, 25 MB each. Files are kept on this phone and in your backups.
+            </Text>
           </Collapsible>
 
           {/* Tags */}

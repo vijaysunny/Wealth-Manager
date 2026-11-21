@@ -15,6 +15,29 @@ jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   scheduleNotificationAsync: jest.fn(async () => 'id'),
 }));
+jest.mock('../../utils/AttachmentPickers', () => ({
+  pickFromCamera: jest.fn(async () => null),
+  pickFromGallery: jest.fn(async () => null),
+  pickAnyFile: jest.fn(async () => ({
+    uri: 'file:///cache/bill.pdf',
+    name: 'bill.pdf',
+    mime: 'application/pdf',
+    size: 2048,
+  })),
+  openAttachment: jest.fn(async () => {}),
+}));
+const mockFiles = {};
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///doc/',
+  makeDirectoryAsync: jest.fn(async () => {}),
+  copyAsync: jest.fn(async ({ from, to }) => {
+    mockFiles[to] = from;
+  }),
+  deleteAsync: jest.fn(async (uri) => {
+    Object.keys(mockFiles).forEach((k) => k.startsWith(uri) && delete mockFiles[k]);
+  }),
+  getInfoAsync: jest.fn(async () => ({ exists: true, size: 1 })),
+}));
 jest.setTimeout(30000);
 
 const nav = () => ({ navigate: jest.fn(), goBack: jest.fn() });
@@ -128,4 +151,56 @@ test('a transfer shows its route and keeps amount read-only', async () => {
   render(<EditTransactionScreen navigation={nav()} route={{ params: { transaction: tr } }} />);
   expect(await screen.findByText('Axis → UPI Lite')).toBeTruthy();
   expect(screen.getByTestId('amount-input').props.editable).toBe(false);
+});
+
+test('B1: Any file attaches and saves at once; tap opens; remove asks and deletes the file', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  const pickers = require('../../utils/AttachmentPickers');
+  await open();
+  fireEvent.press(screen.getByRole('button', { name: 'Bills & files' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Attach from Any file' }));
+  expect(await screen.findByText('bill.pdf')).toBeTruthy();
+  let saved = (await getAll()).find((x) => x.id === 'g1');
+  expect(saved.attachments.map((a) => a.name)).toEqual(['invoice.pdf', 'bill.pdf']);
+  const uri = saved.attachments[1].uri;
+  expect(uri).toMatch(/^file:\/\/\/doc\/attachments\/g1\/.+-bill\.pdf$/);
+  expect(mockFiles[uri]).toBe('file:///cache/bill.pdf');
+  fireEvent.press(screen.getByRole('button', { name: 'Open bill.pdf' }));
+  expect(pickers.openAttachment).toHaveBeenCalledWith(expect.objectContaining({ name: 'bill.pdf' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Remove bill.pdf' }));
+  await alert.mock.calls
+    .find((c) => c[0] === 'Remove file?')[2]
+    .find((b) => b.text === 'Remove')
+    .onPress();
+  await waitFor(() => expect(screen.queryByText('bill.pdf')).toBeNull());
+  saved = (await getAll()).find((x) => x.id === 'g1');
+  expect(saved.attachments.map((a) => a.name)).toEqual(['invoice.pdf']);
+  expect(mockFiles[uri]).toBeUndefined();
+  alert.mockRestore();
+});
+
+test('B1: a file over 25 MB shows the limit message', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  require('../../utils/AttachmentPickers').pickAnyFile.mockResolvedValueOnce({
+    uri: 'file:///c/big',
+    name: 'big.pdf',
+    size: 30 * 1048576,
+  });
+  await open();
+  fireEvent.press(screen.getByRole('button', { name: 'Bills & files' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Attach from Any file' }));
+  await waitFor(() =>
+    expect(alert).toHaveBeenCalledWith(
+      'Could not attach',
+      'This file is 30.0 MB. The limit is 25 MB per file.'
+    )
+  );
+  alert.mockRestore();
+});
+
+test('B1: deleting a transaction deletes its folder', async () => {
+  const fsm = require('expo-file-system/legacy');
+  const { remove } = require('../../data/TransactionRepo');
+  await remove('g1');
+  expect(fsm.deleteAsync).toHaveBeenCalledWith('file:///doc/attachments/g1/', { idempotent: true });
 });

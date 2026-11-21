@@ -81,7 +81,15 @@
         }
       ],
       "expo-system-ui",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Attach photos of bills and receipts to your transactions.",
+          "cameraPermission": "Photograph bills and receipts to attach them to transactions.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "extra": {
       "eas": {

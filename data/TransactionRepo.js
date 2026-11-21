@@ -1,3 +1,4 @@
+import { deleteAllFor } from '../utils/Attachments';
 import { atomic, getDatabase, insertRow, decodeRow, encodeTransaction, sourceId } from './Database';
 import { applyCategoryRules } from '../utils/FinanceTools';
 import { readValue } from './Storage';
@@ -145,7 +146,12 @@ export const removeInDb = async (db, id) => {
   await db.runAsync('DELETE FROM transactions WHERE id=?', String(id));
   return true;
 };
-export const remove = (id) => atomic((db) => removeInDb(db, id));
+export const remove = async (id) => {
+  const removed = await atomic((db) => removeInDb(db, id));
+  // B1: the transaction's files go with it (outside the DB transaction; a missing folder is fine)
+  if (removed) await deleteAllFor(id).catch(() => {});
+  return removed;
+};
 export const monthlyAggregates = async (start, end) =>
   (await getDatabase()).getAllAsync(
     `SELECT strftime('%Y-%m', fullDate, 'localtime') AS month, type, SUM(amount) AS total FROM transactions WHERE fullDate >= ? AND fullDate < ? AND excluded = 0 AND type IN ('expense','income') GROUP BY month, type`,
