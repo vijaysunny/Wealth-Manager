@@ -256,15 +256,17 @@ export const classifyWalletEvent = (body = '', { sender = '' } = {}) => {
       : subType === 'Amazon Pay'
         ? 'Amazon Pay'
         : detectWalletProvider(sender, text);
+  const isTopup = WALLET_TOPUP_RE.test(text) || (subType === 'FASTag' && FASTAG_RECHARGE_RE.test(text));
+  const isWithdraw = WALLET_WITHDRAW_RE.test(text);
+  const bankNamed = !!firstMatch(BANKS, `${sender} ${text}`.toUpperCase());
+  // A5: a top-up/withdraw SMS sent by a bank ("UPI LITE top-up … successful … - Axis Bank") is the
+  // bank's view of a bank ↔ wallet move even without an "A/c" word, so both legs get linked.
   const perspective =
-    firstMatch(BANKS, `${sender} ${text}`.toUpperCase()) && BANK_ACCOUNT_REF_RE.test(text)
-      ? 'bank'
-      : 'wallet';
+    bankNamed && (BANK_ACCOUNT_REF_RE.test(text) || isTopup || isWithdraw) ? 'bank' : 'wallet';
   const balanceBelongsTo = perspective;
   const base = { provider, subType, perspective, balanceBelongsTo };
 
-  const isTopup = WALLET_TOPUP_RE.test(text) || (subType === 'FASTag' && FASTAG_RECHARGE_RE.test(text));
-  if (WALLET_WITHDRAW_RE.test(text)) return { ...base, kind: 'wallet_withdraw' };
+  if (isWithdraw) return { ...base, kind: 'wallet_withdraw' };
   if (isTopup) return { ...base, kind: 'wallet_topup' };
   if (perspective === 'wallet' && WALLET_CREDIT_RE.test(text) && !WALLET_SPEND_RE.test(text))
     return { ...base, kind: 'wallet_credit' };

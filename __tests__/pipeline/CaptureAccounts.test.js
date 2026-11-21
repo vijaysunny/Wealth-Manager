@@ -159,6 +159,23 @@ describe('UPI Lite top-up (A3, A7)', () => {
       reviewStatus: 'pending',
     });
   });
+  test('A5: "UPI LITE top-up … - Axis Bank" (no A/c word) moves BOTH Axis −500 and UPI Lite +500', async () => {
+    const TOPUP_NO_AC =
+      'UPI LITE top-up on UPI App amounting to INR 500.00 has been successful. Ref no. 100000000101 - Axis Bank';
+    const lite = { id: 'lite', name: 'UPI Lite', type: 'Wallet', subType: 'UPI Lite', balance: 500 };
+    await Storage.setItem('user_wealth_accounts', JSON.stringify([...OWNER(), lite]));
+    const before = computeNetWorth(await accounts()).netWorth;
+    await save([capture(TOPUP_NO_AC)]);
+    expect((await byId('axis')).balance).toBe(9500);
+    expect((await byId('lite')).balance).toBe(1000);
+    expect(computeNetWorth(await accounts()).netWorth).toBe(before);
+    expect((await getAll())[0]).toMatchObject({
+      type: 'transfer',
+      transferKind: 'wallet_topup',
+      accountId: 'axis',
+      toAccountId: 'lite',
+    });
+  });
   test('same SMS twice (listener + inbox scan) → one transfer (A7.2)', async () => {
     const tx = capture(SMS.topup);
     await save([tx]);

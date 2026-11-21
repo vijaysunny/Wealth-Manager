@@ -19,9 +19,6 @@ const { rules: OWNER_RULES } = JSON.parse(
 );
 
 const KNOWN_FAILING = new Set([
-  // A5: bank-named UPI Lite top-up must be the bank leg (bank → wallet)
-  'axis-upilite-topup-01.flow',
-  'axis-upilite-topup-01.accountType',
   // A7: Adyar Anand (Bhavan cut off by the card network) is Food
   'axis-cc-spend-adyar-01.category',
   // A7: card limit-change notice is not a transaction
