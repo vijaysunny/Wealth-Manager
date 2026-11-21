@@ -51,6 +51,14 @@ import AppLock from './components/AppLock';
 import Onboarding from './components/Onboarding';
 import { ThemeProvider, useAppTheme } from './components/Theme';
 import Storage from './data/Storage';
+import { useFonts } from 'expo-font';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { saveNetWorthSnapshot } from './utils/FeatureService';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -162,6 +170,16 @@ function AppContent() {
   );
 }
 export default function App() {
+  // C1: load the fonts before the first screen. On a load error, carry on with system fonts.
+  const [fontsLoaded, fontError] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    SpaceGrotesk_600SemiBold,
+    SpaceGrotesk_700Bold,
+  });
+  if (!fontsLoaded && !fontError) return null;
   return (
     <ErrorBoundary>
       <Bootstrap>
