@@ -4,7 +4,8 @@
  * Native-only pieces (icons, WebView, date picker, notifications, SMS reader) are stubbed.
  */
 import React from 'react';
-import { Alert } from 'react-native';
+import { tokens } from '../../components/tokens';
+import { Alert, StyleSheet } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -143,9 +144,68 @@ describe('A7.9 / History transfers', () => {
     );
     const AllTransactionsScreen = require('../../screens/AllTransactionsScreen').default;
     render(<AllTransactionsScreen navigation={nav()} route={{ params: {} }} />);
-    expect(await screen.findByText('Axis Bank → UPI Lite · not counted in spending')).toBeTruthy();
+    expect(await screen.findByText('Axis → UPI Lite')).toBeTruthy();
     expect(screen.getByText('Chai')).toBeTruthy();
-    expect(screen.queryByText(/620/)).toBeNull(); // spending total is 120, never 620
+    expect(screen.getAllByText('−₹120')).toHaveLength(2); // the row and the day total (never 620)
+    expect(screen.queryByText(/620/)).toBeNull();
+    expect(StyleSheet.flatten(screen.getByText('₹500').props.style).color).toBe(tokens.light.muted);
+  });
+
+  test('C5.2: #tag search, tag chips, account chips and Has file', async () => {
+    const { addMany } = require('../../data/TransactionRepo');
+    await Storage.setItem(
+      'user_wealth_accounts',
+      JSON.stringify([
+        { id: 'axis', name: 'Axis Bank', type: 'Bank Account', last4: '0973', balance: 0 },
+        { id: 'card', name: 'Axis Bank Credit Card', type: 'Credit Card', last4: '9070', balance: 0 },
+      ])
+    );
+    const now = new Date().toISOString();
+    await addMany(
+      [
+        {
+          id: 'g1',
+          type: 'expense',
+          amount: 1998.19,
+          merchant: 'Google',
+          category: 'Subscriptions',
+          accountId: 'axis',
+          account: 'Axis Bank',
+          fullDate: now,
+          tags: ['tax-2026', 'subscription'],
+          attachments: [{ id: 'f', name: 'invoice.pdf' }],
+        },
+        {
+          id: 'p1',
+          type: 'expense',
+          amount: 30,
+          merchant: 'ODS parking',
+          category: 'Transport',
+          accountId: 'card',
+          account: 'Axis Bank Credit Card',
+          fullDate: now,
+          tags: ['reimburse'],
+        },
+      ],
+      { dedup: false }
+    );
+    const AllTransactionsScreen = require('../../screens/AllTransactionsScreen').default;
+    render(<AllTransactionsScreen navigation={nav()} route={{ params: {} }} />);
+    expect(await screen.findByText('Google')).toBeTruthy();
+    expect(screen.getByText('ODS parking')).toBeTruthy();
+    fireEvent.changeText(screen.getByTestId('tx-search'), '#tax-2026');
+    expect(screen.queryByText('ODS parking')).toBeNull();
+    expect(screen.getByRole('button', { name: '#tax-2026' }).props.accessibilityState.selected).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: '#tax-2026' }));
+    expect(screen.getByText('ODS parking')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Axis Card ••9070'));
+    expect(screen.queryByText('Google')).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'All accounts' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Has file' }));
+    expect(screen.getByText('Google')).toBeTruthy();
+    expect(screen.queryByText('ODS parking')).toBeNull();
+    fireEvent.changeText(screen.getByTestId('tx-search'), 'nothing-like-this');
+    expect(screen.getByText('Nothing matches')).toBeTruthy();
   });
 });
 

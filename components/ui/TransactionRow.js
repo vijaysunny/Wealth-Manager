@@ -1,7 +1,7 @@
 /**
  * TransactionRow (C5.1/C5.2): icon, payee, account chip, category, paperclip when files are
- * attached, user tags (blue, one line), amount. Transfers are muted; a possible self-transfer
- * shows a hint.
+ * attached, user tags (blue, one line), amount. Transfers are muted and show "from → to";
+ * a possible self-transfer shows a hint.
  */
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -11,6 +11,7 @@ import { fonts, radius, space } from '../tokens';
 import MoneyText from './MoneyText';
 import { getCategoryIcon } from '../../utils/icons';
 import { visibleTags } from '../../utils/Tags';
+import { shortAccountName } from '../../utils/TransactionList';
 
 export const payeeOf = (tx) =>
   tx.merchant ||
@@ -26,25 +27,28 @@ export const outlineIcon = (name) => {
   return map[`${base}-outline`] !== undefined ? `${base}-outline` : base;
 };
 
-const shortAccount = (name = '') => name.replace(/\s+Bank\b/i, '').replace(/\s+Credit Card\b/i, ' Card');
+/** Account chip text: "Axis ••0973", or "Axis ••0973 → UPI Lite" for a transfer. */
+export const accountChip = (tx, accountsById = {}) => {
+  const acc = accountsById[String(tx.accountId)];
+  const from = shortAccountName(acc?.name || tx.account, acc?.last4 || tx.last4);
+  if (tx.type !== 'transfer' || !tx.toAccount) return from;
+  const toAcc = accountsById[String(tx.toAccountId)];
+  return `${from} → ${shortAccountName(toAcc?.name || tx.toAccount, toAcc?.last4)}`;
+};
 
-export default function TransactionRow({ tx, onPress, showDate = true, divider = true }) {
+export default function TransactionRow({ tx, onPress, accountsById, showDate = false, divider = true }) {
   const t = useTokens();
   const transfer = tx.type === 'transfer';
   const icon = tx.customIcon ? { name: tx.customIcon } : getCategoryIcon(tx.category);
   const tags = visibleTags(tx.tags);
   const files = Array.isArray(tx.attachments) ? tx.attachments.length : 0;
-  const route =
-    transfer && tx.toAccount ? `${shortAccount(tx.account)} → ${shortAccount(tx.toAccount)}` : null;
-  const meta = [
-    route || (tx.account ? shortAccount(tx.account) : null),
-    transfer ? 'Transfer' : tx.category,
-    showDate ? tx.date || String(tx.fullDate || '').slice(0, 10) : null,
-  ].filter(Boolean);
+  const chip = accountChip(tx, accountsById);
+  const payee = payeeOf(tx);
+  const sub = [transfer ? null : tx.category, showDate ? tx.date : null].filter(Boolean).join(' · ');
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${payeeOf(tx)}, ${tx.amount}`}
+      accessibilityLabel={`${payee}, ${tx.amount}`}
       onPress={onPress}
       style={({ pressed }) => ({
         flexDirection: 'row',
@@ -66,20 +70,42 @@ export default function TransactionRow({ tx, onPress, showDate = true, divider =
           marginRight: space.md,
         }}
       >
-        <Ionicons
-          name={transfer ? 'swap-horizontal' : outlineIcon(icon.name)}
-          size={20}
-          color={transfer ? t.muted : t.primary}
-        />
+        {transfer ? (
+          <Ionicons name="swap-horizontal" size={20} color={t.muted} />
+        ) : tx.category || tx.customIcon ? (
+          <Ionicons name={outlineIcon(icon.name)} size={20} color={t.primary} />
+        ) : (
+          <Text style={{ color: t.primary, fontFamily: fonts.semibold, fontSize: 16 }}>
+            {payee.charAt(0).toUpperCase()}
+          </Text>
+        )}
       </View>
       <View style={{ flex: 1, paddingRight: space.sm }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text
-            numberOfLines={1}
-            style={{ flexShrink: 1, color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}
-          >
-            {payeeOf(tx)}
-          </Text>
+        <Text numberOfLines={1} style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+          {payee}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+          {chip ? (
+            <View
+              style={{
+                backgroundColor: t.divider,
+                borderRadius: 6,
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                marginRight: space.sm,
+                maxWidth: '100%',
+              }}
+            >
+              <Text numberOfLines={1} style={{ color: t.text2, fontFamily: fonts.medium, fontSize: 12 }}>
+                {chip}
+              </Text>
+            </View>
+          ) : null}
+          {sub ? (
+            <Text numberOfLines={1} style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
+              {sub}
+            </Text>
+          ) : null}
           {files > 0 ? (
             <Ionicons
               testID="has-file"
@@ -91,23 +117,17 @@ export default function TransactionRow({ tx, onPress, showDate = true, divider =
             />
           ) : null}
         </View>
-        <Text
-          numberOfLines={1}
-          style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13, marginTop: 2 }}
-        >
-          {meta.join(' · ')}
-        </Text>
         {tags.length ? (
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
-            style={{ color: t.primary, fontFamily: fonts.medium, fontSize: 13, marginTop: 2 }}
+            style={{ color: t.primary, fontFamily: fonts.medium, fontSize: 13, marginTop: 4 }}
           >
             {tags.map((g) => `#${g}`).join(' ')}
           </Text>
         ) : null}
         {tx.transferCandidate && tx.type === 'expense' ? (
-          <Text style={{ color: t.warnText, fontFamily: fonts.medium, fontSize: 12, marginTop: 2 }}>
+          <Text style={{ color: t.warnText, fontFamily: fonts.medium, fontSize: 12, marginTop: 4 }}>
             Self-transfer?
           </Text>
         ) : null}

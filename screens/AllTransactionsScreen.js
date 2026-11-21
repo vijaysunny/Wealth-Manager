@@ -1,663 +1,219 @@
-import { Text, View, TouchableOpacity, SafeAreaView } from '../components/Theme';
-import { getMonthlyBudget } from '../utils/MonthlyBudgets';
-import { getAll } from '../data/TransactionRepo';
-import React, { useState, useCallback } from 'react';
-import { StyleSheet, FlatList, Modal } from 'react-native';
-import AppButton from '../components/ui/AppButton';
-import AsyncStorage from '../data/Storage';
+/**
+ * Transactions (Phase 12 C5.2, docs/design/Transactions.png).
+ * Back · title · export. Search ("payee, amount or #tag", utils/Tags.parseSearch), account
+ * chips, tag chips + Has file, list grouped by day with the day total (transfers not counted).
+ * Bulk edit lives in MoneyTool?tab=History (reachable from the export menu).
+ */
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, ScrollView, SectionList, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { getCategoryIcon } from '../utils/icons';
-import { isReportable } from '../utils/BalanceService';
-import { parseAmount, shiftMonth, formatMoney } from '../utils/Format';
-import { transferRoute } from '../utils/ReviewText';
-export default function AllTransactionsScreen({ navigation }) {
-  const [transactions, setTransactions] = useState([]);
-  const [filteredData, setFilteredData] = useState([]);
-  const [monthlyStats, setMonthlyStats] = useState([]);
-  const [currentMonthSummary, setCurrentMonthSummary] = useState({
-    spent: 0,
-    budget: 0,
-    income: 0,
-  });
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('This Month'); // 'This Month', 'Last 3 Months', 'All Time'
+import Storage from '../data/Storage';
+import { getAll } from '../data/TransactionRepo';
+import { exportHistory } from '../utils/HistoryExport';
+import { parseSearch, matchesSearch, recentTags } from '../utils/Tags';
+import { groupByDay, touchesAccount, shortAccountName } from '../utils/TransactionList';
+import { formatMoney } from '../utils/Format';
+import { useTokens } from '../components/Theme';
+import { fonts, radius, space, type } from '../components/tokens';
+import { Chip, EmptyState, IconButton, ScreenHeader, TransactionRow } from '../components/ui';
 
-  // --- HELPER: Format Currency Compact (1.2k, 1.5L) ---
-  const formatCompact = (num) => {
-    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
-  };
+const dayTotalLabel = (n) => (n === 0 ? '' : `${n < 0 ? '−' : '+'}${formatMoney(Math.abs(n))}`);
 
-  // --- HELPER: Calculate Safe to Spend ---
-  const getSafeToSpend = () => {
-    const today = new Date();
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const daysLeft = lastDay - today.getDate();
-    if (!(currentMonthSummary.budget > 0)) return null; // no budget set
-    const remaining = currentMonthSummary.budget - currentMonthSummary.spent;
-    if (remaining <= 0) return 0;
-    return Math.round(remaining / (daysLeft || 1));
-  };
-  const renderHeader = () => {
-    const hasBudget = currentMonthSummary.budget > 0;
-    const percent = hasBudget
-      ? Math.min(100, Math.round((currentMonthSummary.spent / currentMonthSummary.budget) * 100))
-      : null;
-    const safeSpend = getSafeToSpend();
-    return (
-      <View style={styles.headerContainer}>
-        {/* BAR CHART ROW */}
-        <View style={styles.chartRow}>
-          {monthlyStats.map((item, index) => {
-            // Find max for scaling
-            const maxVal = Math.max(...monthlyStats.map((s) => s.amount)) || 1;
-            const barHeight = (item.amount / maxVal) * 60; // Max height 60
-            return (
-              <View key={index} style={styles.barContainer}>
-                <Text style={styles.barLabelTop}>{formatCompact(item.amount)}</Text>
-                <View
-                  style={[
-                    styles.bar,
-                    {
-                      height: Math.max(4, barHeight),
-                      backgroundColor: item.active ? '#4361EE' : '#E0E7FF',
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.barLabelBottom,
-                    item.active && {
-                      color: '#4361EE',
-                      fontWeight: 'bold',
-                    },
-                  ]}
-                >
-                  {item.month}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
+export default function AllTransactionsScreen({ navigation, route }) {
+  const t = useTokens();
+  const [rows, setRows] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [query, setQuery] = useState('');
+  const [accountId, setAccountId] = useState(null);
+  const [hasFile, setHasFile] = useState(false);
 
-        {/* TABS (Visual Only for now) */}
-        <View style={styles.tabRow}>
-          <View style={styles.activeTab}>
-            <Text style={styles.activeTabText}>Transactions</Text>
-          </View>
-        </View>
+  const load = useCallback(async () => {
+    setAccounts(JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]'));
+    setRows(await getAll());
+  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      load().catch((e) => Alert.alert('Load error', e.message));
+    }, [load])
+  );
 
-        {/* CIRCULAR SUMMARY */}
-        <View style={styles.circleContainer}>
-          <View style={styles.circleOuter}>
-            <View style={styles.circleInner}>
-              <Ionicons name="arrow-up" size={16} color="#555" />
-              <Text style={styles.mainAmount}>{formatMoney(Math.round(currentMonthSummary.spent))}</Text>
-              <View style={styles.percentBadge}>
-                <Ionicons name="speedometer-outline" size={12} color="#4361EE" />
-                <Text style={styles.percentText}>{hasBudget ? `${percent}%` : 'No budget'}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+  const accountsById = useMemo(() => Object.fromEntries(accounts.map((a) => [String(a.id), a])), [accounts]);
+  const tags = useMemo(() => recentTags(rows), [rows]);
+  const parsed = useMemo(() => parseSearch(query), [query]);
+  const account = accountId ? accountsById[accountId] : null;
+  const filtered = useMemo(
+    () =>
+      rows.filter(
+        (tx) =>
+          matchesSearch(tx, parsed) &&
+          touchesAccount(tx, account) &&
+          (!hasFile || (Array.isArray(tx.attachments) && tx.attachments.length > 0))
+      ),
+    [rows, parsed, account, hasFile]
+  );
+  const sections = useMemo(() => groupByDay(filtered), [filtered]);
 
-        {/* STATS ROW */}
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Income</Text>
-            <Text style={styles.statValue}>₹{formatCompact(currentMonthSummary.income)}</Text>
-          </View>
-          <View style={styles.verticalLine} />
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Budget</Text>
-            <Text style={styles.statValue}>
-              {hasBudget ? `₹${formatCompact(currentMonthSummary.budget)}` : 'Not set'}
-            </Text>
-          </View>
-          <View style={styles.verticalLine} />
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Safe to spend</Text>
-            <Text style={styles.statValue}>
-              {safeSpend === null ? '—' : `₹${formatCompact(safeSpend)}/day`}
-            </Text>
-          </View>
-        </View>
-      </View>
+  const toggleTag = (tag) => {
+    const token = `#${tag}`;
+    const words = query.split(/\s+/).filter(Boolean);
+    setQuery(
+      words.includes(token) ? words.filter((w) => w !== token).join(' ') : [...words, token].join(' ')
     );
   };
-  const renderItem = ({ item }) => {
-    const date = new Date(item.fullDate);
-    const today = new Date();
-    const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth();
-    const timeStr = date.toLocaleTimeString('en-IN', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-    const dateStr = isToday
-      ? `Today, ${timeStr}`
-      : `${date.getDate()} ${date.toLocaleString('en-IN', {
-          month: 'short',
-        })}`;
 
-    // Icon Logic
-    const iconData = getCategoryIcon(item.category);
-    // Initials for avatar
-    const initial = item.title ? item.title.charAt(0).toUpperCase() : '?';
-    return (
-      <TouchableOpacity
-        style={styles.txRow}
-        onPress={() =>
-          navigation.navigate('TransactionDetail', {
-            transaction: item,
-          })
-        }
+  const onExport = () =>
+    Alert.alert('Export', `${filtered.length} transaction${filtered.length === 1 ? '' : 's'} shown`, [
+      {
+        text: 'CSV',
+        onPress: () => exportHistory(filtered).catch((e) => Alert.alert('Export failed', e.message)),
+      },
+      {
+        text: 'Excel',
+        onPress: () => exportHistory(filtered, 'xlsx').catch((e) => Alert.alert('Export failed', e.message)),
+      },
+      { text: 'Bulk edit…', onPress: () => navigation.navigate('MoneyTool', { tab: 'History' }) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+
+  const header = (
+    <View>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: t.card,
+          borderColor: t.border,
+          borderWidth: 1,
+          borderRadius: radius.lg,
+          paddingHorizontal: space.lg,
+          minHeight: 52,
+        }}
       >
-        {/* Avatar / Icon */}
-        <View
-          style={[
-            styles.avatar,
-            {
-              backgroundColor: iconData.color + '20',
-            },
-          ]}
-        >
-          {item.customIcon ? (
-            <Ionicons name={item.customIcon} size={20} color={iconData.color} />
-          ) : (
-            <Text
-              style={[
-                styles.avatarText,
-                {
-                  color: iconData.color,
-                },
-              ]}
-            >
-              {initial}
-            </Text>
-          )}
-        </View>
+        <Ionicons name="search-outline" size={20} color={t.muted} />
+        <TextInput
+          testID="tx-search"
+          accessibilityLabel="Search transactions"
+          autoFocus={!!route?.params?.focusSearch}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search payee, amount or #tag"
+          placeholderTextColor={t.placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={{ flex: 1, marginLeft: space.md, color: t.text, fontFamily: fonts.body, fontSize: 16 }}
+        />
+        {query ? (
+          <IconButton icon="close-circle" label="Clear search" color={t.muted} onPress={() => setQuery('')} />
+        ) : null}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: space.md }}>
+        <Chip label="All accounts" selected={!accountId} onPress={() => setAccountId(null)} />
+        {accounts.map((a) => (
+          <Chip
+            key={a.id}
+            label={shortAccountName(a.name, a.last4)}
+            selected={accountId === String(a.id)}
+            onPress={() => setAccountId(accountId === String(a.id) ? null : String(a.id))}
+          />
+        ))}
+      </ScrollView>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ alignItems: 'center' }}
+      >
+        <Text style={[type.meta, { color: t.muted, marginRight: space.sm, marginBottom: space.sm }]}>
+          Tags
+        </Text>
+        {tags.map((g) => (
+          <Chip
+            key={g}
+            tone="tag"
+            label={`#${g}`}
+            selected={parsed.tags.includes(g)}
+            onPress={() => toggleTag(g)}
+          />
+        ))}
+        <Chip label="Has file" icon="attach" selected={hasFile} onPress={() => setHasFile(!hasFile)} />
+      </ScrollView>
+    </View>
+  );
 
-        {/* Details */}
-        <View style={styles.txDetails}>
-          <Text style={styles.txTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          {!!transferRoute(item) && (
-            <Text style={{ fontSize: 12, color: '#1976D2' }} numberOfLines={1}>
-              {transferRoute(item)} · not counted in spending
-            </Text>
-          )}
-          {item.tags && item.tags.length > 0 && (
-            <View
-              style={{
-                flexDirection: 'row',
-              }}
-            >
-              <View style={styles.miniTag}>
-                <Text style={styles.miniTagText}>{item.tags[0]}</Text>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Amount */}
-        <View
-          style={{
-            alignItems: 'flex-end',
-          }}
-        >
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
+      <ScreenHeader
+        title="Transactions"
+        onBack={() => navigation.goBack()}
+        right={<IconButton icon="share-outline" label="Export transactions" onPress={onExport} />}
+      />
+      <SectionList
+        sections={sections}
+        keyExtractor={(tx) => String(tx.id)}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: space.xxl }}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          <View style={{ marginTop: space.lg }}>
+            <EmptyState
+              icon="search-outline"
+              title={rows.length ? 'Nothing matches' : 'No transactions yet'}
+              body={
+                rows.length
+                  ? 'Try another word, amount or tag.'
+                  : 'Add one from Home, or turn on bank SMS in Settings.'
+              }
+            />
+          </View>
+        }
+        renderSectionHeader={({ section }) => (
           <View
             style={{
               flexDirection: 'row',
-              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: space.xl,
+              marginBottom: space.sm,
+              paddingHorizontal: space.xs,
             }}
           >
-            <Text style={styles.txAmount}>{formatMoney(item.amount)}</Text>
-            <Ionicons
-              name={
-                item.type === 'transfer'
-                  ? 'swap-horizontal'
-                  : item.type === 'income'
-                    ? 'arrow-down-circle'
-                    : 'arrow-up-circle'
-              }
-              size={14}
-              color={item.type === 'transfer' ? '#1976D2' : item.type === 'income' ? '#4CAF50' : '#757575'}
-              style={{
-                marginLeft: 4,
-              }}
-            />
+            <Text accessibilityRole="header" style={[type.overline, { color: t.muted }]}>
+              {section.title}
+            </Text>
+            <Text style={{ color: t.muted, fontFamily: fonts.semibold, fontSize: 13 }}>
+              {dayTotalLabel(section.total)}
+            </Text>
           </View>
-          <Text style={styles.txDate}>{dateStr}</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-  const applyFilter = useCallback((filterType, allTxs, budgetLimit) => {
-    setSelectedFilter(filterType);
-    const now = new Date();
-    let filtered = [];
-    let spent = 0;
-    let income = 0;
-    if (filterType === 'This Month') {
-      filtered = allTxs.filter((t) => {
-        const d = new Date(t.fullDate);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      });
-    } else if (filterType === 'Last 3 Months') {
-      const past = shiftMonth(now, -3);
-      const daysInPastMonth = new Date(past.getFullYear(), past.getMonth() + 1, 0).getDate();
-      past.setDate(Math.min(now.getDate(), daysInPastMonth)); // clamp: 31 May - 3 months = 28/29 Feb
-      past.setHours(0, 0, 0, 0);
-      filtered = allTxs.filter((t) => new Date(t.fullDate) >= past);
-    } else {
-      filtered = allTxs;
-    }
-
-    // Calculate Totals for Summary (the list still shows excluded rows; totals skip them)
-    filtered.filter(isReportable).forEach((t) => {
-      if (t.type === 'expense') spent += t.amount;
-      else if (t.type === 'income') income += t.amount;
-    });
-    setFilteredData(filtered);
-    setCurrentMonthSummary({
-      spent,
-      income,
-      budget: budgetLimit,
-    });
-    setFilterModalVisible(false);
-  }, []);
-  const loadData = useCallback(async () => {
-    const txJson = JSON.stringify(await getAll());
-    const budgetJson = await AsyncStorage.getItem('user_budget_limit'); // Overall monthly budget
-    let budgetLimit = parseAmount(budgetJson) || 0; // 0 = no budget set (no invented default)
-
-    let txs = txJson ? JSON.parse(txJson) : [];
-    budgetLimit = (await getMonthlyBudget(new Date(), txs)).effectiveLimit;
-
-    // Sort Newest First
-    txs.sort((a, b) => new Date(b.fullDate) - new Date(a.fullDate));
-    setTransactions(txs);
-
-    // 1. Calculate Monthly Stats for Bar Chart (Last 6 Months)
-    const stats = [];
-    const today = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const monthName = d.toLocaleString('en-IN', {
-        month: 'short',
-      });
-      const total = txs
-        .filter((t) => {
-          const td = new Date(t.fullDate);
+        )}
+        renderItem={({ item, index, section }) => {
+          const first = index === 0;
+          const last = index === section.data.length - 1;
           return (
-            isReportable(t) &&
-            t.type === 'expense' &&
-            td.getMonth() === d.getMonth() &&
-            td.getFullYear() === d.getFullYear()
-          );
-        })
-        .reduce((acc, curr) => acc + curr.amount, 0);
-      stats.push({
-        month: monthName,
-        amount: total,
-        active: i === 0,
-      });
-    }
-    setMonthlyStats(stats);
-
-    // 2. Initial Filter (Default to This Month)
-    applyFilter('This Month', txs, budgetLimit);
-  }, [applyFilter]);
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [loadData])
-  );
-  return (
-    <SafeAreaView style={styles.container}>
-      <AppButton
-        title="Search, filters, export and bulk actions"
-        onPress={() =>
-          navigation.navigate('MoneyTool', {
-            tab: 'History',
-          })
-        }
-      />
-
-      {/* TOP HEADER */}
-      <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.navTitle}>All transactions</Text>
-          <Text style={styles.navSub}>
-            {selectedFilter} <Ionicons name="caret-down" size={10} />
-          </Text>
-        </View>
-        <View
-          style={{
-            flexDirection: 'row',
-          }}
-        >
-          <TouchableOpacity onPress={() => setFilterModalVisible(true)} style={styles.iconBtn}>
-            <Ionicons name="filter" size={20} color="#333" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate('MoneyTool', {
-                tab: 'History',
-              })
-            }
-            style={[
-              styles.iconBtn,
-              {
-                marginLeft: 10,
-              },
-            ]}
-          >
-            <Ionicons name="document-text-outline" size={20} color="#333" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <FlatList
-        data={filteredData}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={{
-          paddingBottom: 20,
-        }}
-        showsVerticalScrollIndicator={false}
-      />
-
-      {/* FILTER MODAL */}
-      <Modal visible={filterModalVisible} transparent animationType="slide">
-        <TouchableOpacity style={styles.modalOverlay} onPress={() => setFilterModalVisible(false)}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter</Text>
+            <View
+              style={{
+                backgroundColor: t.card,
+                borderColor: t.border,
+                borderLeftWidth: 1,
+                borderRightWidth: 1,
+                borderTopWidth: first ? 1 : 0,
+                borderBottomWidth: last ? 1 : 0,
+                borderTopLeftRadius: first ? radius.lg : 0,
+                borderTopRightRadius: first ? radius.lg : 0,
+                borderBottomLeftRadius: last ? radius.lg : 0,
+                borderBottomRightRadius: last ? radius.lg : 0,
+                paddingHorizontal: space.lg,
+              }}
+            >
+              <TransactionRow
+                tx={item}
+                accountsById={accountsById}
+                divider={!last}
+                onPress={() => navigation.navigate('TransactionDetail', { transaction: item })}
+              />
             </View>
-
-            {['This Month', 'Last 3 Months', 'All Time'].map((opt) => (
-              <TouchableOpacity
-                key={opt}
-                style={styles.radioRow}
-                onPress={() => applyFilter(opt, transactions, currentMonthSummary.budget)}
-              >
-                <Ionicons
-                  name={selectedFilter === opt ? 'radio-button-on' : 'radio-button-off'}
-                  size={20}
-                  color={selectedFilter === opt ? '#4361EE' : '#666'}
-                />
-                <Text style={styles.radioText}>{opt}</Text>
-              </TouchableOpacity>
-            ))}
-
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setFilterModalVisible(false)}>
-              <Text
-                style={{
-                  color: '#fff',
-                  fontWeight: 'bold',
-                }}
-              >
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+          );
+        }}
+      />
     </SafeAreaView>
   );
 }
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  // NAVBAR
-  navBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#fff',
-  },
-  navTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  navSub: {
-    fontSize: 12,
-    color: '#666',
-  },
-  iconBtn: {
-    padding: 5,
-    backgroundColor: '#F0F0F0',
-    borderRadius: 8,
-  },
-  // HEADER CONTAINER
-  headerContainer: {
-    backgroundColor: '#F8F9FA',
-    paddingBottom: 20,
-  },
-  // CHART
-  chartRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginTop: 20,
-    height: 90,
-    alignItems: 'flex-end',
-  },
-  barContainer: {
-    alignItems: 'center',
-    width: 30,
-  },
-  bar: {
-    width: 8,
-    borderRadius: 4,
-    backgroundColor: '#E0E7FF',
-  },
-  barLabelTop: {
-    fontSize: 9,
-    color: '#666',
-    marginBottom: 4,
-  },
-  barLabelBottom: {
-    fontSize: 10,
-    color: '#999',
-    marginTop: 6,
-  },
-  // TABS
-  tabRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 20,
-    marginHorizontal: 20,
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#4CAF50',
-    paddingBottom: 5,
-  },
-  activeTabText: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
-  },
-  inactiveTabText: {
-    color: '#999',
-    fontWeight: 'bold',
-  },
-  // CIRCLE SUMMARY
-  circleContainer: {
-    alignItems: 'center',
-    marginTop: 30,
-  },
-  circleOuter: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 8,
-    borderColor: '#E0E7FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopColor: '#4361EE',
-    borderRightColor: '#4361EE',
-  },
-  // Simple partial arc simulation
-  circleInner: {
-    alignItems: 'center',
-  },
-  mainAmount: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-    marginVertical: 5,
-  },
-  percentBadge: {
-    flexDirection: 'row',
-    backgroundColor: '#E0E7FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  percentText: {
-    fontSize: 12,
-    color: '#4361EE',
-    fontWeight: 'bold',
-    marginLeft: 4,
-  },
-  // STATS ROW
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginHorizontal: 20,
-    marginTop: 30,
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#999',
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  verticalLine: {
-    width: 1,
-    backgroundColor: '#eee',
-    height: '80%',
-  },
-  // TRANSACTION LIST
-  txRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#fff',
-    marginHorizontal: 15,
-    marginTop: 10,
-    borderRadius: 12,
-    elevation: 1,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  txDetails: {
-    flex: 1,
-  },
-  txTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  miniTag: {
-    backgroundColor: '#F0F0F0',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-  },
-  miniTagText: {
-    fontSize: 10,
-    color: '#666',
-    fontWeight: '600',
-  },
-  txAmount: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  txDate: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 2,
-    textAlign: 'right',
-  },
-  // MODAL
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  modalHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  radioRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderColor: '#f0f0f0',
-  },
-  radioText: {
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#333',
-  },
-  closeBtn: {
-    marginTop: 20,
-    backgroundColor: '#333',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-});
