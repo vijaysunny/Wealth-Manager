@@ -45,7 +45,7 @@ export const startSmsListener = () => {
       fullDate: smsDate.toISOString(),
       category: parsed.category,
       account: bankName,
-      tags: ['Auto-SMS'],
+      tags: ['auto-sms'],
       extractedBalance: parsed.balance,
       ...capturedFields(parsed),
     };

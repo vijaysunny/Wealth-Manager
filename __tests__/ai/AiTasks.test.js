@@ -158,7 +158,7 @@ describe('statements', () => {
       extractedBalance: 20501,
       account: 'HDFC Bank',
     });
-    expect(rows[0].tags).toContain('AI');
+    expect(rows[0].tags).toContain('ai');
     expect(rows[1]).toMatchObject({ type: 'income', category: 'General', extractedBalance: null });
     expect(rows[0].id).not.toBe(rows[1].id);
   });

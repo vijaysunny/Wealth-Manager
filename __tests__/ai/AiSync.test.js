@@ -76,7 +76,7 @@ test('aiCategorizeNew only touches General rows and retitles category-titled row
   };
   const out = await aiCategorizeNew(
     [
-      { id: 1, title: 'General', category: 'General', type: 'expense', tags: ['Auto-Sync'] },
+      { id: 1, title: 'General', category: 'General', type: 'expense', tags: ['auto-sync'] },
       { id: 2, title: 'Swiggy', merchant: 'Swiggy', category: 'General', type: 'expense' },
       { id: 3, title: 'Bills', category: 'Bills', type: 'expense' },
       { id: 4, title: 'General', category: 'General', type: 'transfer' },
@@ -85,7 +85,7 @@ test('aiCategorizeNew only touches General rows and retitles category-titled row
     ai
   );
   expect(ai.categorize.mock.calls[0][0].map((t) => t.id)).toEqual([1, 2]);
-  expect(out[0]).toMatchObject({ category: 'Food', title: 'Food', tags: ['Auto-Sync', 'AI'] });
+  expect(out[0]).toMatchObject({ category: 'Food', title: 'Food', tags: ['auto-sync', 'ai'] });
   expect(out[1]).toMatchObject({ category: 'Food', title: 'Swiggy' });
   expect(out[2].category).toBe('Bills');
   expect(out[3].category).toBe('General');
@@ -108,5 +108,5 @@ test('syncSms saves AI-read SMS alongside parsed ones, tagged AI', async () => {
     ai,
   });
   expect(res).toEqual({ status: 'ok', added: 1 });
-  expect(save.mock.calls[0][0][0]).toMatchObject({ amount: 101, tags: ['Auto-Sync', 'AI'], aiParsed: true });
+  expect(save.mock.calls[0][0][0]).toMatchObject({ amount: 101, tags: ['auto-sync', 'ai'], aiParsed: true });
 });

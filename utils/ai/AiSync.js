@@ -66,7 +66,7 @@ export const aiCategorizeNew = async (txs, storage, ai = defaultAiDeps()) => {
       const category = cats.get(t.id);
       // SMS rows without a merchant are titled with their category; keep that in step
       const title = t.title && t.title !== t.category ? t.title : category;
-      return { ...t, category, title, tags: [...new Set([...(t.tags || []), 'AI'])] };
+      return { ...t, category, title, tags: [...new Set([...(t.tags || []), 'ai'])] };
     });
   } catch (e) {
     console.log('AI categorize step skipped:', e.message);

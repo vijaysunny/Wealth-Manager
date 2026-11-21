@@ -841,7 +841,7 @@ export const parseStatementRows = (rawRows, bankHint = '') => {
       fullDate: date.toISOString(),
       category,
       account: bankHint || 'Bank Statement',
-      tags: ['Imported'],
+      tags: ['imported'],
       note: refNo ? `Ref: ${refNo}` : '',
       refNo: normRef(refNo) || extractRefNo(narration),
       extractedBalance: balance,

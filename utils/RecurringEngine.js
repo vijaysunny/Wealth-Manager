@@ -129,7 +129,7 @@ const buildTx = (entry, dueDate) => ({
   account: entry.account || 'Cash',
   date: dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
   fullDate: dueDate.toISOString(),
-  tags: ['Recurring', 'Auto'],
+  tags: ['recurring', 'auto'],
   recurringId: entry.id,
   note: `Auto-generated: ${entry.frequency} recurring`,
 });

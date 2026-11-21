@@ -1,14 +1,21 @@
 /**
  * Bootstrap.js (plan B5) - the ONE place the app waits for the database (open + legacy
- * migration). Children render only after it is ready; a failure shows the error with Retry.
+ * migration, B2 tag clean-up). Children render only after it is ready; a failure shows the error with Retry.
  * `open` is injectable for tests.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import AppButton from './ui/AppButton';
 import { View, Text } from './Theme';
 import { getDatabase } from '../data/Database';
+import { migrateTags } from '../data/TagMigration';
 
-export default function Bootstrap({ children, open = getDatabase }) {
+// Database open plus the one-time data migrations (B2 tags). Each is safe to run twice.
+const openAndMigrate = async () => {
+  await getDatabase();
+  await migrateTags();
+};
+
+export default function Bootstrap({ children, open = openAndMigrate }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const start = useCallback(() => {

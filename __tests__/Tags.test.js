@@ -42,7 +42,7 @@ test('addTag / removeTag: no duplicates, normalised', () => {
 });
 
 test('system tags are hidden but recognised', () => {
-  expect(SYSTEM_TAGS).toEqual(['auto-sms', 'auto-sync']);
+  expect(SYSTEM_TAGS).toEqual(['auto-sms', 'auto-sync', 'ai', 'imported', 'recurring', 'auto']);
   expect(isSystemTag('Auto-Sync')).toBe(true);
   expect(visibleTags(['Auto-SMS', '#work', 'auto-sync'])).toEqual(['work']);
   expect(visibleTags(undefined)).toEqual([]);

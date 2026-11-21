@@ -3,7 +3,9 @@
  * Tags are lowercase slugs: 'tax-2026'. System tags mark how a row was captured; they are hidden
  * in the UI but stay searchable.
  */
-export const SYSTEM_TAGS = ['auto-sms', 'auto-sync'];
+// How a row was captured: SMS, inbox scan, AI, statement import, recurring rule. Hidden on rows,
+// still searchable (#imported). The plan lists auto-sms / auto-sync; the rest are the same kind.
+export const SYSTEM_TAGS = ['auto-sms', 'auto-sync', 'ai', 'imported', 'recurring', 'auto'];
 const MAX_LEN = 32;
 
 /** "  #Tax 2026! " → "tax-2026"; '' when nothing usable is left. */

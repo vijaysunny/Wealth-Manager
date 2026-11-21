@@ -7,7 +7,7 @@
  *  - Reference numbers, last-4 digits and balances are extracted LOCALLY by the regex parser,
  *    never taken from the model.
  *  - Long digit runs (phone numbers, full account numbers) are masked before text leaves the phone.
- *  - Everything AI-made is tagged 'AI' and SMS rows land in the normal review queue (pending).
+ *  - Everything AI-made is tagged 'ai' and SMS rows land in the normal review queue (pending).
  */
 import { askAi } from './AiClient';
 import {
@@ -266,7 +266,7 @@ export const validateStatementRows = (
       fullDate: date.toISOString(),
       category: pick(r.category, allowed, 'General'),
       account: bankHint || 'Bank Statement',
-      tags: ['Imported', 'AI'],
+      tags: ['imported', 'ai'],
       refNo: extractRefNo(narration),
       extractedBalance: balance,
       source: 'statement',

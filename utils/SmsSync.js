@@ -51,7 +51,7 @@ export const smsToTransaction = (sms) => {
     fullDate: when.toISOString(),
     category: sms.category,
     account: sms.bankName,
-    tags: ['Auto-Sync'],
+    tags: ['auto-sync'],
     extractedBalance: sms.currentBalance,
     ...(sms.captured || {}),
   };
@@ -108,7 +108,7 @@ const run = async ({ scan, storage, notify, save, now, ai }) => {
   }
   // Optional AI steps (Settings → AI assistant): read SMS the parser missed, categorize 'General'
   for (const item of await aiParseUnparsed(res.unparsed, storage, ai)) {
-    const tx = { ...smsToTransaction(item), tags: ['Auto-Sync', 'AI'] };
+    const tx = { ...smsToTransaction(item), tags: ['auto-sync', 'ai'] };
     if (dedup.check(tx)) continue;
     fresh.push(tx);
   }
