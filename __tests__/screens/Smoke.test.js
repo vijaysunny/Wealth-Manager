@@ -63,10 +63,10 @@ afterEach(() => jest.restoreAllMocks());
 describe('WealthScreen (A6)', () => {
   const WealthScreen = require('../../screens/WealthScreen').default;
 
-  test('wallets are grouped under "Cash & wallets" with their funding bank', async () => {
+  test('wallets are grouped under "Wallets" with their funding bank', async () => {
     render(<WealthScreen navigation={nav()} />);
-    expect(await screen.findByText('Cash & wallets')).toBeTruthy();
-    expect(screen.getByText(/from Axis Bank/)).toBeTruthy();
+    expect(await screen.findByText('Wallets')).toBeTruthy();
+    expect(screen.getByText(/Topped up from Axis/)).toBeTruthy();
     expect(screen.getByText('Reconcile')).toBeTruthy();
   });
 
@@ -109,7 +109,7 @@ describe('A7.9 / History transfers', () => {
     );
     const WealthScreen = require('../../screens/WealthScreen').default;
     render(<WealthScreen navigation={nav()} />);
-    expect(await screen.findByText('Below zero - reconcile')).toBeTruthy();
+    expect(await screen.findByText('Below zero')).toBeTruthy();
   });
 
   test('History shows a transfer with its route and keeps it out of spending', async () => {

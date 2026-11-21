@@ -1,25 +1,78 @@
+/**
+ * Accounts (Phase 12 C5.5, docs/design/Accounts net worth.png).
+ * Header with Add · dark net-worth card (total, "N balances missing", Cash & bank /
+ * Investments / Owed) · Bank accounts (Set balance) · Credit cards (available limit from SMS,
+ * Set due) · Wallets (linked bank) · Investments collapsible (closed by default).
+ * Pull to refresh updates live prices, loans and PF interest. Long-press an account to manage it.
+ */
+import React, { useCallback, useState } from 'react';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage, { updateAccount as persistAccount } from '../data/Storage';
 import { deleteAccount as removeAccount } from '../data/Collections';
-import { Text, View, ScrollView, TouchableOpacity, TextInput, SafeAreaView } from '../components/Theme';
-import React, { useState, useCallback } from 'react';
-import { StyleSheet, RefreshControl, Alert, Modal } from 'react-native';
-import AppButton from '../components/ui/AppButton';
-
-import { Ionicons } from '@expo/vector-icons';
+import { getAll } from '../data/TransactionRepo';
 import { fetchMutualFundNAV, fetchStockPrice } from '../utils/InvestmentApi';
-import { calculateOutstandingBalance } from '../utils/LoanCalculator'; // <--- Import Calculator
-import { useFocusEffect } from '@react-navigation/native';
-import { computeNetWorth, isWallet } from '../utils/BalanceService';
+import { calculateOutstandingBalance } from '../utils/LoanCalculator';
+import { isWallet } from '../utils/BalanceService';
 import { computeReconcile, needsReconcile } from '../utils/WalletReconcile';
 import { reconcileWallet } from '../utils/FeatureService';
 import { formatMoney } from '../utils/Format';
 import { priceStatusLabel } from '../utils/PriceStatus';
+import { scheduleCardReminder } from '../utils/CardReminders';
+import {
+  accountsOverview,
+  balanceMissing,
+  groupAccounts,
+  investmentsSummary,
+  latestLimits,
+  monthCounts,
+} from '../utils/AccountsOverview';
+import { shortAccountName } from '../utils/TransactionList';
+import { useTokens } from '../components/Theme';
+import { fonts, radius, space, type } from '../components/tokens';
+import { AppButton, Collapsible, Section } from '../components/ui';
+
+const initials = (name = '') =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase() || '?';
+
+const INVESTMENT_KINDS = [
+  { key: 'mf', title: 'Mutual funds', note: 'NAV updates daily', icon: 'trending-up-outline' },
+  { key: 'stocks', title: 'Stocks', note: 'Price on refresh', icon: 'stats-chart-outline' },
+  { key: 'fd', title: 'FD / RD', note: 'Interest daily · maturity reminder', icon: 'lock-closed-outline' },
+  {
+    key: 'other',
+    title: 'PF, gold, property',
+    note: 'PF adds interest daily',
+    icon: 'shield-checkmark-outline',
+  },
+];
 
 export default function WealthScreen({ navigation }) {
-  const [data, setData] = useState({ banks: [], pf: [], liabilities: [], investments: [] });
-  const [totals, setTotals] = useState({ netWorth: 0, assets: 0, debt: 0 });
+  const t = useTokens();
+  const [accounts, setAccounts] = useState([]);
+  const [limits, setLimits] = useState({});
+  const [counts, setCounts] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState(null); // { account, text }
+  const [dueEdit, setDueEdit] = useState(null); // { account, text }
   const [reconcile, setReconcile] = useState(null); // { account, text, category, requestId }
 
   useFocusEffect(
@@ -107,26 +160,10 @@ export default function WealthScreen({ navigation }) {
       void processed;
     }
 
-    // --- CATEGORIZATION & TOTALS ---
-    const pf = accounts.filter((a) => a.type === 'Provident Fund');
-    const loans = accounts.filter((a) => a.type === 'Loan' || a.type === 'Credit Card');
-    const banks = accounts.filter((a) => a.type === 'Bank Account');
-    // "Cash & wallets" (A6): cash plus UPI Lite / Paytm Wallet / FASTag ... with their linked bank
-    const wallets = accounts
-      .filter((a) => a.type === 'Cash' || isWallet(a))
-      .map((a) => ({
-        ...a,
-        linkedBankName: accounts.find((b) => String(b.id) === String(a.linkedBankId))?.name,
-      }));
-    // Investments: Everything else (Mutual Funds, Stocks, Gold, Real Estate)
-    const inv = accounts.filter(
-      (a) => !['Provident Fund', 'Loan', 'Credit Card', 'Bank Account', 'Cash', 'Wallet'].includes(a.type)
-    );
-
-    const nw = computeNetWorth(accounts);
-
-    setData({ banks, wallets, pf, liabilities: loans, investments: inv });
-    setTotals({ netWorth: nw.netWorth, assets: nw.assets, debt: nw.liabilities });
+    const txs = await getAll();
+    setAccounts(accounts);
+    setLimits(latestLimits(txs));
+    setCounts(monthCounts(txs));
     setRefreshing(false);
   };
   const handleLongPress = (account) => {
@@ -162,6 +199,7 @@ export default function WealthScreen({ navigation }) {
     }
     updateAccount(balanceEdit.account.id, {
       balance: value,
+      balanceSetAt: new Date().toISOString(),
       ...(balanceEdit.account.symbol ? { priceOverride: true } : {}),
     });
     setBalanceEdit(null);
@@ -238,224 +276,441 @@ export default function WealthScreen({ navigation }) {
     await removeAccount(account.id);
     loadData();
   };
-  const renderItem = (item, isDebt) => (
-    <TouchableOpacity
-      key={item.id}
-      style={styles.row}
-      onPress={() => navigation.navigate('EditAsset', { asset: item })} // <--- Add Navigation
-      onLongPress={() => handleLongPress(item)}
-      delayLongPress={500}
+  const saveDue = async () => {
+    const day = Number(String(dueEdit.text).trim());
+    try {
+      await scheduleCardReminder(dueEdit.account, day);
+      await updateAccount(dueEdit.account.id, { dueDay: day });
+      setDueEdit(null);
+    } catch (e) {
+      Alert.alert('Due date', e.message);
+    }
+  };
+
+  const ov = accountsOverview(accounts);
+  const g = groupAccounts(accounts);
+  const byId = Object.fromEntries(accounts.map((a) => [String(a.id), a]));
+
+  const warnButton = (label, onPress, a11y) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      onPress={onPress}
+      style={[styles.warnBtn, { backgroundColor: t.warnBg, borderColor: t.warnBorder }]}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-        <View style={[styles.iconBox, { backgroundColor: isDebt ? '#FFEBEE' : '#E8F5E9' }]}>
-          <Ionicons
-            name={
-              item.type === 'Loan'
-                ? 'document-text'
-                : item.type === 'Provident Fund'
-                  ? 'shield-checkmark'
-                  : 'wallet'
-            }
-            size={18}
-            color={isDebt ? '#D32F2F' : '#2E7D32'}
-          />
-        </View>
-        <View style={{ marginLeft: 10, flex: 1 }}>
-          <Text style={styles.name}>{item.name}</Text>
-          {item.type === 'Loan' ? (
-            <Text style={styles.sub}>
-              {item.loanType} • {item.interestRate}%
-            </Text>
-          ) : (
-            <Text style={styles.sub}>
-              {item.subType || item.type} {item.interestRate ? `• ${item.interestRate}%` : ''}
-              {item.provider ? ` • ${item.provider}` : ''}
-              {item.linkedBankName ? ` • from ${item.linkedBankName}` : ''}
-            </Text>
-          )}
-          {!!priceStatusLabel(item) && (
-            <Text style={{ fontSize: 11, color: '#E65100' }}>{priceStatusLabel(item)}</Text>
-          )}
-          {isWallet(item) && (
-            <View style={{ flexDirection: 'row', marginTop: 4 }}>
-              {needsReconcile(item) && (
-                <Text style={{ color: '#C62828', marginRight: 12 }}>Below zero - reconcile</Text>
-              )}
-              <TouchableOpacity onPress={() => startReconcile(item)} style={{ marginRight: 16 }}>
-                <Text style={{ color: '#1976D2', fontWeight: '600' }}>Reconcile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() =>
-                  navigation.navigate('Expense', {
-                    prefill: { amount: '', category: '', accountName: item.name },
-                  })
-                }
-              >
-                <Text style={{ color: '#1976D2', fontWeight: '600' }}>Add spend</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={[styles.bal, { color: isDebt ? '#D32F2F' : '#333' }]}>
-          ₹ {Math.round(parseFloat(item.balance)).toLocaleString('en-IN')}
-        </Text>
-        {item.type === 'Loan' && <Text style={{ fontSize: 10, color: '#999' }}>Outstanding</Text>}
-        {item.type === 'Provident Fund' && <Text style={{ fontSize: 10, color: '#4CAF50' }}>+ Interest</Text>}
-      </View>
-    </TouchableOpacity> // <--- Close TouchableOpacity
+      <Text style={{ color: t.warnText, fontFamily: fonts.semibold, fontSize: 15 }}>{label}</Text>
+    </Pressable>
   );
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* HEADER */}
-      <AppButton
-        title="Wealth calculations"
-        onPress={() => navigation.navigate('MoneyTool', { tab: 'Wealth' })}
-      />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Net Worth</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('AddInvestment')}>
-          <Ionicons name="add-circle" size={32} color="#2196F3" />
-        </TouchableOpacity>
-      </View>
+  // The row and its right-hand action are sibling buttons (never nested).
+  const row = (a, { sub, right, iconName, tone = 'primary', last }) => (
+    <View key={a.id} style={[styles.row, { borderColor: t.divider, borderBottomWidth: last ? 0 : 1 }]}>
+      <Pressable
+        testID={`account-${a.id}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${shortAccountName(a.name, a.last4)}, ${sub || a.type}`}
+        accessibilityHint="Opens the account. Long-press for more."
+        onPress={() => navigation.navigate('EditAsset', { asset: a })}
+        onLongPress={() => handleLongPress(a)}
+        delayLongPress={500}
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+      >
+        <View
+          style={[
+            styles.badge,
+            {
+              backgroundColor: tone === 'danger' ? t.dangerBg : tone === 'income' ? '#E6F4EC' : t.primarySoft,
+            },
+          ]}
+        >
+          {iconName ? (
+            <Ionicons
+              name={iconName}
+              size={22}
+              color={tone === 'danger' ? t.dangerText : tone === 'income' ? t.income : t.primary}
+            />
+          ) : (
+            <Text style={{ color: t.dangerText, fontFamily: fonts.bold, fontSize: 15 }}>
+              {initials(a.name)}
+            </Text>
+          )}
+        </View>
+        <View style={{ flex: 1, paddingRight: space.sm }}>
+          <Text numberOfLines={1} style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 17 }}>
+            {shortAccountName(a.name, a.last4)}
+          </Text>
+          {sub ? (
+            <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 14, marginTop: 2 }}>{sub}</Text>
+          ) : null}
+          {priceStatusLabel(a) ? (
+            <Text style={{ color: t.warnText, fontFamily: fonts.body, fontSize: 12, marginTop: 2 }}>
+              {priceStatusLabel(a)}
+            </Text>
+          ) : null}
+          {isWallet(a) ? (
+            <View style={{ flexDirection: 'row', marginTop: space.xs }}>
+              {needsReconcile(a) ? (
+                <Text style={{ color: t.expense, fontFamily: fonts.medium, marginRight: space.md }}>
+                  Below zero
+                </Text>
+              ) : null}
+              <Text
+                accessibilityRole="button"
+                onPress={() => startReconcile(a)}
+                style={{ color: t.primary, fontFamily: fonts.semibold, marginRight: space.lg }}
+              >
+                Reconcile
+              </Text>
+              <Text
+                accessibilityRole="button"
+                onPress={() =>
+                  navigation.navigate('Expense', {
+                    prefill: { amount: '', category: '', accountName: a.name },
+                  })
+                }
+                style={{ color: t.primary, fontFamily: fonts.semibold }}
+              >
+                Add spend
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </Pressable>
+      {right}
+    </View>
+  );
 
+  const amount = (n, color) => (
+    <Text style={{ color: color || t.text, fontFamily: fonts.displaySemi, fontSize: 18 }}>
+      {formatMoney(Math.round(Number(n) || 0))}
+    </Text>
+  );
+
+  const card = (children) => (
+    <View style={[styles.card, { backgroundColor: t.card, borderColor: t.border }]}>{children}</View>
+  );
+
+  const empty = accounts.length === 0;
+
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: t.bg }}>
+      <View style={styles.header}>
+        <Text
+          accessibilityRole="header"
+          style={{ flex: 1, color: t.text, fontFamily: fonts.display, fontSize: 30 }}
+        >
+          Accounts
+        </Text>
+        <AppButton
+          title="Add"
+          icon="add"
+          style={{ borderRadius: radius.pill, paddingHorizontal: space.lg }}
+          onPress={() => navigation.navigate('AddInvestment')}
+        />
+      </View>
       <ScrollView
+        contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: space.xxl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} />}
       >
-        {/* NET WORTH CARD */}
-        <View style={styles.nwCard}>
-          <Text style={{ color: '#BBDEFB', fontSize: 12, fontWeight: 'bold' }}>NET WORTH</Text>
-          <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', marginVertical: 5 }}>
-            ₹ {totals.netWorth.toLocaleString('en-IN')}
+        <View testID="networth-card" style={[styles.nw, { backgroundColor: t.ink }]}>
+          <Text style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 15 }}>Net worth</Text>
+          <Text
+            testID="networth"
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={{ color: '#FFFFFF', fontFamily: fonts.display, fontSize: 40, marginTop: space.xs }}
+          >
+            {formatMoney(ov.netWorth)}
           </Text>
-          <View style={{ flexDirection: 'row', marginTop: 10 }}>
-            <View style={{ marginRight: 20 }}>
-              <Text style={{ color: '#A5D6A7', fontSize: 12 }}>Assets</Text>
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>
-                ₹ {totals.assets.toLocaleString('en-IN')}
-              </Text>
-            </View>
-            <View>
-              <Text style={{ color: '#EF9A9A', fontSize: 12 }}>Liabilities</Text>
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>
-                ₹ {totals.debt.toLocaleString('en-IN')}
-              </Text>
-            </View>
+          {ov.missing > 0 ? (
+            <Text style={{ color: '#F5D48A', fontFamily: fonts.body, fontSize: 14, marginTop: space.xs }}>
+              {ov.missing} balance{ov.missing === 1 ? '' : 's'} missing · set{' '}
+              {ov.missing === 1 ? 'it' : 'them'} to see the real figure
+            </Text>
+          ) : null}
+          <View style={styles.threeUp}>
+            {[
+              ['Cash & bank', ov.cashBank, '#5CC998'],
+              ['Investments', ov.investments, '#8AA8FF'],
+              ['Owed', ov.owed, '#F08A80'],
+            ].map(([label, value, color]) => (
+              <View key={label} style={[styles.mini, { backgroundColor: t.inkCard }]}>
+                <Text numberOfLines={1} style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 13 }}>
+                  {label}
+                </Text>
+                <Text
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                  style={{ color, fontFamily: fonts.display, fontSize: 18, marginTop: 4 }}
+                >
+                  {formatMoney(Math.round(value))}
+                </Text>
+              </View>
+            ))}
           </View>
         </View>
 
-        {/* SECTIONS */}
-        {data.pf.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.secTitle}>Provident Fund</Text>
-            <View style={styles.card}>{data.pf.map((i) => renderItem(i, false))}</View>
-          </View>
+        {empty ? (
+          <Text
+            style={{
+              color: t.muted,
+              fontFamily: fonts.body,
+              fontSize: 15,
+              lineHeight: 22,
+              marginTop: space.lg,
+            }}
+          >
+            No accounts yet. Turn on bank SMS in Settings and they appear for review, or tap Add.
+          </Text>
+        ) : null}
+
+        {g.banks.length > 0 && (
+          <Section title="Bank accounts">
+            {card(
+              g.banks.map((a, i) =>
+                row(a, {
+                  sub: [
+                    a.subType && a.subType !== a.type ? a.subType : 'Savings',
+                    counts[String(a.id)] ? `${counts[String(a.id)]} txns this month` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                  last: i === g.banks.length - 1,
+                  right: balanceMissing(a)
+                    ? warnButton('Set balance', () => promptBalance(a), `Set balance for ${a.name}`)
+                    : amount(a.balance),
+                })
+              )
+            )}
+          </Section>
         )}
 
-        {data.investments.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.secTitle}>Investments</Text>
-            <View style={styles.card}>{data.investments.map((i) => renderItem(i, false))}</View>
-          </View>
+        {g.cards.length > 0 && (
+          <Section title="Credit cards">
+            {card(
+              g.cards.map((a, i) =>
+                row(a, {
+                  iconName: 'card-outline',
+                  tone: i % 2 ? 'primary' : 'danger',
+                  sub: Number.isFinite(limits[String(a.id)])
+                    ? `Available ${formatMoney(limits[String(a.id)])}`
+                    : a.dueDay
+                      ? `Due on day ${a.dueDay}`
+                      : 'Credit card',
+                  last: i === g.cards.length - 1,
+                  right: a.dueDay
+                    ? amount(a.balance, Number(a.balance) > 0 ? t.expense : t.text)
+                    : warnButton(
+                        'Set due',
+                        () => setDueEdit({ account: a, text: '' }),
+                        `Set due date for ${a.name}`
+                      ),
+                })
+              )
+            )}
+          </Section>
         )}
 
-        {data.banks.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.secTitle}>Bank accounts</Text>
-            <View style={styles.card}>{data.banks.map((i) => renderItem(i, false))}</View>
-          </View>
+        {g.wallets.length > 0 && (
+          <Section title="Wallets">
+            {card(
+              g.wallets.map((a, i) => {
+                const bank = a.linkedBankId != null ? byId[String(a.linkedBankId)] : null;
+                return row(a, {
+                  iconName: a.type === 'Cash' ? 'cash-outline' : 'wallet-outline',
+                  tone: 'income',
+                  sub: bank
+                    ? `Topped up from ${shortAccountName(bank.name, bank.last4)}`
+                    : a.type === 'Cash'
+                      ? 'Cash'
+                      : a.subType,
+                  last: i === g.wallets.length - 1,
+                  right: balanceMissing(a)
+                    ? warnButton('Set balance', () => promptBalance(a), `Set balance for ${a.name}`)
+                    : amount(a.balance),
+                });
+              })
+            )}
+          </Section>
         )}
 
-        {(data.wallets || []).length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.secTitle}>Cash & wallets</Text>
-            <View style={styles.card}>{data.wallets.map((i) => renderItem(i, false))}</View>
-          </View>
+        {g.loans.length > 0 && (
+          <Section title="Loans">
+            {card(
+              g.loans.map((a, i) =>
+                row(a, {
+                  iconName: 'document-text-outline',
+                  tone: 'danger',
+                  sub:
+                    [a.loanType, a.interestRate ? `${a.interestRate}%` : null].filter(Boolean).join(' · ') ||
+                    'Loan',
+                  last: i === g.loans.length - 1,
+                  right: amount(a.balance, t.expense),
+                })
+              )
+            )}
+          </Section>
         )}
 
-        {data.liabilities.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.secTitle}>Loans & Liabilities</Text>
-            <View style={styles.card}>{data.liabilities.map((i) => renderItem(i, true))}</View>
-          </View>
-        )}
-
-        {/* EMPTY STATE */}
-        {totals.assets === 0 && totals.debt === 0 && (
-          <View style={{ alignItems: 'center', marginTop: 50 }}>
-            <Text style={{ color: '#999' }}>No assets found.</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AddInvestment')}>
-              <Text style={{ color: '#2196F3', fontWeight: 'bold', marginTop: 10 }}>
-                + Add your first asset
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={{ height: 30 }} />
+        <View style={{ marginTop: space.lg }}>
+          <Collapsible
+            testID="investments"
+            title="Investments"
+            summary={investmentsSummary(g.investments)}
+            left={
+              <View style={[styles.badge, { backgroundColor: t.primarySoft, marginRight: 0 }]}>
+                <Ionicons name="trending-up-outline" size={22} color={t.primary} />
+              </View>
+            }
+            badge={g.investments.length ? formatMoney(Math.round(ov.investments)) : null}
+          >
+            {g.investments.map((a) =>
+              row(a, {
+                iconName: a.type === 'Provident Fund' ? 'shield-checkmark-outline' : 'trending-up-outline',
+                sub: [a.subType || a.type, a.interestRate ? `${a.interestRate}%` : null]
+                  .filter(Boolean)
+                  .join(' · '),
+                right: amount(a.balance),
+              })
+            )}
+            {INVESTMENT_KINDS.map((k) => (
+              <View key={k.key} style={[styles.row, { borderColor: t.divider }]}>
+                <Ionicons name={k.icon} size={22} color={t.muted} style={{ marginRight: space.md }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>{k.title}</Text>
+                  <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>{k.note}</Text>
+                </View>
+                <AppButton
+                  title="Add"
+                  size="sm"
+                  variant="secondary"
+                  accessibilityLabel={`Add ${k.title}`}
+                  onPress={() => navigation.navigate('AddInvestment', { kind: k.key })}
+                />
+              </View>
+            ))}
+            <Text style={[type.meta, { color: t.muted, fontSize: 13, lineHeight: 19, marginTop: space.md }]}>
+              Net worth counts only accounts added here. Mutual funds use the daily NAV, stocks and gold the
+              price when you pull to refresh, PF adds interest daily and loans recompute what is owed. SIP
+              debits from your bank will be moved here as transfers once the investment is added.
+            </Text>
+            <AppButton
+              title="Money calculators"
+              variant="secondary"
+              size="sm"
+              icon="calculator-outline"
+              style={{ marginTop: space.md }}
+              onPress={() => navigation.navigate('MoneyTool', { tab: 'Wealth' })}
+            />
+          </Collapsible>
+        </View>
       </ScrollView>
 
-      {/* UPDATE BALANCE MODAL */}
       <Modal visible={!!reconcile} transparent animationType="fade" onRequestClose={() => setReconcile(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Reconcile wallet</Text>
-            <Text style={styles.modalSub}>
+        <View style={styles.backdrop}>
+          <View style={[styles.modal, { backgroundColor: t.card }]}>
+            <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>Reconcile wallet</Text>
+            <Text
+              style={{ color: t.muted, fontFamily: fonts.body, marginTop: space.xs, marginBottom: space.md }}
+            >
               {reconcile?.account?.name}: tracked {formatMoney(reconcile?.account?.balance || 0)}. Enter the
               balance your UPI app shows.
             </Text>
             <TextInput
-              style={styles.modalInput}
+              accessibilityLabel="Balance in the app"
+              style={[styles.input, { borderColor: t.inputBorder, color: t.text }]}
               value={reconcile?.text ?? ''}
-              onChangeText={(t) => setReconcile((prev) => ({ ...prev, text: t }))}
+              onChangeText={(v) => setReconcile((prev) => ({ ...prev, text: v }))}
               keyboardType="numeric"
               placeholder="Balance in the app"
+              placeholderTextColor={t.placeholder}
               autoFocus
             />
             <TextInput
-              style={styles.modalInput}
+              accessibilityLabel="Category for unrecorded spends"
+              style={[styles.input, { borderColor: t.inputBorder, color: t.text, marginTop: space.sm }]}
               value={reconcile?.category ?? ''}
-              onChangeText={(t) => setReconcile((prev) => ({ ...prev, category: t }))}
+              onChangeText={(v) => setReconcile((prev) => ({ ...prev, category: v }))}
               placeholder="Category for unrecorded spends (optional)"
+              placeholderTextColor={t.placeholder}
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity onPress={() => setReconcile(null)} style={styles.modalBtn}>
-                <Text style={{ color: '#666', fontWeight: '600' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={submitReconcile} style={styles.modalBtn}>
-                <Text style={{ color: '#1976D2', fontWeight: '600' }}>Continue</Text>
-              </TouchableOpacity>
+              <AppButton
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => setReconcile(null)}
+              />
+              <AppButton title="Continue" style={{ flex: 1 }} onPress={submitReconcile} />
             </View>
           </View>
         </View>
       </Modal>
+
       <Modal
         visible={!!balanceEdit}
         transparent
         animationType="fade"
         onRequestClose={() => setBalanceEdit(null)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>New Balance</Text>
-            <Text style={styles.modalSub}>{balanceEdit?.account?.name}</Text>
+        <View style={styles.backdrop}>
+          <View style={[styles.modal, { backgroundColor: t.card }]}>
+            <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>Set balance</Text>
+            <Text
+              style={{ color: t.muted, fontFamily: fonts.body, marginTop: space.xs, marginBottom: space.md }}
+            >
+              {balanceEdit?.account?.name}: the balance your bank app shows today.
+            </Text>
             <TextInput
-              style={styles.modalInput}
+              testID="balance-input"
+              accessibilityLabel="Balance"
+              style={[styles.input, { borderColor: t.inputBorder, color: t.text }]}
               value={balanceEdit?.text ?? ''}
-              onChangeText={(t) => setBalanceEdit((prev) => ({ ...prev, text: t }))}
+              onChangeText={(v) => setBalanceEdit((prev) => ({ ...prev, text: v }))}
               keyboardType="numeric"
               autoFocus
               selectTextOnFocus
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity onPress={() => setBalanceEdit(null)} style={styles.modalBtn}>
-                <Text style={{ color: '#666', fontWeight: '600' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={saveBalance} style={styles.modalBtn}>
-                <Text style={{ color: '#2196F3', fontWeight: 'bold' }}>Save</Text>
-              </TouchableOpacity>
+              <AppButton
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => setBalanceEdit(null)}
+              />
+              <AppButton title="Save" style={{ flex: 1 }} onPress={saveBalance} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!dueEdit} transparent animationType="fade" onRequestClose={() => setDueEdit(null)}>
+        <View style={styles.backdrop}>
+          <View style={[styles.modal, { backgroundColor: t.card }]}>
+            <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>Card due date</Text>
+            <Text
+              style={{ color: t.muted, fontFamily: fonts.body, marginTop: space.xs, marginBottom: space.md }}
+            >
+              Day of the month the {dueEdit?.account?.name} bill is due (1–31). You get a reminder that
+              morning for the next 12 months.
+            </Text>
+            <TextInput
+              testID="due-input"
+              accessibilityLabel="Due day"
+              style={[styles.input, { borderColor: t.inputBorder, color: t.text }]}
+              value={dueEdit?.text ?? ''}
+              onChangeText={(v) => setDueEdit((prev) => ({ ...prev, text: v }))}
+              keyboardType="number-pad"
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <AppButton
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => setDueEdit(null)}
+              />
+              <AppButton title="Save" style={{ flex: 1 }} onPress={saveDue} />
             </View>
           </View>
         </View>
@@ -465,38 +720,41 @@ export default function WealthScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f7fa' },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#333' },
-  nwCard: { margin: 20, padding: 20, backgroundColor: '#1565C0', borderRadius: 15, elevation: 3 },
-  section: { marginHorizontal: 20, marginBottom: 20 },
-  secTitle: { marginBottom: 10, fontWeight: 'bold', color: '#666', fontSize: 12, textTransform: 'uppercase' },
-  card: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' },
+  nw: { borderRadius: radius.xxl, padding: space.xl },
+  threeUp: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
+  mini: { flex: 1, borderRadius: radius.md, padding: space.md },
+  card: { borderWidth: 1, borderRadius: radius.lg, paddingHorizontal: space.lg },
   row: {
     flexDirection: 'row',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderColor: '#f0f0f0',
     alignItems: 'center',
+    minHeight: 72,
+    paddingVertical: space.md,
+    borderBottomWidth: 1,
   },
-  iconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  name: { fontWeight: '600', fontSize: 15, color: '#333' },
-  sub: { fontSize: 11, color: '#999', marginTop: 2 },
-  bal: { fontWeight: 'bold', fontSize: 16 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 30 },
-  modalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  modalSub: { fontSize: 12, color: '#999', marginTop: 2, marginBottom: 12 },
-  modalInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, fontSize: 18 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16 },
-  modalBtn: { paddingVertical: 8, paddingHorizontal: 16 },
+  badge: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: space.md,
+  },
+  warnBtn: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  backdrop: { flex: 1, backgroundColor: 'rgba(14,23,38,0.45)', justifyContent: 'center', padding: space.xxl },
+  modal: { borderRadius: radius.xl, padding: space.xl },
+  input: { borderWidth: 1, borderRadius: radius.md, padding: space.md, fontSize: 18, fontFamily: fonts.body },
+  modalActions: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
 });
