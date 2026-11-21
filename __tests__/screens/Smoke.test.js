@@ -10,7 +10,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null, MaterialIcons: () => null }));
 jest.mock('@react-navigation/native', () => {
   const R = require('react');
   return { useFocusEffect: (cb) => R.useEffect(cb, []), useNavigation: () => ({ navigate: jest.fn() }) };
@@ -170,6 +169,70 @@ describe('ToolsScreen (A6 shortcuts)', () => {
   });
 });
 
+describe('HomeScreen (C5.1)', () => {
+  const HomeScreen = require('../../screens/HomeScreen').default;
+  const { addMany } = require('../../data/TransactionRepo');
+  const now = new Date();
+  const at = (d) => new Date(now.getFullYear(), now.getMonth(), d, 12).toISOString();
+  test('spent excludes the card bill; transfers shown separately; 3 recent rows; tags and paperclip', async () => {
+    await addMany(
+      [
+        {
+          id: 'h1',
+          type: 'expense',
+          amount: 1998.19,
+          merchant: 'Adyar Anand Bhavan',
+          category: 'Food',
+          account: 'Axis Bank',
+          fullDate: at(1),
+          tags: ['auto-sms', 'tax-2026'],
+          attachments: [{ id: 'f1' }],
+        },
+        {
+          id: 'h2',
+          type: 'transfer',
+          transferKind: 'cc_bill',
+          amount: 12511.38,
+          account: 'Axis Bank',
+          toAccount: 'SBI Credit Card',
+          fullDate: at(1),
+        },
+        {
+          id: 'h3',
+          type: 'expense',
+          amount: 281,
+          merchant: 'Swiggy',
+          category: 'Food',
+          account: 'Axis Bank',
+          fullDate: at(1),
+        },
+        {
+          id: 'h4',
+          type: 'expense',
+          amount: 50,
+          merchant: 'Tea',
+          category: 'Food',
+          account: 'Cash',
+          fullDate: new Date(now.getFullYear(), now.getMonth(), 1, 8).toISOString(),
+        },
+      ],
+      { balanceMode: 'none' }
+    );
+    const n = nav();
+    render(<HomeScreen navigation={n} />);
+    expect(await screen.findByText('₹2,329.19')).toBeTruthy();
+    expect(screen.getByTestId('transfers-amount').props.children).toBe('₹12,511.38');
+    expect(screen.getAllByRole('button', { name: /,\s*\d/ })).toHaveLength(3);
+    expect(screen.getByText('#tax-2026')).toBeTruthy();
+    expect(screen.queryByText(/auto-sms/)).toBeNull();
+    expect(screen.getByTestId('has-file')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'See all transactions' }));
+    expect(n.navigate).toHaveBeenCalledWith('Transactions');
+    fireEvent.press(screen.getByRole('button', { name: 'Search transactions' }));
+    expect(n.navigate).toHaveBeenCalledWith('Transactions', { focusSearch: true });
+  });
+});
+
 describe('HomeScreen (B2)', () => {
   const HomeScreen = require('../../screens/HomeScreen').default;
   test('renders and warns when there is no backup', async () => {
@@ -179,7 +242,7 @@ describe('HomeScreen (B2)', () => {
   test('no warning right after a backup', async () => {
     await Storage.setItem('last_backup_at', new Date().toISOString());
     render(<HomeScreen navigation={nav()} />);
-    await screen.findByText(/Hello/);
+    await screen.findByTestId('greeting');
     await waitFor(() => expect(screen.queryByText(/No backup yet|Last backup/)).toBeNull());
   });
 });
@@ -211,7 +274,7 @@ describe('HomeScreen review card (A2)', () => {
   });
   test('hidden when nothing is waiting', async () => {
     render(<HomeScreen navigation={nav()} />);
-    await screen.findByText(/Hello/);
+    await screen.findByTestId('greeting');
     expect(screen.queryByTestId('review-card')).toBeNull();
   });
 });

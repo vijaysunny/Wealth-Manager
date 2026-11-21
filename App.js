@@ -34,6 +34,7 @@ import ImportScreen from './screens/ImportScreen';
 import SavingsScreen from './screens/SavingsScreen';
 import RecurringScreen from './screens/RecurringScreen';
 import ReviewAccountsScreen from './screens/ReviewAccountsScreen';
+import ScanSmsScreen from './screens/ScanSmsScreen';
 
 // --- UTILS ---
 import { registerBackgroundSync } from './utils/BackgroundSync';
@@ -145,6 +146,7 @@ function AppContent() {
         <Stack.Screen name="Import" component={ImportScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Savings" component={SavingsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Recurring" component={RecurringScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="ScanSms" component={ScanSmsScreen} options={{ headerShown: false }} />
         <Stack.Screen
           name="ReviewAccounts"
           component={ReviewAccountsScreen}

@@ -463,6 +463,11 @@ export default function SettingsScreen({ navigation }) {
             onPress={() => navigation.navigate('MoneyTool', { tab: 'Rules' })}
           />
           <RowButton
+            icon="scan-outline"
+            label="Scan old SMS now"
+            onPress={() => navigation.navigate('ScanSms')}
+          />
+          <RowButton
             icon="list-outline"
             label="Review captured transactions"
             onPress={() => navigation.navigate('ReviewAccounts', { tab: 'check' })}
