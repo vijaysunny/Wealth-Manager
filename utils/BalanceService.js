@@ -111,14 +111,26 @@ const move = (accounts, tx, direction) => {
   }
   if (tx?.type === 'transfer') {
     const destination = accounts.find((a) => String(a.id) === String(tx.toAccountId));
+    // B3: a SIP is a transfer into an investment (MF, stocks, FD/RD, PF…), not only spendable accounts
+    const investmentTarget =
+      tx.kind === 'investment' &&
+      !!destination &&
+      !['Bank Account', 'Credit Card', 'Loan', 'Cash', 'Wallet'].includes(destination.type);
     if (
       !destination ||
-      !SPENDABLE_TYPES.includes(destination.type) ||
+      (!SPENDABLE_TYPES.includes(destination.type) && !investmentTarget) ||
       findAccountIndex(accounts, tx) === -1 ||
       String(tx.accountId) === String(tx.toAccountId)
     )
       throw new Error('Choose two different accounts');
     const outgoing = { ...tx, type: 'expense' };
+    if (investmentTarget) {
+      // findAccountIndex only knows spendable accounts, so credit the investment directly
+      const next = move(accounts, outgoing, direction).slice();
+      const i = next.findIndex((a) => String(a.id) === String(destination.id));
+      next[i] = { ...next[i], balance: round2(num(next[i].balance) + direction * num(tx.amount)) };
+      return next;
+    }
     const incoming = { ...tx, type: 'income', accountId: tx.toAccountId, account: destination.name };
     return move(move(accounts, outgoing, direction), incoming, direction);
   }

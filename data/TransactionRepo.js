@@ -1,4 +1,5 @@
 import { deleteAllFor } from '../utils/Attachments';
+import { linkSipDebits } from '../utils/InvestmentLink';
 import { atomic, getDatabase, insertRow, decodeRow, encodeTransaction, sourceId } from './Database';
 import { applyCategoryRules } from '../utils/FinanceTools';
 import { readValue } from './Storage';
@@ -51,6 +52,7 @@ const persistMany = (transactions, { balanceMode = 'none', dedup = true } = {}) 
     if (balanceMode === 'captured') {
       accounts = (await db.getAllAsync('SELECT data FROM accounts')).map((r) => JSON.parse(r.data));
       ({ accounts, txs: candidates } = resolveCaptures(accounts, candidates));
+      candidates = linkSipDebits(accounts, candidates); // B3: SIP debit → transfer to the investment
     }
     const addedTxs = [];
     const applyTxs = []; // rows whose balance effect is applied below (new + re-linked)

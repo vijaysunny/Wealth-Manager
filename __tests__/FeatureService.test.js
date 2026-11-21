@@ -56,3 +56,49 @@ test('merge skips duplicates and preserves current account balances', async () =
   expect(JSON.parse(await Storage.getItem('user_wealth_accounts'))[0].balance).toBe(900);
   expect(await mergeRestore(backup)).toEqual({ added: 0, skipped: 2 });
 });
+
+test('B3: a SIP debit becomes a transfer bank → investment on that platform', async () => {
+  await Storage.setItem(
+    'user_wealth_accounts',
+    JSON.stringify([
+      { id: 1, type: 'Bank Account', name: 'Bank', bankName: 'Bank', last4: '1234', balance: 1000 },
+      { id: 2, type: 'Mutual Fund', subType: 'Mutual Fund', name: 'Groww Flexi Cap', balance: 50000 },
+    ])
+  );
+  await addMany([tx('sip', { smsId: 'sip1', merchant: 'GROWW', amount: 500, accountId: 1 })], {
+    balanceMode: 'captured',
+  });
+  const [row] = await getAll();
+  expect(row).toMatchObject({ type: 'transfer', kind: 'investment', accountId: 1, toAccountId: 2 });
+  const accs = JSON.parse(await Storage.getItem('user_wealth_accounts'));
+  expect(accs.find((a) => a.id === 1).balance).toBe(500);
+  expect(accs.find((a) => a.id === 2).balance).toBe(50500);
+});
+
+test('B3: without an investment on that platform it stays an expense', async () => {
+  await addMany([tx('sip2', { smsId: 'sip2', merchant: 'Zerodha', amount: 300 })], {
+    balanceMode: 'captured',
+  });
+  const [row] = await getAll();
+  expect(row.type).toBe('expense');
+});
+
+test('B3: deleting a SIP transfer puts both balances back', async () => {
+  await Storage.setItem(
+    'user_wealth_accounts',
+    JSON.stringify([
+      { id: 1, type: 'Bank Account', name: 'Bank', balance: 1000 },
+      { id: 2, type: 'Fixed Deposit', subType: 'Fixed Deposit', name: 'FD', balance: 100 },
+    ])
+  );
+  await add({ ...tx('m'), type: 'transfer', kind: 'investment', accountId: 1, toAccountId: 2, amount: 200 });
+  let accs = JSON.parse(await Storage.getItem('user_wealth_accounts'));
+  expect(accs.map((a) => a.balance)).toEqual([800, 300]);
+  await bulkDelete(['m']);
+  accs = JSON.parse(await Storage.getItem('user_wealth_accounts'));
+  expect(accs.map((a) => a.balance)).toEqual([1000, 100]);
+  // a plain transfer into an investment is still refused
+  await expect(add({ ...tx('p'), type: 'transfer', accountId: 1, toAccountId: 2 })).rejects.toThrow(
+    'Choose two different accounts'
+  );
+});
