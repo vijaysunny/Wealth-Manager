@@ -18,6 +18,9 @@ export const PROVIDERS = {
     keyUrl: 'https://aistudio.google.com/apikey',
     prefer: [/^gemini-flash-latest$/, /^gemini-[\d.]+-flash$/, /^gemini-[\d.]+-flash-lite$/, /flash/],
     avoid: /image|tts|audio|live|embed|vision|thinking|exp|preview|8b/i,
+    // A9: when a key lists only "-preview" Flash models (Gemini 2.5 was shut down in Oct 2026),
+    // a preview model is better than "no suitable model". These are never acceptable.
+    fallbackAvoid: /image|tts|audio|live|embed/i,
   },
   groq: {
     id: 'groq',
@@ -58,13 +61,25 @@ export const parseOrder = (value) => {
 const versionDesc = (a, b) => b.localeCompare(a, 'en', { numeric: true });
 
 /** Best model id for a provider from the ids its API listed; null when nothing suitable. */
-export const pickModel = (providerId, ids = []) => {
-  const p = PROVIDERS[providerId];
-  if (!p) return null;
-  const usable = ids.map((id) => String(id).replace(/^models\//, '')).filter((id) => id && !p.avoid.test(id));
+const firstPreferred = (p, ids) => {
   for (const re of p.prefer) {
-    const hits = usable.filter((id) => re.test(id)).sort(versionDesc);
+    const hits = ids.filter((id) => re.test(id)).sort(versionDesc);
     if (hits.length) return hits[0];
   }
   return null;
+};
+
+export const pickModel = (providerId, ids = []) => {
+  const p = PROVIDERS[providerId];
+  if (!p) return null;
+  const all = ids.map((id) => String(id).replace(/^models\//, '')).filter(Boolean);
+  const best = firstPreferred(
+    p,
+    all.filter((id) => !p.avoid.test(id))
+  );
+  if (best || !p.fallbackAvoid) return best;
+  return firstPreferred(
+    p,
+    all.filter((id) => !p.fallbackAvoid.test(id))
+  );
 };

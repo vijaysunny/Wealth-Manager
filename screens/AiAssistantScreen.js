@@ -92,9 +92,26 @@ export default function AiAssistantScreen({ navigation }) {
       <AppButton title="Back" onPress={() => navigation.goBack()} />
       <Text style={{ fontSize: 24, fontWeight: 'bold', marginVertical: 12 }}>AI Assistant</Text>
       {!ready.insights && !ready.categorize ? (
-        <Text>
-          AI is off. Turn on “Use AI” and save a free Gemini or Groq key in Settings → AI assistant.
-        </Text>
+        <View
+          testID="ai-off-card"
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderColor: '#E3E6EC',
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 16,
+          }}
+        >
+          <Text style={{ color: '#0E1726', fontSize: 17, fontWeight: '700' }}>AI is off</Text>
+          <Text style={{ color: '#3A4456', fontSize: 15, lineHeight: 21, marginTop: 4 }}>
+            Turn on “Use AI” and save a free Gemini or Groq key in Settings → AI assistant.
+          </Text>
+          <AppButton
+            title="Turn on AI"
+            style={{ marginTop: 12 }}
+            onPress={() => navigation.navigate('Main', { screen: 'SettingsTab' })}
+          />
+        </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
           {ready.categorize && (

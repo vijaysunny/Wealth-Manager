@@ -17,12 +17,31 @@ export class AiError extends Error {
   }
 }
 
+// The provider's own error text: Gemini/OpenAI-style {"error":{"message":"…"}}
+const apiMessageOf = (body) => {
+  try {
+    const j = JSON.parse(body);
+    const m = j?.error?.message || j?.message || (typeof j?.error === 'string' ? j.error : null);
+    return m ? String(m) : null;
+  } catch {
+    return null;
+  }
+};
+
 class HttpError extends Error {
   constructor(status, body) {
     super(`HTTP ${status}${body ? `: ${String(body).slice(0, 160)}` : ''}`);
     this.status = status;
+    this.apiMessage = apiMessageOf(body);
   }
 }
+
+/** Short, readable error for the Settings status line (A9): the API's text, first 120 chars. */
+export const describeAiError = (e) => {
+  const text = (e && (e.apiMessage || e.message)) || 'Unknown error';
+  const withStatus = e && e.apiMessage && e.status ? `HTTP ${e.status}: ${text}` : text;
+  return String(withStatus).slice(0, 120);
+};
 
 const DEFAULT_TIMEOUT_MS = 30000;
 
@@ -188,4 +207,19 @@ export const testProvider = async (providerId, key, overrides = {}) => {
     DEFAULT_TIMEOUT_MS
   );
   return { model, reply: String(text).trim().slice(0, 40) };
+};
+
+/**
+ * A9: run the Test for one provider and turn it into the status line Settings shows:
+ * { ok: true, model, line: 'Working · <model>' } or { ok: false, line: <error, ≤120 chars> }.
+ * Never throws.
+ */
+export const runProviderTest = async (providerId, key, overrides = {}) => {
+  if (!key) return { ok: false, line: 'No key' };
+  try {
+    const { model } = await testProvider(providerId, key, overrides);
+    return { ok: true, model, line: `Working · ${model}` };
+  } catch (e) {
+    return { ok: false, line: describeAiError(e) };
+  }
 };

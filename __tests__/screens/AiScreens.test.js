@@ -24,6 +24,13 @@ jest.mock('expo-secure-store', () => ({
   }),
 }));
 
+// No network in tests: the automatic Test after Save key is mocked (A9)
+const mockRunTest = jest.fn(async () => ({ ok: true, model: 'gemini-x', line: 'Working · gemini-x' }));
+jest.mock('../../utils/ai/AiClient', () => ({
+  ...jest.requireActual('../../utils/ai/AiClient'),
+  runProviderTest: (...a) => mockRunTest(...a),
+}));
+
 const AiSettingsPanel = require('../../components/AiSettingsPanel').default;
 const AiAssistantScreen = require('../../screens/AiAssistantScreen').default;
 
@@ -41,12 +48,56 @@ test('panel: cannot enable without a key; saved key goes to SecureStore and is n
 
   fireEvent.changeText(screen.getAllByPlaceholderText('Paste API key')[0], 'secret-gemini-key');
   fireEvent.press(screen.getAllByText('Save key')[0]);
-  await screen.findByText(/Google Gemini Flash · key saved ✓/);
+  await screen.findByText(/Google Gemini Flash · key saved/);
   expect(secure.ai_key_gemini).toBe('secret-gemini-key');
   expect(screen.queryByDisplayValue('secret-gemini-key')).toBeNull();
 });
 
-test('assistant screen explains how to turn AI on', async () => {
-  render(<AiAssistantScreen navigation={{ goBack: jest.fn() }} />);
-  await screen.findByText(/AI is off/);
+test('assistant screen: visible "AI is off" card with a Turn on AI button (A9)', async () => {
+  const navigate = jest.fn();
+  render(<AiAssistantScreen navigation={{ goBack: jest.fn(), navigate }} />);
+  expect(await screen.findByTestId('ai-off-card')).toBeTruthy();
+  const title = screen.getByText('AI is off');
+  // the regression: text must carry an explicit colour, never the system default
+  expect(require('react-native').StyleSheet.flatten(title.props.style).color).toBe('#0E1726');
+  fireEvent.press(screen.getByRole('button', { name: 'Turn on AI' }));
+  expect(navigate).toHaveBeenCalledWith('Main', { screen: 'SettingsTab' });
+});
+
+test('A9: Save key runs the Test, shows the status line and offers to turn AI on', async () => {
+  delete secure.ai_key_gemini;
+  delete secure.ai_key_groq;
+  delete secure.ai_key_xai;
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  render(<AiSettingsPanel />);
+  await screen.findByText(/Google Gemini Flash · no key/);
+  fireEvent.changeText(screen.getAllByPlaceholderText('Paste API key')[0], 'k2');
+  fireEvent.press(screen.getAllByText('Save key')[0]);
+  expect(await screen.findByText('Working · gemini-x')).toBeTruthy();
+  expect(mockRunTest).toHaveBeenCalledWith('gemini', 'k2');
+  await waitFor(() =>
+    expect(alert).toHaveBeenCalledWith('Turn on AI now?', expect.any(String), expect.any(Array))
+  );
+  const turnOn = alert.mock.calls
+    .find((c) => c[0] === 'Turn on AI now?')[2]
+    .find((b) => b.text === 'Turn on');
+  turnOn.onPress();
+  await waitFor(() =>
+    expect(
+      screen
+        .UNSAFE_getAllByType(require('react-native').Switch)
+        .find((x) => x.props.accessibilityLabel === 'Use AI').props.value
+    ).toBe(true)
+  );
+});
+
+test('A9: a failing Test shows the API error under the provider', async () => {
+  ['gemini', 'groq', 'xai'].forEach((id) => delete secure[`ai_key_${id}`]);
+  mockRunTest.mockResolvedValueOnce({ ok: false, line: 'HTTP 400: API key not valid.' });
+  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  render(<AiSettingsPanel />);
+  await screen.findByText(/Google Gemini Flash · no key/);
+  fireEvent.changeText(screen.getAllByPlaceholderText('Paste API key')[0], 'bad');
+  fireEvent.press(screen.getAllByText('Save key')[0]);
+  expect(await screen.findByText('HTTP 400: API key not valid.')).toBeTruthy();
 });

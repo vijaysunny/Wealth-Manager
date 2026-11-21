@@ -178,3 +178,74 @@ test('testProvider reports the model and reply', async () => {
     reply: 'OK',
   });
 });
+
+describe('A9: preview fallback and Test status line', () => {
+  const { runProviderTest, describeAiError } = require('../../utils/ai/AiClient');
+  const previewOnly = {
+    models: [
+      { name: 'models/gemini-3.5-flash-preview-09-2026', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-3.5-flash-image-preview', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-3.5-flash-preview-tts', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/text-embedding-005', supportedGenerationMethods: ['embedContent'] },
+    ],
+  };
+
+  test('pickModel: only -preview flash ids → picks the preview; never image/tts/audio/live/embed', () => {
+    expect(
+      pickModel('gemini', [
+        'gemini-3.5-flash-preview-09-2026',
+        'gemini-3.5-flash-image-preview',
+        'gemini-3.5-flash-preview-tts',
+        'gemini-3.5-flash-live-preview',
+        'gemini-embedding-preview',
+      ])
+    ).toBe('gemini-3.5-flash-preview-09-2026');
+    expect(
+      pickModel('gemini', ['gemini-3.5-flash-image-preview', 'gemini-3.5-flash-preview-tts'])
+    ).toBeNull();
+    // a stable model still wins over a preview
+    expect(pickModel('gemini', ['gemini-3.6-flash-preview', 'gemini-3.5-flash'])).toBe('gemini-3.5-flash');
+    // providers without a fallback list do not relax
+    expect(pickModel('groq', ['llama-guard-4'])).toBeNull();
+  });
+
+  test('Test works with a preview-only key → "Working · <model>"', async () => {
+    const { deps } = setup({
+      routes: [
+        ['/models?', () => reply(200, previewOnly)],
+        [':generateContent', () => reply(200, geminiText('OK'))],
+      ],
+    });
+    await expect(runProviderTest('gemini', 'k', deps)).resolves.toEqual({
+      ok: true,
+      model: 'gemini-3.5-flash-preview-09-2026',
+      line: 'Working · gemini-3.5-flash-preview-09-2026',
+    });
+  });
+
+  test('Test surfaces the API error text (first 120 characters)', async () => {
+    const msg = 'API key not valid. Please pass a valid API key. '.repeat(4);
+    const { deps } = setup({
+      routes: [
+        ['/models?', () => reply(400, { error: { code: 400, message: msg, status: 'INVALID_ARGUMENT' } })],
+      ],
+    });
+    const r = await runProviderTest('gemini', 'bad', deps);
+    expect(r.ok).toBe(false);
+    expect(r.line.startsWith('HTTP 400: API key not valid.')).toBe(true);
+    expect(r.line.length).toBeLessThanOrEqual(120);
+  });
+
+  test('no suitable model and no key give clear messages', async () => {
+    const { deps } = setup({
+      routes: [['/models?', () => reply(200, { models: [{ name: 'models/gemini-3.5-flash-preview-tts' }] })]],
+    });
+    expect((await runProviderTest('gemini', 'k', deps)).line).toMatch(/no suitable model/);
+    expect(await runProviderTest('gemini', '', deps)).toEqual({ ok: false, line: 'No key' });
+  });
+
+  test('describeAiError: plain errors and non-JSON bodies', () => {
+    expect(describeAiError(new Error('timed out'))).toBe('timed out');
+    expect(describeAiError(null)).toBe('Unknown error');
+  });
+});

@@ -9,7 +9,7 @@ import { Switch, Alert, Linking } from 'react-native';
 import AppButton from './ui/AppButton';
 import { PROVIDERS } from '../utils/ai/AiProviders';
 import { loadAiSettings, saveAiSettings, getApiKey, setApiKey } from '../utils/ai/AiConfig';
-import { testProvider } from '../utils/ai/AiClient';
+import { runProviderTest } from '../utils/ai/AiClient';
 
 const FEATURE_LABELS = {
   sms: 'Read bank SMS the parser misses',
@@ -24,6 +24,7 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
   const [hasKey, setHasKey] = useState({});
   const [drafts, setDrafts] = useState({});
   const [busy, setBusy] = useState(null);
+  const [status, setStatus] = useState({}); // A9: last Test result per provider
 
   const refresh = useCallback(async () => {
     setSettings(await loadAiSettings());
@@ -50,19 +51,38 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
     }
   };
 
+  const checkKey = async (id, key) => {
+    setStatus((st) => ({ ...st, [id]: { ok: null, line: 'Testing…' } }));
+    const result = await runProviderTest(id, key);
+    setStatus((st) => ({ ...st, [id]: result }));
+    return result;
+  };
+
   const saveKey = (id) =>
     run(id, async () => {
-      await setApiKey(id, drafts[id] || '');
+      const key = (drafts[id] || '').trim();
+      const firstKey = !!key && !Object.values(hasKey).some(Boolean);
+      await setApiKey(id, key);
       setDrafts((d) => ({ ...d, [id]: '' }));
       await refresh();
+      if (!key) {
+        setStatus((st) => ({ ...st, [id]: { ok: false, line: 'No key' } }));
+        return;
+      }
+      // A9: test right away, so a bad key or "no suitable model" shows here, not later
+      await checkKey(id, key);
+      if (firstKey && !settings.enabled)
+        Alert.alert('Turn on AI now?', 'Nothing is sent to the provider until AI is on.', [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Turn on', onPress: () => update({ enabled: true }).catch(() => {}) },
+        ]);
     });
 
   const test = (id) =>
     run(id, async () => {
       const key = drafts[id] || (await getApiKey(id));
       if (!key) throw new Error('Enter a key first.');
-      const { model, reply } = await testProvider(id, key);
-      Alert.alert(PROVIDERS[id].label, `Working ✓\nModel: ${model}\nReply: ${reply}`);
+      await checkKey(id, key);
     });
 
   if (!settings) return null;
@@ -73,6 +93,7 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <Text style={{ flex: 1, fontWeight: '600' }}>Use AI</Text>
         <Switch
+          accessibilityLabel="Use AI"
           value={settings.enabled}
           onValueChange={(enabled) =>
             run('toggle', async () => {
@@ -93,8 +114,20 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
         return (
           <View key={id} style={{ borderTopWidth: 1, borderColor: '#E5E7EB', paddingVertical: 8 }}>
             <Text style={{ fontWeight: '600' }}>
-              {idx + 1}. {p.label} {hasKey[id] ? '· key saved ✓' : '· no key'}
+              {idx + 1}. {p.label} {hasKey[id] ? '· key saved' : '· no key'}
             </Text>
+            {status[id] ? (
+              <Text
+                testID={`ai-status-${id}`}
+                style={{
+                  fontSize: 13,
+                  marginTop: 2,
+                  color: status[id].ok ? '#0E7C4A' : status[id].ok === false ? '#7A1A24' : '#5B6475',
+                }}
+              >
+                {status[id].line}
+              </Text>
+            ) : null}
             <Text style={{ fontSize: 12, color: '#2196F3' }} onPress={() => Linking.openURL(p.keyUrl)}>
               Get a {p.free ? 'free ' : ''}key: {p.keyUrl}
             </Text>
