@@ -136,5 +136,76 @@ test('suggestion and signature', () => {
   expect(suggestedAccountFor({ bankName: 'SBI', accountType: 'Credit Card', last4: '1987' }).name).toBe(
     'SBI Credit Card ••1987'
   );
-  expect(captureSignature({ bankName: 'Axis Bank', last4: '0973' })).toBe('Bank Account|axis bank|0973|');
+  expect(captureSignature({ bankName: 'Axis Bank', last4: '0973' })).toBe('Bank Account|axis bank|0973||');
+});
+
+describe('A11: debit cards', () => {
+  const R = require('../utils/AccountResolver');
+  const savings = { id: 'axis', name: 'Axis Bank ••0973', type: 'Bank Account', last4: '0973', balance: 0 };
+  const card = { id: 'axiscc', name: 'Axis Card', type: 'Credit Card', last4: '4821', balance: 0 };
+  const dc = (o = {}) => ({
+    smsId: 's1',
+    type: 'expense',
+    amount: 450,
+    accountType: 'Bank Account',
+    bankName: 'Axis Bank',
+    last4: null,
+    cardLast4: '4821',
+    fullDate: '2026-11-17T00:00:00Z',
+    ...o,
+  });
+
+  test('a card in debitCards matches the savings account', () => {
+    const r = R.resolveAccount([{ ...savings, debitCards: ['4821'] }, card], dc());
+    expect(r).toMatchObject({ status: 'matched', account: { id: 'axis' } });
+  });
+
+  test('an unknown card with one account of that bank → link_debit_card with the candidate', () => {
+    const r = R.resolveAccount([savings], dc());
+    expect(r.status).toBe('link_debit_card');
+    expect(r.candidates.map((a) => a.id)).toEqual(['axis']);
+    const { tx } = R.resolveCapture([savings], dc(), { newId: () => 'n' });
+    expect(tx).toMatchObject({
+      accountUnresolved: true,
+      reviewReason: 'link_debit_card',
+      accountCandidates: ['axis'],
+    });
+  });
+
+  test('several accounts of that bank → still asks, with all of them', () => {
+    const other = { id: 'axis2', name: 'Axis Joint', type: 'Bank Account', balance: 0 };
+    const r = R.resolveAccount([savings, other], dc());
+    expect(r.status).toBe('link_debit_card');
+    expect(r.candidates).toHaveLength(2);
+  });
+
+  test('no account of that bank → new_account suggesting a bank account that knows the card', () => {
+    const { tx } = R.resolveCapture([], dc(), { newId: () => 'n' });
+    expect(tx.reviewReason).toBe('new_account');
+    expect(tx.suggestedAccount).toMatchObject({ type: 'Bank Account', last4: null, debitCards: ['4821'] });
+  });
+
+  test('a credit card with the same digits never matches a bank account, and vice versa', () => {
+    expect(R.resolveAccount([savings, card], dc()).status).toBe('link_debit_card');
+    const cc = { ...dc(), accountType: 'Credit Card', last4: '4821', cardLast4: '4821' };
+    expect(R.resolveAccount([{ ...savings, debitCards: ['4821'] }, card], cc)).toMatchObject({
+      status: 'matched',
+      account: { id: 'axiscc' },
+    });
+  });
+
+  test('"A/c XX5678 … Debit Card XX9911" matches by account digits and learns the card', () => {
+    const sbi = { id: 'sbi', name: 'SBI ••5678', type: 'Bank Account', last4: '5678', balance: 0 };
+    const tx = dc({ bankName: 'SBI', last4: '5678', cardLast4: '9911' });
+    const { accounts, tx: out } = R.resolveCapture([sbi], tx, { newId: () => 'n' });
+    expect(out.accountId).toBe('sbi');
+    expect(accounts[0].debitCards).toEqual(['9911']);
+  });
+
+  test('captureSignature separates debit cards of one bank, but not account-digit captures', () => {
+    expect(R.captureSignature(dc())).not.toBe(R.captureSignature(dc({ cardLast4: '1111' })));
+    expect(R.captureSignature(dc({ last4: '0973', cardLast4: '1' }))).toBe(
+      R.captureSignature(dc({ last4: '0973', cardLast4: '2' }))
+    );
+  });
 });

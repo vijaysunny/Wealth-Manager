@@ -69,6 +69,7 @@ export const resolveCaptureAccount = (id, choice = {}) =>
         subType: s.subType || s.type || 'Bank Account',
         ...(s.bankName ? { bankName: s.bankName } : {}),
         ...(s.last4 ? { last4: s.last4 } : {}),
+        ...(Array.isArray(s.debitCards) && s.debitCards.length ? { debitCards: s.debitCards } : {}),
         balance: 0,
         createdFrom: 'review',
       };
@@ -109,6 +110,14 @@ export const resolveCaptureAccount = (id, choice = {}) =>
     for (const tx of others) {
       const r = resolveAccount(accounts, tx);
       if (r.status === 'matched' && String(r.account.id) === String(account.id)) await assign(tx);
+      else if (r.status === 'link_debit_card') {
+        // A11: the bank now has an account, so the card question replaces "add an account"
+        await writeRow(db, {
+          ...tx,
+          reviewReason: 'link_debit_card',
+          accountCandidates: r.candidates.map((a) => a.id),
+        });
+      }
     }
     accounts = applyCapturedToAccounts(accounts, resolved);
     accounts = await pairResolvedCardBills(db, accounts, resolved);

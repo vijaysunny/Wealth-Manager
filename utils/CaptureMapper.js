@@ -10,6 +10,7 @@ export const capturedFields = (parsed = {}) => {
   const out = {
     accountType: parsed.accountType || null,
     last4: parsed.last4 || null,
+    cardLast4: parsed.cardLast4 || null,
     channel: parsed.channel || null,
     counterparty: parsed.counterparty || null,
     availableLimit: Number.isFinite(parsed.availableLimit) ? parsed.availableLimit : null,

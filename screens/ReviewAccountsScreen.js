@@ -18,7 +18,7 @@ import {
   resolveCaptureAccount,
 } from '../utils/FeatureService';
 import { discoverAccounts, checkItems } from '../utils/AccountDiscovery';
-import { describeCapture, reviewHint } from '../utils/ReviewText';
+import { describeCapture, reviewHint, debitCardQuestion } from '../utils/ReviewText';
 import { formatMoney } from '../utils/Format';
 import { useTokens } from '../components/Theme';
 import { radius, space } from '../components/tokens';
@@ -78,9 +78,11 @@ export default function ReviewAccountsScreen({ navigation, route }) {
     }
   };
 
+  // linking = { name, type, txId, allowCreate }: a discovered group, or a debit card (A11)
   const linkChoices = linking
-    ? accounts.filter((a) => SPENDABLE.includes(a.type) && a.type === linking.suggested.type)
+    ? accounts.filter((a) => SPENDABLE.includes(a.type) && a.type === linking.type)
     : [];
+  const linkGroup = (g) => setLinking({ name: g.suggested.name, type: g.suggested.type, txId: g.firstTxId });
 
   const renderGroup = ({ item: g }) => {
     const isCard = g.suggested.type === 'Credit Card';
@@ -113,10 +115,61 @@ export default function ReviewAccountsScreen({ navigation, route }) {
             variant="secondary"
             disabled={busy}
             style={{ flex: 1 }}
-            onPress={() => setLinking(g)}
+            onPress={() => linkGroup(g)}
           />
         </View>
       </Card>
+    );
+  };
+
+  const renderDebitCard = (tx) => {
+    const candidates = accounts.filter((a) =>
+      (tx.accountCandidates || []).map(String).includes(String(a.id))
+    );
+    const only = candidates.length === 1 ? candidates[0] : null;
+    const other = () =>
+      setLinking({
+        name: `Debit Card ••${tx.cardLast4}`,
+        type: 'Bank Account',
+        txId: tx.id,
+        allowCreate: true,
+      });
+    return (
+      <View style={{ marginTop: space.sm }}>
+        <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>{debitCardQuestion(tx, only)}</Text>
+        {tx.groupCount > 1 && (
+          <Text style={{ color: t.muted, marginTop: 2 }}>{tx.groupCount} transactions with this card</Text>
+        )}
+        <View style={styles.buttons}>
+          {only ? (
+            <AppButton
+              title="Yes"
+              size="sm"
+              style={{ flex: 1 }}
+              accessibilityLabel={`Yes, Debit Card ••${tx.cardLast4} is linked to ${only.name}`}
+              onPress={() => run(() => resolveCaptureAccount(tx.id, { accountId: only.id }))}
+            />
+          ) : (
+            candidates.map((a) => (
+              <AppButton
+                key={a.id}
+                title={a.name}
+                size="sm"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => run(() => resolveCaptureAccount(tx.id, { accountId: a.id }))}
+              />
+            ))
+          )}
+          <AppButton
+            title="Different account"
+            size="sm"
+            variant="secondary"
+            style={{ flex: 1 }}
+            onPress={other}
+          />
+        </View>
+      </View>
     );
   };
 
@@ -127,6 +180,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
         {tx.category} · {tx.date || String(tx.fullDate || '').slice(0, 10)}
       </Text>
       {reviewHint(tx) ? <Text style={{ color: t.warnText, marginTop: 4 }}>{reviewHint(tx)}</Text> : null}
+      {tx.reviewReason === 'link_debit_card' && tx.accountUnresolved && renderDebitCard(tx)}
       {tx.reviewReason === 'pick_account' && (
         <View style={styles.chips}>
           {accounts
@@ -258,14 +312,14 @@ export default function ReviewAccountsScreen({ navigation, route }) {
         <View style={styles.sheetWrap}>
           <View style={[styles.sheet, { backgroundColor: t.card }]}>
             <Text style={[styles.groupName, { color: t.text, marginBottom: space.sm }]}>
-              Link {linking?.suggested.name} to
+              Link {linking?.name} to
             </Text>
             <ScrollView style={{ maxHeight: 320 }}>
               {linkChoices.length === 0 ? (
                 <Text style={{ color: t.muted }}>
-                  You have no{' '}
-                  {linking?.suggested.type === 'Credit Card' ? 'credit cards' : 'accounts of this type'} yet.
-                  Use Add instead.
+                  You have no {linking?.type === 'Credit Card' ? 'credit cards' : 'accounts of this type'}{' '}
+                  yet.
+                  {linking?.allowCreate ? '' : ' Use Add instead.'}
                 </Text>
               ) : (
                 linkChoices.map((a) => (
@@ -274,14 +328,26 @@ export default function ReviewAccountsScreen({ navigation, route }) {
                     title={a.name}
                     variant="secondary"
                     onPress={() => {
-                      const g = linking;
+                      const { txId } = linking;
                       setLinking(null);
-                      run(() => resolveCaptureAccount(g.firstTxId, { accountId: a.id }));
+                      run(() => resolveCaptureAccount(txId, { accountId: a.id }));
                     }}
                   />
                 ))
               )}
             </ScrollView>
+            {linking?.allowCreate && (
+              <AppButton
+                title="Add as a new account"
+                variant="dashed"
+                icon="add"
+                onPress={() => {
+                  const { txId } = linking;
+                  setLinking(null);
+                  run(() => resolveCaptureAccount(txId, { create: true }));
+                }}
+              />
+            )}
             <AppButton title="Cancel" variant="secondary" onPress={() => setLinking(null)} />
           </View>
         </View>

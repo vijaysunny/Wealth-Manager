@@ -15,6 +15,7 @@ const isPendingNewAccount = (tx) =>
 
 const typeBank = (signature) => signature.split('|').slice(0, 2).join('|');
 const digitsOf = (signature) => signature.split('|')[2] || '';
+const cardOf = (signature) => signature.split('|')[4] || '';
 
 const latestLimit = (txs) => {
   const withLimit = txs
@@ -39,7 +40,8 @@ export const discoverAccounts = (txs = []) => {
     groups.get(signature).txs.push(tx);
   }
   for (const [signature, g] of [...groups]) {
-    if (digitsOf(signature)) continue;
+    // a debit-card group is not folded: which account owns a card is the owner's call (A11)
+    if (digitsOf(signature) || cardOf(signature)) continue;
     const homes = [...groups.values()].filter(
       (o) => o !== g && digitsOf(o.signature) && typeBank(o.signature) === typeBank(signature)
     );
@@ -53,6 +55,7 @@ export const discoverAccounts = (txs = []) => {
       const ordered = g.txs.slice().sort((a, b) => new Date(a.fullDate) - new Date(b.fullDate));
       // the suggestion comes from a capture that carries the digits, when there is one
       const lead = ordered.find((t) => t.last4) || ordered[0];
+      const card = cardOf(g.signature);
       return {
         signature: g.signature,
         suggested: lead.suggestedAccount || suggestedAccountFor(lead),
@@ -60,14 +63,34 @@ export const discoverAccounts = (txs = []) => {
         txIds: ordered.map((t) => t.id),
         firstTxId: lead.id,
         availableLimit: latestLimit(ordered),
+        ...(card ? { cardLast4: card } : {}),
       };
     })
     .sort((a, b) => b.count - a.count || a.suggested.name.localeCompare(b.suggested.name));
 };
 
-/** Review items that are not new-account groups (self-transfer, pick account, pick wallet …). */
-export const checkItems = (txs = []) =>
-  txs.filter((tx) => tx && tx.reviewStatus === 'pending' && !isPendingNewAccount(tx));
+/**
+ * Review items that are not new-account groups (self-transfer, pick account, pick wallet …).
+ * Debit-card questions are asked once per card: one item with `groupCount` captures (A11).
+ */
+export const checkItems = (txs = []) => {
+  const out = [];
+  const cards = new Map();
+  for (const tx of txs) {
+    if (!tx || tx.reviewStatus !== 'pending' || isPendingNewAccount(tx)) continue;
+    if (tx.reviewReason === 'link_debit_card' && tx.accountUnresolved) {
+      const key = captureSignature(tx);
+      if (cards.has(key)) {
+        cards.get(key).groupCount += 1;
+        continue;
+      }
+      const item = { ...tx, groupCount: 1 };
+      cards.set(key, item);
+      out.push(item);
+    } else out.push(tx);
+  }
+  return out;
+};
 
 /** Total captures waiting in discovered groups. */
 export const waitingCount = (groups = []) => groups.reduce((n, g) => n + g.count, 0);

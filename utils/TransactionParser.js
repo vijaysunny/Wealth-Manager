@@ -282,9 +282,17 @@ export const classifyWalletEvent = (body = '', { sender = '' } = {}) => {
  * itself (UPI Lite spend, Paytm Wallet, FASTag ...), otherwise 'Bank Account'.
  * Card wording wins, so RuPay-credit-card-on-UPI spends stay card expenses.
  */
+// A11: a card SMS that names neither debit nor credit ("Spent / Card no. XX4821 / … / Avl Bal")
+// is decided by the balance wording: a bank balance means a debit card, a limit means a credit card.
+const BANK_BALANCE_RE = /\b(?:avl|avbl|available)\.?\s*bal(?:ance)?\b/i;
+const CARD_LIMIT_RE = /\b(?:avl|avbl|available)\.?\s*(?:credit\s*|cr\.?\s*)?(?:limit|lmt)\b/i;
 export const detectAccountType = (body = '', { sender = '' } = {}) => {
   if (/credit\s*card|\bcc\b/i.test(body)) return 'Credit Card';
-  if (/\bcard\b/i.test(body) && !/debit\s*card/i.test(body)) return 'Credit Card';
+  if (/\bcard\b/i.test(body) && !/debit\s*card/i.test(body)) {
+    if (CARD_LIMIT_RE.test(body)) return 'Credit Card';
+    if (BANK_BALANCE_RE.test(body)) return 'Bank Account';
+    return 'Credit Card';
+  }
   const wallet = classifyWalletEvent(body, { sender });
   if (wallet && !wallet.ignore && wallet.perspective === 'wallet') return 'Wallet';
   return 'Bank Account';
@@ -416,6 +424,22 @@ export const extractLast4 = (text = '') => {
   return null;
 };
 
+// A11: account digits and card digits are different numbers on a debit-card SMS
+// ("debited from A/c XX5678 using SBI Debit Card XX9911").
+const ACCOUNT_DIGITS_RE = /\b(?:a\/c|acct|account)\b\.?\s*(?:no\.?|number)?\s*[:.]?\s*[X*]*\s*(\d{3,18})\b/i;
+const CARD_DIGITS_RE =
+  /\bcard\b\.?\s*(?:no\.?|number)?\s*(?:ending(?:\s+(?:with|in))?)?\s*[:.]?\s*[X*]*\s*(\d{3,18})\b/i;
+/** Digits after "A/c" / "Acct" / "Account", or null. */
+export const extractAccountLast4 = (text = '') => {
+  const m = String(text).match(ACCOUNT_DIGITS_RE);
+  return m ? m[1].slice(-4) : null;
+};
+/** Digits after "Card" ("Card no. XX4821", "Debit Card XX9911", "card ending 1234"), or null. */
+export const extractCardLast4 = (text = '') => {
+  const m = String(text).match(CARD_DIGITS_RE);
+  return m ? m[1].slice(-4) : null;
+};
+
 const LIMIT_RE =
   /(?:avl|avbl|available)\.?\s*(?:credit\s*|cr\.?\s*)?limit\s*(?:is\s*)?[:\-\s]*(?:rs\.?|inr|₹)?\s*\.?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
 /** Credit-card available limit ("Avl limit: INR 275541.19"), or null. Never a balance. */
@@ -530,7 +554,9 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
 
   const own = ownAccountText(body);
   const accountType = detectAccountType(own, { sender });
-  const last4 = extractLast4(body);
+  // A11: on a bank (debit card) SMS the card digits are not the account's digits
+  const cardLast4 = /\bcard\b/i.test(body) ? extractCardLast4(body) : null;
+  const last4 = accountType === 'Bank Account' && cardLast4 ? extractAccountLast4(own) : extractLast4(body);
   const { channel, mode, counterparty } = extractChannel(body);
   let type = detectDirection(body);
   let category = guessCategory(body);
@@ -576,6 +602,7 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
     availableLimit: extractAvailableLimit(body),
     accountType,
     last4,
+    cardLast4,
     channel,
     channelMode: mode,
     counterparty,

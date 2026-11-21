@@ -99,3 +99,20 @@ test('checkItems = pending review items that are not new-account groups', () => 
   ];
   expect(checkItems(txs).map((t) => t.reviewReason || t.id)).toEqual(['pick_account', 'x']);
 });
+
+describe('A11 debit cards in discovery', () => {
+  const dc = (o) => cap({ last4: null, cardLast4: '4821', ...o });
+  test('a debit-card group is never folded into the savings group and carries its card', () => {
+    const groups = discoverAccounts([cap(), dc(), dc()]);
+    expect(groups).toHaveLength(2);
+    expect(groups.find((g) => g.cardLast4 === '4821').count).toBe(2);
+  });
+  test('link_debit_card questions appear once per card in Check, with a count', () => {
+    const q = (o) => dc({ reviewReason: 'link_debit_card', ...o });
+    const items = checkItems([q(), q(), q({ cardLast4: '1111' })]);
+    expect(items.map((i) => [i.cardLast4, i.groupCount])).toEqual([
+      ['4821', 2],
+      ['1111', 1],
+    ]);
+  });
+});

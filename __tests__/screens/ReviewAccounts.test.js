@@ -117,3 +117,24 @@ test('Check tab lists the other review items', async () => {
   fireEvent.press(pick);
   await waitFor(async () => expect((await getAll()).find((t) => t.id === 'amb').accountId).toBe('a1'));
 });
+
+test('A11: Check tab asks "Is Debit Card ••4821 linked to Axis Bank ••0973?" once; Yes resolves all', async () => {
+  await Storage.setItem(
+    'user_wealth_accounts',
+    JSON.stringify([
+      { id: 'axis', name: 'Axis Bank ••0973', type: 'Bank Account', last4: '0973', balance: 0 },
+    ])
+  );
+  const dc = (i) => cap({ id: `dc${i}`, last4: null, cardLast4: '4821' });
+  await addMany([dc(1), dc(2), dc(3)], { balanceMode: 'captured' });
+  render(<ReviewAccountsScreen navigation={nav()} route={{ params: { tab: 'check' } }} />);
+  expect(await screen.findByText('Is Debit Card ••4821 linked to Axis Bank ••0973?')).toBeTruthy();
+  expect(screen.getAllByText(/Is Debit Card ••4821/)).toHaveLength(1);
+  expect(screen.getByText('3 transactions with this card')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: /^Yes, Debit Card ••4821/ }));
+  await waitFor(() => expect(screen.queryByText(/Is Debit Card ••4821/)).toBeNull(), { timeout: 8000 });
+  const rows = (await getAll()).filter((t) => /^dc/.test(t.id));
+  rows.forEach((t) => expect(t.accountId).toBe('axis'));
+  const [axis] = JSON.parse(await Storage.getItem('user_wealth_accounts')).filter((a) => a.id === 'axis');
+  expect(axis.debitCards).toEqual(['4821']);
+});

@@ -80,8 +80,14 @@ const walletsFor = (accounts, { provider, subType }) => {
   return byProvider.length ? byProvider : fit.filter((a) => !a.provider);
 };
 
+/** Debit-card digits a bank account is known by (A11). */
+export const debitCardsOf = (account) =>
+  Array.isArray(account?.debitCards) ? account.debitCards.map(String) : [];
+
 /**
  * { status: 'matched', account } | { status: 'ambiguous', candidates } | { status: 'none' }
+ * | { status: 'link_debit_card', candidates } - a debit-card SMS (card digits, no account digits)
+ *   from a bank the owner has accounts with, but the card is not linked to any of them yet (A11).
  */
 export const resolveAccount = (accounts, tx) => {
   const type = typeFor(tx);
@@ -91,6 +97,14 @@ export const resolveAccount = (accounts, tx) => {
   } else {
     const tokens = bankTokens(tx.bankName || tx.account);
     candidates = tokens.length ? accounts.filter((a) => a.type === type && mentions(a, tokens)) : [];
+    if (type === 'Bank Account' && !tx.last4 && tx.cardLast4) {
+      const card = String(tx.cardLast4);
+      const linked = candidates.filter((a) => debitCardsOf(a).some((d) => sameDigits(d, card)));
+      if (linked.length === 1) return { status: 'matched', account: linked[0] };
+      if (linked.length > 1) return { status: 'ambiguous', candidates: linked };
+      // A card is never silently assumed to belong to an account: ask once, then remember it
+      return candidates.length ? { status: 'link_debit_card', candidates } : { status: 'none' };
+    }
     if (tx.last4) {
       const exact = candidates.filter((a) => sameDigits(last4Of(a), String(tx.last4)));
       if (exact.length === 1) return { status: 'matched', account: exact[0] };
@@ -108,12 +122,14 @@ export const suggestedAccountFor = (tx) => {
   const type = typeFor(tx);
   const bank = tx.bankName || tx.account || 'Account';
   const label = type === 'Credit Card' && !/card/i.test(bank) ? `${bank} Credit Card` : bank;
+  const debitCard = type === 'Bank Account' && !tx.last4 && tx.cardLast4 ? String(tx.cardLast4) : null;
   return {
     name: tx.last4 ? `${label} ••${tx.last4}` : label,
     type,
     subType: type,
     bankName: tx.bankName || null,
     last4: tx.last4 || null,
+    ...(debitCard ? { debitCards: [debitCard] } : {}),
   };
 };
 
@@ -218,6 +234,13 @@ export const assignCapture = (accounts, tx, account, { newId }) => {
     acc = { ...acc, last4: String(tx.last4) }; // learn the digits on first sight
     next = withAccount(next, acc);
   }
+  // A11: a bank account learns the debit card used on it (from "A/c XX5678 … Debit Card XX9911",
+  // or when the owner confirms which account a card belongs to)
+  const card = tx.cardLast4 ? String(tx.cardLast4) : null;
+  if (card && acc.type === 'Bank Account' && !debitCardsOf(acc).some((d) => sameDigits(d, card))) {
+    acc = { ...acc, debitCards: [...debitCardsOf(acc), card] };
+    next = withAccount(next, acc);
+  }
   return linkWalletTransfer(next, resolvedFields(tx, acc), acc, { newId });
 };
 
@@ -235,6 +258,17 @@ export const resolveCapture = (accounts, tx, { newId }) => {
   else if (r.status === 'none' && typeFor(tx) === 'Wallet') {
     account = newWallet(tx, null, newId);
     next = withAccount(next, account);
+  } else if (r.status === 'link_debit_card') {
+    return {
+      accounts,
+      tx: {
+        ...tx,
+        accountUnresolved: true,
+        reviewReason: 'link_debit_card',
+        accountCandidates: r.candidates.map((a) => a.id),
+        suggestedAccount: suggestedAccountFor(tx),
+      },
+    };
   } else if (r.status === 'ambiguous') {
     return {
       accounts,
@@ -279,7 +313,14 @@ export const resolveCaptures = (accounts, txs, { newId } = {}) => {
 
 /** Same account the same way: used to resolve all similar pending captures in one tap. */
 export const captureSignature = (tx) =>
-  [typeFor(tx), lower(tx.bankName || tx.account), tx.last4 || '', lower(tx.walletProvider)].join('|');
+  [
+    typeFor(tx),
+    lower(tx.bankName || tx.account),
+    tx.last4 || '',
+    lower(tx.walletProvider),
+    // A11: debit-card captures group by card, so one "Yes" resolves that card's captures only
+    typeFor(tx) === 'Bank Account' && !tx.last4 ? tx.cardLast4 || '' : '',
+  ].join('|');
 
 /**
  * Statement import (plan A5): link UPI Lite transfer rows to the bank account being imported

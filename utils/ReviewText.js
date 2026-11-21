@@ -22,11 +22,19 @@ export const describeCapture = (tx) => {
   return `${tx.type === 'income' ? 'Received' : 'Spent'} ${amount} · ${who} · ${tx.account || '—'}`;
 };
 
+/** "Is Debit Card ••4821 linked to Axis Bank ••0973?" for a single candidate (A11). */
+export const debitCardQuestion = (tx, account) =>
+  account
+    ? `Is Debit Card ••${tx.cardLast4} linked to ${account.name}?`
+    : `Which account is Debit Card ••${tx.cardLast4} linked to?`;
+
 /** Why the row needs attention, or null. */
 export const reviewHint = (tx) => {
   switch (tx.reviewReason) {
     case 'new_account':
       return `No matching account. Create "${tx.suggestedAccount?.name || tx.bankName}" or pick one.`;
+    case 'link_debit_card':
+      return `Debit Card ••${tx.cardLast4} is not linked to an account yet.`;
     case 'pick_account':
       return 'More than one account could match. Pick the right one.';
     case 'pick_wallet':

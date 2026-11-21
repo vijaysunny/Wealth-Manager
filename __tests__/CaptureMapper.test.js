@@ -22,6 +22,7 @@ test('safe on empty input', () => {
   expect(capturedFields()).toEqual({
     accountType: null,
     last4: null,
+    cardLast4: null,
     channel: null,
     counterparty: null,
     availableLimit: null,

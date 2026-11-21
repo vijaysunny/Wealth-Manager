@@ -156,3 +156,59 @@ test('Link to existing: a group goes to the account the owner picked', async () 
   expect(sbi.balance).toBeCloseTo(2917.1 - 29388.82, 2);
   expect(computeNetWorth(await accounts()).netWorth).toBeCloseTo(26471.72, 2);
 });
+
+describe('A11: debit-card spends (synthetic samples)', () => {
+  const { parseTransactionText: parse } = require('../../utils/TransactionParser');
+  const DC = [
+    'INR 450.00 spent on Axis Bank Debit Card XX4821 at SWIGGY on 17-11-26 10:15:22. Avl Bal INR 12345.67. Not you? SMS BLOCK 4821 to 919951860002',
+    'INR 2000.00 withdrawn at ATM using Axis Bank Debit Card XX4821 on 17-11-26 18:02:11. Avl Bal INR 10345.67 - Axis Bank',
+    'Spent\nCard no. XX4821\nINR 120.00\n18-11-26 09:10:05\nCHAI POINT\nAvl Bal INR 10225.67\nSMS BLOCK 4821 to 919951860002, if not you - Axis Bank',
+  ];
+  const dcCapture = (body, i) => {
+    const p = parse(body);
+    return {
+      id: `dc${i}`,
+      smsId: `sms:DC:${i}`,
+      amount: p.amount,
+      type: p.type,
+      title: p.merchant || p.category,
+      category: p.category,
+      account: p.bankName,
+      fullDate: new Date(Date.UTC(2026, 10, 25, 0, 0, i)).toISOString(),
+      extractedBalance: p.balance,
+      ...capturedFields(p),
+    };
+  };
+
+  test('after Add all, the card asks once; "Yes" moves all 3 captures to Axis ••0973', async () => {
+    await addMany(DC.map(dcCapture), { balanceMode: 'captured' });
+    // the card is its own group while Axis savings does not exist
+    expect((await discoveredAccounts()).some((g) => g.cardLast4 === '4821')).toBe(true);
+    // add Axis savings (and the others) - the card captures turn into a link question
+    const axisGroup = (await discoveredAccounts()).find((g) => g.suggested.name === 'Axis Bank ••0973');
+    await resolveCaptureAccount(axisGroup.firstTxId, { create: true });
+    let rows = await getAll();
+    const pending = rows.filter((t) => /^dc/.test(t.id));
+    expect(pending.map((t) => t.reviewReason)).toEqual([
+      'link_debit_card',
+      'link_debit_card',
+      'link_debit_card',
+    ]);
+    const axis = await find(/Axis Bank ••0973/, 'Bank Account');
+    const before = axis.balance;
+
+    const r = await resolveCaptureAccount('dc0', { accountId: axis.id });
+    expect(r.resolved).toBe(3);
+    rows = await getAll();
+    rows.filter((t) => /^dc/.test(t.id)).forEach((t) => expect(t.accountId).toBe(axis.id));
+    const after = await find(/Axis Bank ••0973/, 'Bank Account');
+    expect(after.debitCards).toEqual(['4821']);
+    // the latest SMS balance (Avl Bal 10225.67) wins
+    expect(after.balance).not.toBe(before);
+    expect(after.balance).toBeCloseTo(10225.67, 2);
+
+    // the next spend with that card goes straight to savings
+    await addMany([dcCapture(DC[0].replace('450.00', '99.00'), 9)], { balanceMode: 'captured' });
+    expect((await getAll()).find((t) => t.id === 'dc9').accountId).toBe(axis.id);
+  });
+});

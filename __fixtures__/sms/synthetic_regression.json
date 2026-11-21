@@ -5,55 +5,167 @@
       "id": "syn-icici-debit-info-credited",
       "sender": "VK-ICICIB",
       "body": "ICICI Bank Acct XX123 debited for Rs 500.00 on 05-Jan-24; Rahul credited. UPI:401234567890. Avl Bal Rs 12,345.67",
-      "expected": { "parsed": true, "type": "expense", "amount": 500, "bank": "ICICI Bank", "balance": 12345.67, "refNo": "401234567890" }
+      "expected": {
+        "parsed": true,
+        "type": "expense",
+        "amount": 500,
+        "bank": "ICICI Bank",
+        "balance": 12345.67,
+        "refNo": "401234567890"
+      }
     },
     {
       "id": "syn-hdfc-salary-credit",
       "sender": "AD-HDFCBK",
       "body": "Rs 25,000.00 credited to your A/c XX4321 on 01-Jan-24 by ACME Salary. Avl Bal Rs 30,000.00",
-      "expected": { "parsed": true, "type": "income", "amount": 25000, "category": "Salary", "bank": "HDFC Bank", "balance": 30000, "last4": "4321" }
+      "expected": {
+        "parsed": true,
+        "type": "income",
+        "amount": 25000,
+        "category": "Salary",
+        "bank": "HDFC Bank",
+        "balance": 30000,
+        "last4": "4321"
+      }
     },
     {
       "id": "syn-hdfc-upi-sent",
       "sender": "",
       "body": "Sent Rs.250.00 From HDFC Bank A/C *1234 To SWIGGY On 02/01/24 Ref 401",
-      "expected": { "parsed": true, "type": "expense", "amount": 250, "bank": "HDFC Bank", "last4": "1234" }
+      "expected": {
+        "parsed": true,
+        "type": "expense",
+        "amount": 250,
+        "bank": "HDFC Bank",
+        "last4": "1234"
+      }
     },
     {
       "id": "syn-upi-received",
       "sender": "",
       "body": "Received Rs.700.00 in your A/c from Amit via UPI",
-      "expected": { "parsed": true, "type": "income", "amount": 700 }
+      "expected": {
+        "parsed": true,
+        "type": "income",
+        "amount": 700
+      }
     },
     {
       "id": "syn-due-to-wording",
       "sender": "",
       "body": "Due to a revision, Rs 99 debited from A/c XX11 for NETFLIX",
-      "expected": { "parsed": true, "amount": 99, "type": "expense" }
+      "expected": {
+        "parsed": true,
+        "amount": 99,
+        "type": "expense"
+      }
     },
     {
       "id": "neg-otp",
       "sender": "",
       "body": "123456 is your OTP for txn of Rs 500. Do not share.",
-      "expected": { "parsed": false }
+      "expected": {
+        "parsed": false
+      }
     },
     {
       "id": "neg-will-be-debited",
       "sender": "",
       "body": "Rs 5,000 will be debited from your a/c on 05-Jan for EMI",
-      "expected": { "parsed": false }
+      "expected": {
+        "parsed": false
+      }
     },
     {
       "id": "neg-failed",
       "sender": "",
       "body": "Payment of Rs 800 failed. Please retry.",
-      "expected": { "parsed": false }
+      "expected": {
+        "parsed": false
+      }
     },
     {
       "id": "neg-cc-payment-due",
       "sender": "",
       "body": "Your credit card bill of Rs 4,500 payment due on 10-Jan",
-      "expected": { "parsed": false }
+      "expected": {
+        "parsed": false
+      }
+    },
+    {
+      "id": "axis-debitcard-spend-01",
+      "sender": "",
+      "_note": "SYNTHETIC A11 debit-card sample (Phase 12). Replace with the owner's real debit-card SMS before marking A11 done.",
+      "body": "INR 450.00 spent on Axis Bank Debit Card XX4821 at SWIGGY on 17-11-26 10:15:22. Avl Bal INR 12345.67. Not you? SMS BLOCK 4821 to 919951860002",
+      "expected": {
+        "type": "expense",
+        "amount": 450,
+        "accountType": "Bank Account",
+        "bank": "Axis Bank",
+        "cardLast4": "4821",
+        "last4": null,
+        "balance": 12345.67,
+        "category": "Food"
+      }
+    },
+    {
+      "id": "axis-debitcard-atm-01",
+      "sender": "",
+      "_note": "SYNTHETIC A11 debit-card sample (Phase 12). Replace with the owner's real debit-card SMS before marking A11 done.",
+      "body": "INR 2000.00 withdrawn at ATM using Axis Bank Debit Card XX4821 on 17-11-26 18:02:11. Avl Bal INR 10345.67 - Axis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 2000,
+        "accountType": "Bank Account",
+        "bank": "Axis Bank",
+        "cardLast4": "4821",
+        "last4": null,
+        "balance": 10345.67,
+        "category": "Cash"
+      }
+    },
+    {
+      "id": "axis-card-no-avlbal-01",
+      "sender": "",
+      "_note": "SYNTHETIC A11 debit-card sample (Phase 12). Replace with the owner's real debit-card SMS before marking A11 done.",
+      "body": "Spent\nCard no. XX4821\nINR 120.00\n18-11-26 09:10:05\nCHAI POINT\nAvl Bal INR 10225.67\nSMS BLOCK 4821 to 919951860002, if not you - Axis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 120,
+        "accountType": "Bank Account",
+        "bank": "Axis Bank",
+        "cardLast4": "4821",
+        "last4": null,
+        "balance": 10225.67
+      }
+    },
+    {
+      "id": "axis-card-no-avllmt-01",
+      "sender": "",
+      "_note": "SYNTHETIC A11 debit-card sample (Phase 12). Replace with the owner's real debit-card SMS before marking A11 done.",
+      "body": "Spent\nCard no. XX9070\nINR 120.00\n18-11-26 09:10:05\nCHAI POINT\nAvl Lmt INR 275000.00\nSMS BLOCK 9070 to 919951860002, if not you - Axis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 120,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070"
+      }
+    },
+    {
+      "id": "sbi-ac-and-debitcard-01",
+      "sender": "",
+      "_note": "SYNTHETIC A11 debit-card sample (Phase 12). Replace with the owner's real debit-card SMS before marking A11 done.",
+      "body": "Your A/c XX5678 is debited for Rs.350.00 using SBI Debit Card XX9911 at DMART on 18Nov26. Avl Bal Rs.8,000.00 -SBI",
+      "expected": {
+        "type": "expense",
+        "amount": 350,
+        "accountType": "Bank Account",
+        "bank": "SBI",
+        "last4": "5678",
+        "cardLast4": "9911",
+        "balance": 8000
+      }
     }
   ]
 }
