@@ -56,6 +56,20 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 | W6 | Revoke notification permission | Red banner on Home; SMS capture still saves | PENDING | |
 | W7 | No backup for 30+ days | Banner on Home; tapping opens Settings | PENDING | |
 
+## Phase 12 Part A checks (pending until the owner confirms on the phone; Android dark mode ON)
+
+| # | Scenario | Expected | Result | Notes |
+|---|---|---|---|---|
+| P1 | Fresh install of the APK with the phone in dark mode (A1) | Every screen's text is readable (Security, Budget headings, Goals help, Edit amount, AI switch labels, AI screen) | PENDING | App is pinned to light until dark mode returns in Part C |
+| P2 | Settings → Read bank SMS automatically (A8) | Red banner with the restricted-settings steps; Open App info → ⋮ → Allow restricted settings → allow SMS; back in the app the switch is on | PENDING | |
+| P3 | Real Axis debit SMS arrives (A8) | Appears within seconds on Axis ••0973 with a notification | PENDING | |
+| P4 | Scan old SMS → Home card → Review accounts → Add all (A2) | Axis ••0973, Axis Card ••9070, SBI Card ••1987 (and Equitas ••1246) added; Accounts lists them; no capture left waiting | PENDING | |
+| P5 | UPI Lite top-up SMS without "A/c" (A5) | UPI Lite +500 and Axis −500 | PENDING | |
+| P6 | Axis card bill paid from the bank (A4) | Not counted in Spent; shows as a transfer; pairs with the card's "payment received" SMS | PENDING | |
+| P7 | Debit-card spend (A11) | Review asks "Is Debit Card ••xxxx linked to Axis Bank ••0973?"; Yes moves it and later spends go straight there | PENDING | **Needs the owner's real debit-card SMS**: the fixtures are synthetic |
+| P8 | Gemini: Save key (A9) | Test runs automatically → "Working · <model>"; "Turn on AI now?" asked once; Ask a question gets a reply | PENDING | |
+| P9 | Buttons in Settings → Security, AI panel, AI screen (A10) | Normal-case, spaced, nothing touching, ≥44px | PENDING | |
+
 ## Failures found
 
 (none recorded yet)
