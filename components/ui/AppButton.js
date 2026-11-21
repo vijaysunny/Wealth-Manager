@@ -6,7 +6,7 @@ import React from 'react';
 import { Pressable, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../Theme';
-import { tokens, radius, space } from '../tokens';
+import { tokens, radius, space, fonts } from '../tokens';
 
 const HEIGHT = { lg: 52, md: 44, sm: 36 };
 const FONT = { lg: 16, md: 15, sm: 14 };
@@ -91,5 +91,5 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   icon: { marginRight: space.sm },
-  label: { fontWeight: '600', textAlign: 'center' },
+  label: { fontFamily: fonts.semibold, textAlign: 'center' },
 });

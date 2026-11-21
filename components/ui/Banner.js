@@ -6,7 +6,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTokens } from '../Theme';
-import { radius, space } from '../tokens';
+import { radius, space, fonts } from '../tokens';
 import AppButton from './AppButton';
 
 const TONES = {
@@ -37,9 +37,15 @@ export default function Banner({ tone = 'info', title, body, action, testID, sty
       <View style={{ flexDirection: 'row' }}>
         <Ionicons name={c.icon} size={22} color={t[c.fg]} style={{ marginRight: space.md, marginTop: 1 }} />
         <View style={{ flex: 1 }}>
-          {title ? <Text style={{ color: t[c.fg], fontSize: 17, fontWeight: '700' }}>{title}</Text> : null}
+          {title ? (
+            <Text style={{ color: t[c.fg], fontSize: 17, fontFamily: fonts.semibold }}>{title}</Text>
+          ) : null}
           {body ? (
-            <Text style={{ color: t[c.fg], fontSize: 15, lineHeight: 21, marginTop: 2 }}>{body}</Text>
+            <Text
+              style={{ color: t[c.fg], fontSize: 15, lineHeight: 21, marginTop: 2, fontFamily: fonts.body }}
+            >
+              {body}
+            </Text>
           ) : null}
         </View>
       </View>

@@ -2,7 +2,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useTokens } from '../Theme';
-import { radius, space } from '../tokens';
+import { radius, space, fonts } from '../tokens';
 
 export default function Segmented({ options, value, onChange, style }) {
   const t = useTokens();
@@ -33,7 +33,11 @@ export default function Segmented({ options, value, onChange, style }) {
             }}
           >
             <Text
-              style={{ color: selected ? (o.color ?? t.text) : t.muted, fontWeight: '600', fontSize: 15 }}
+              style={{
+                color: selected ? (o.color ?? t.text) : t.muted,
+                fontFamily: fonts.semibold,
+                fontSize: 15,
+              }}
             >
               {o.label}
             </Text>
