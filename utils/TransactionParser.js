@@ -354,6 +354,15 @@ const REF_LABELLED_RE =
   /(?:\bupi(?:\s*ref(?:erence)?)?|\bref(?:erence)?(?:\s*(?:no|number|num|id))?|\brrn|\butr|\btxn\s*(?:id|no)|\btransaction\s*(?:id|no))\s*[:.#\-/]*\s*([A-Za-z]*\d{6,40})/i;
 // Slash narration used by Axis and others: "IMPS/P2A/632013023016/baja", "UPI/P2M/630969451444/GROWW INVEST TECH P"
 const CHANNEL_SLASH_RE = /\b(IMPS|UPI|NEFT|RTGS)\/(?:(P2A|P2M|P2P)\/)?([A-Za-z]*\d{6,40})\/([^\n/]{1,60})/i;
+// A6: the slash narration runs into the bank's trailer ("C DA.View bal: https:", "BAJA. Chk Bal").
+const SLASH_PAYEE_STOP_RE = /\.?\s*(?:view\s*bal|chk\s*bal|check\s*bal|https?:|not\s*you)|\s+-\s+/i;
+/** Counterparty from a slash narration, cut at the trailer and trimmed of punctuation. */
+export const cleanSlashPayee = (raw = '') => {
+  let v = String(raw);
+  const stop = v.search(SLASH_PAYEE_STOP_RE);
+  if (stop >= 0) v = v.slice(0, stop);
+  return v.replace(/^[\s.,:;-]+|[\s.,:;/-]+$/g, '') || null;
+};
 // A bare 12-digit number right after "+", "to " or "call" is a phone number (helpline / "SMS BLOCK ... to 91..."), not a ref
 const PHONE_BEFORE_RE = /(?:\+|\bto\s*\+?|\bcall\s*:?\s*\+?)$/i;
 export const extractRefNo = (text = '') => {
@@ -381,7 +390,7 @@ export const extractChannel = (text = '') => {
     return {
       channel: slash[1].toUpperCase(),
       mode: slash[2]?.toUpperCase() || null,
-      counterparty: slash[4].trim(),
+      counterparty: cleanSlashPayee(slash[4]),
     };
   const named =
     s.match(/\bvia\s+(UPI|IMPS|NEFT|RTGS|BBPS|NACH)\b/i) || s.match(/\b(IMPS|NEFT|RTGS|BBPS|NACH|UPI)\b/i);
@@ -458,7 +467,7 @@ export const extractMerchant = (text = '') => {
   const s = String(text);
   const vpa = s.match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
   const slash = s.match(CHANNEL_SLASH_RE);
-  let merchant = slash ? slash[4].trim() : null;
+  let merchant = slash ? cleanSlashPayee(slash[4]) : null;
   if (!merchant) {
     const candidate = s.match(MERCHANT_RE)?.[1]?.trim();
     if (candidate && !NOT_MERCHANT_RE.test(candidate)) merchant = candidate;

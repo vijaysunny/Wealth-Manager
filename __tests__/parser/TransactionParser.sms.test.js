@@ -23,9 +23,6 @@ const KNOWN_FAILING = new Set([
   'axis-cc-spend-adyar-01.category',
   // A7: card limit-change notice is not a transaction
   'sbi-cc-limit-reset-01.parsed',
-  // A6: counterparty runs into "View bal"/"Chk Bal" links
-  'axis-neft-credit-01.counterparty',
-  'axis-neft-credit-baja-01.counterparty',
   // A7: ACH-DR-<name> payee
   'axis-ach-bajaj-01.merchant',
   'axis-ach-bajaj-02.merchant',

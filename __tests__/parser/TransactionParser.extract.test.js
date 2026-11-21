@@ -170,3 +170,18 @@ describe('bank and account type come from the account side, not the payee', () =
     expect(ownAccountText('the same has been credited to your SBI Credit Card.')).toMatch(/SBI Credit Card/);
   });
 });
+
+describe('A6: cleanSlashPayee', () => {
+  const { cleanSlashPayee } = require('../../utils/TransactionParser');
+  test.each([
+    ['C DA.View bal: https:', 'C DA'],
+    ['BAJA. Chk Bal https:', 'BAJA'],
+    ['Kavya', 'Kavya'],
+    ['GROWW INVEST TECH P', 'GROWW INVEST TECH P'],
+    ['Amazon Pay Credit C', 'Amazon Pay Credit C'],
+    ['Paym - Axis Bank', 'Paym'],
+    ['SHOP Not you? SMS', 'SHOP'],
+    ['  NAME. ', 'NAME'],
+    ['.View bal', null],
+  ])('%j → %j', (raw, want) => expect(cleanSlashPayee(raw)).toBe(want));
+});
