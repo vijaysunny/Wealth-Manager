@@ -6,7 +6,7 @@ import React from 'react';
 import { Pressable, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../Theme';
-import { tokens, radius, space, fonts } from '../tokens';
+import { tokens, radius, space, fonts, luminance } from '../tokens';
 
 const HEIGHT = { lg: 52, md: 44, sm: 36 };
 const FONT = { lg: 16, md: 15, sm: 14 };
@@ -19,6 +19,12 @@ export const buttonColors = (variant, t) => {
       return { bg: t.card, pressed: t.primarySoft, border: t.primary, fg: t.primary, dashed: true };
     case 'danger':
       return { bg: t.dangerBg, pressed: t.dangerBorder, border: t.dangerBorder, fg: t.dangerText };
+    case 'ink':
+      // Dark bulk action (design: "Add all N accounts"). On a dark background ink would vanish,
+      // so dark mode uses primary.
+      return luminance(t.bg) < 0.2
+        ? { bg: t.primary, pressed: t.primaryPressed, border: t.primary, fg: t.onPrimary }
+        : { bg: t.ink, pressed: t.inkCard, border: t.ink, fg: '#FFFFFF' };
     case 'dangerSolid':
       return { bg: t.danger, pressed: t.dangerText, border: t.danger, fg: t.onPrimary };
     default:

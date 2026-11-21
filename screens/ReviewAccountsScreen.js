@@ -5,7 +5,7 @@
  * "Check": the other review items (pick account, pick wallet, possible self-transfer …).
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +21,8 @@ import { discoverAccounts, checkItems } from '../utils/AccountDiscovery';
 import { describeCapture, reviewHint, debitCardQuestion } from '../utils/ReviewText';
 import { formatMoney } from '../utils/Format';
 import { useTokens } from '../components/Theme';
-import { radius, space } from '../components/tokens';
+import { fonts, radius, space } from '../components/tokens';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import AppButton from '../components/ui/AppButton';
 import Card from '../components/ui/Card';
 import Segmented from '../components/ui/Segmented';
@@ -93,12 +94,16 @@ export default function ReviewAccountsScreen({ navigation, route }) {
             {isCard ? (
               <Ionicons name="card-outline" size={22} color={t.primary} />
             ) : (
-              <Text style={{ color: t.dangerText, fontWeight: '700' }}>{initials(g.suggested.name)}</Text>
+              <Text style={{ color: t.dangerText, fontFamily: fonts.bold }}>
+                {initials(g.suggested.name)}
+              </Text>
             )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.groupName, { color: t.text }]}>{g.suggested.name}</Text>
-            <Text style={{ color: t.muted, fontSize: 14 }}>{groupSubtitle(g)}</Text>
+            <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 14, marginTop: 2 }}>
+              {groupSubtitle(g)}
+            </Text>
           </View>
         </View>
         <View style={styles.buttons}>
@@ -136,7 +141,9 @@ export default function ReviewAccountsScreen({ navigation, route }) {
       });
     return (
       <View style={{ marginTop: space.sm }}>
-        <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>{debitCardQuestion(tx, only)}</Text>
+        <Text style={{ color: t.text, fontSize: 15, fontFamily: fonts.semibold }}>
+          {debitCardQuestion(tx, only)}
+        </Text>
         {tx.groupCount > 1 && (
           <Text style={{ color: t.muted, marginTop: 2 }}>{tx.groupCount} transactions with this card</Text>
         )}
@@ -175,7 +182,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
 
   const renderCheck = ({ item: tx }) => (
     <Card>
-      <Text style={{ color: t.text, fontWeight: '600', fontSize: 15 }}>{describeCapture(tx)}</Text>
+      <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 15 }}>{describeCapture(tx)}</Text>
       <Text style={{ color: t.muted, marginTop: 2 }}>
         {tx.category} · {tx.date || String(tx.fullDate || '').slice(0, 10)}
       </Text>
@@ -248,17 +255,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={() => navigation.goBack()}
-          style={styles.iconBtn}
-        >
-          <Ionicons name="chevron-back" size={24} color={t.text} />
-        </Pressable>
-        <Text style={[styles.title, { color: t.text }]}>Review</Text>
-      </View>
+      <ScreenHeader title="Review" onBack={() => navigation.goBack()} />
       <Text style={[styles.intro, { color: t.text2 }]}>
         We read these accounts from your bank SMS. Add each one once and every matching transaction moves to
         it.
@@ -302,6 +299,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
           <AppButton
             title={`Add all ${groups.length} account${groups.length === 1 ? '' : 's'}`}
             size="lg"
+            variant="ink"
             loading={busy}
             onPress={() => run(() => addAllDiscoveredAccounts())}
           />
@@ -357,10 +355,13 @@ export default function ReviewAccountsScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, paddingTop: space.sm },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '700', marginLeft: space.xs },
-  intro: { fontSize: 15, lineHeight: 21, paddingHorizontal: space.xl, marginVertical: space.md },
+  intro: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    lineHeight: 22,
+    paddingHorizontal: space.xl,
+    marginVertical: space.md,
+  },
   list: { paddingHorizontal: space.xl, paddingBottom: 120 },
   groupHead: { flexDirection: 'row', alignItems: 'center', marginBottom: space.md },
   badge: {
@@ -371,7 +372,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: space.md,
   },
-  groupName: { fontSize: 17, fontWeight: '700' },
+  groupName: { fontFamily: fonts.semibold, fontSize: 17 },
   buttons: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', marginTop: space.sm },
   footer: {

@@ -175,3 +175,9 @@ test('TabBar: 5 labelled tabs, active one selected, press navigates', () => {
   fireEvent.press(screen.getByRole('tab', { name: 'Home' }));
   expect(navigation.navigate).toHaveBeenCalledTimes(1);
 });
+
+test('ink button: dark on light, primary on dark (stays visible)', () => {
+  const { buttonColors } = require('../../components/ui/AppButton');
+  expect(buttonColors('ink', tokens.light).bg).toBe(tokens.light.ink);
+  expect(buttonColors('ink', tokens.dark).bg).toBe(tokens.dark.primary);
+});
