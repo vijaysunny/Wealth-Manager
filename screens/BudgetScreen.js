@@ -1,541 +1,405 @@
-import { Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView } from '../components/Theme';
-import { getMonthlyBudget, saveMonthlyBudget } from '../utils/MonthlyBudgets';
-import { getAll } from '../data/TransactionRepo';
-import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, Alert, Switch } from 'react-native';
-import AsyncStorage from '../data/Storage';
-import { Ionicons } from '@expo/vector-icons';
+/**
+ * Budget (Phase 12 C5.6, docs/design/Budget.png).
+ * Month pill · card: spent of monthly budget, budget input + Set, "Carry unused budget
+ * forward" switch with the leftover · By category: amount, limit or "Set limit", progress
+ * bar (over 90 % warn, over 100 % danger); tapping a row opens a limit sheet.
+ */
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { isReportable } from '../utils/BalanceService';
-import { parseAmount, shiftMonth, isSameMonth, safePercent, formatMoney } from '../utils/Format';
-const Chip = ({ label, selected, onPress }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    style={[
-      styles.chip,
-      selected && {
-        backgroundColor: '#333',
-        borderColor: '#333',
-      },
-    ]}
-  >
-    <Text
-      style={[
-        styles.chipText,
-        selected && {
-          color: '#fff',
-        },
-      ]}
-    >
-      {label}
-    </Text>
-  </TouchableOpacity>
-);
+import Storage from '../data/Storage';
+import { getAll } from '../data/TransactionRepo';
+import { getMonthlyBudget, saveMonthlyBudget } from '../utils/MonthlyBudgets';
+import { parseAmount, shiftMonth, formatMoney } from '../utils/Format';
+import { monthSpending, categoryRows, previousMonthName } from '../utils/BudgetView';
+import { useTokens } from '../components/Theme';
+import { fonts, radius, space } from '../components/tokens';
+import { AppButton, AppSwitch, IconButton, OptionSheet } from '../components/ui';
+
+const DEFAULT_CATS = ['Food', 'Transport', 'Shopping', 'Bills', 'Health'];
+const BAR_COLORS = ['#5B3CC4', '#A35200', '#1B3F8F', '#97212E', '#0E7C4A', '#1F6FD8'];
+
 export default function BudgetScreen({ navigation }) {
+  const t = useTokens();
   const isFocused = useIsFocused();
-
-  // Date State for History
-  const [selectedDate, setSelectedDate] = useState(new Date());
-
-  // Budget State
+  const [month, setMonth] = useState(new Date());
+  const [budgetText, setBudgetText] = useState('');
+  const [limit, setLimit] = useState(0);
   const [rollover, setRollover] = useState(false);
   const [carry, setCarry] = useState(0);
-  const [overallBudget, setOverallBudget] = useState('');
-  const [overallSpent, setOverallSpent] = useState(0);
-  const [catBudgets, setCatBudgets] = useState({});
-  const [catSpent, setCatSpent] = useState({});
+  const [spent, setSpent] = useState(0);
+  const [byCategory, setByCategory] = useState({});
+  const [limits, setLimits] = useState({});
+  const [categories, setCategories] = useState(DEFAULT_CATS);
+  const [editing, setEditing] = useState(null); // { name, text }
+  const [picking, setPicking] = useState(false);
 
-  // UI State
-  const [availableCats, setAvailableCats] = useState([]);
-  const [selectedCat, setSelectedCat] = useState('');
-  const [newCatAmount, setNewCatAmount] = useState('');
-  // Reload when date changes
-
-  const changeMonth = (direction) => {
-    setSelectedDate(shiftMonth(selectedDate, direction));
-  };
-  // ... (Keep saveOverallBudget, saveCategoryBudget, deleteCategoryBudget, renderProgressBar same as before) ...
-  // [Paste those helper functions here from previous code]
-  const saveOverallBudget = async () => {
-    if (String(overallBudget).trim() === '') {
-      await saveMonthlyBudget(selectedDate, {
-        limit: 0,
-      }); // empty = no budget set
-      return;
-    }
-    const v = parseAmount(overallBudget);
-    if (v === null) {
-      Alert.alert('Error', 'Enter a valid budget amount greater than 0');
-      return;
-    }
-    await saveMonthlyBudget(selectedDate, {
-      limit: v,
-      rollover,
-    });
-    setOverallBudget(String(v));
-    Alert.alert('Success', 'Budget Set!');
-  };
-  const saveCategoryBudget = async () => {
-    const v = parseAmount(newCatAmount);
-    if (!selectedCat || v === null) {
-      Alert.alert('Error', 'Select a category and enter a valid amount');
-      return;
-    }
-    const newBudgets = {
-      ...catBudgets,
-      [selectedCat]: v,
-    };
-    setCatBudgets(newBudgets);
-    await saveMonthlyBudget(selectedDate, {
-      categories: newBudgets,
-    });
-    setNewCatAmount('');
-    setSelectedCat('');
-  };
-  const deleteCategoryBudget = async (category) => {
-    const newBudgets = {
-      ...catBudgets,
-    };
-    delete newBudgets[category];
-    setCatBudgets(newBudgets);
-    await AsyncStorage.setItem('user_category_budgets', JSON.stringify(newBudgets));
-  };
-  const renderProgressBar = (spent, limit, color = '#2196F3') => {
-    const ratio = safePercent(spent, limit);
-    const percent = Math.min(ratio, 1);
-    const isDanger = limit > 0 && spent > limit;
-    const finalColor = isDanger ? '#F44336' : percent > 0.85 ? '#FF9800' : color;
-    return (
-      <View style={styles.progressBarBg}>
-        <View
-          style={[
-            styles.progressBarFill,
-            {
-              width: `${percent * 100}%`,
-              backgroundColor: finalColor,
-            },
-          ]}
-        />
-      </View>
-    );
-  };
-  const masterCategoryList = Array.from(
-    new Set([...availableCats, ...Object.keys(catBudgets), ...Object.keys(catSpent)])
-  ).sort();
-  const loadData = useCallback(async () => {
-    const savedCategories = await AsyncStorage.getItem('user_categories');
-    const txJson = JSON.stringify(await getAll());
-    const transactions = txJson ? JSON.parse(txJson) : [];
-    let baseCategories = savedCategories
-      ? JSON.parse(savedCategories)
-      : ['Food', 'Transport', 'Shopping', 'Bills', 'Health'];
-    const monthly = await getMonthlyBudget(selectedDate, transactions);
-    setOverallBudget(String(monthly.limit || ''));
-    setCatBudgets(monthly.categories || {});
+  const load = useCallback(async () => {
+    const txs = await getAll();
+    const monthly = await getMonthlyBudget(month, txs);
+    setLimit(monthly.limit || 0);
+    setBudgetText(monthly.limit ? String(monthly.limit) : '');
+    setLimits(monthly.categories || {});
     setRollover(!!monthly.rollover);
     setCarry(monthly.carry || 0);
-
-    // FILTER BY SELECTED MONTH
-    const targetMonth = selectedDate.getMonth();
-    const targetYear = selectedDate.getFullYear();
-    let total = 0;
-    let catTotals = {};
-    let foundInTransactions = new Set();
-    transactions.forEach((t) => {
-      const d = new Date(t.fullDate || t.date);
-
-      // Calculate Spend for Selected Month (excluded transactions don't count)
-      if (
-        isReportable(t) &&
-        t.type === 'expense' &&
-        d.getMonth() === targetMonth &&
-        d.getFullYear() === targetYear
-      ) {
-        total += t.amount;
-        catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
-      }
-      if (t.category) foundInTransactions.add(t.category);
-    });
-    setOverallSpent(total);
-    setCatSpent(catTotals);
-    const finalCatList = Array.from(new Set([...baseCategories, ...foundInTransactions])).sort();
-    setAvailableCats(finalCatList);
-  }, [selectedDate]);
+    const s = monthSpending(txs, month);
+    setSpent(s.total);
+    setByCategory(s.byCategory);
+    const saved = JSON.parse((await Storage.getItem('user_categories')) || 'null') || DEFAULT_CATS;
+    setCategories([...new Set([...saved, ...txs.map((x) => x.category).filter(Boolean)])].sort());
+  }, [month]);
   useEffect(() => {
-    if (isFocused) loadData();
-  }, [isFocused, loadData]);
+    if (isFocused) load().catch((e) => Alert.alert('Load error', e.message));
+  }, [isFocused, load]);
+
+  const saveBudget = async () => {
+    if (budgetText.trim() === '') {
+      await saveMonthlyBudget(month, { limit: 0 });
+      return load();
+    }
+    const v = parseAmount(budgetText);
+    if (v === null) {
+      Alert.alert('Budget', 'Enter an amount greater than 0.');
+      return;
+    }
+    await saveMonthlyBudget(month, { limit: v, rollover });
+    await load();
+  };
+
+  const saveLimit = async (name, text) => {
+    const next = { ...limits };
+    if (String(text).trim() === '') delete next[name];
+    else {
+      const v = parseAmount(text);
+      if (v === null) {
+        Alert.alert('Limit', 'Enter an amount greater than 0, or leave it empty to remove the limit.');
+        return;
+      }
+      next[name] = v;
+    }
+    await saveMonthlyBudget(month, { categories: next });
+    setEditing(null);
+    await load();
+  };
+
+  const rows = categoryRows(byCategory, limits);
+  const total = limit > 0 ? limit + (rollover ? carry : 0) : 0;
+  const isNow =
+    month.getFullYear() === new Date().getFullYear() && month.getMonth() === new Date().getMonth();
+  const statusColor = (s, i) =>
+    s === 'over' ? t.expense : s === 'warn' ? '#B26A00' : BAR_COLORS[i % BAR_COLORS.length];
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Budget Planner</Text>
-        {/* Analytics Button */}
-        <TouchableOpacity onPress={() => navigation.navigate('Analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#2196F3" />
-        </TouchableOpacity>
-      </View>
-
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: t.bg }}>
       <ScrollView
-        contentContainerStyle={{
-          padding: 20,
-          paddingBottom: 50,
-        }}
+        contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: space.xxl }}
+        keyboardShouldPersistTaps="handled"
       >
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
+        <View style={styles.header}>
           <Text
-            style={{
-              flex: 1,
-            }}
+            accessibilityRole="header"
+            style={{ flex: 1, color: t.text, fontFamily: fonts.display, fontSize: 30 }}
           >
-            Roll unused overall budget forward
+            Budget
           </Text>
-          <Switch
-            value={rollover}
-            onValueChange={async (value) => {
-              await saveMonthlyBudget(selectedDate, {
-                rollover: value,
-              });
-              setRollover(value);
-              await loadData();
-            }}
-          />
-        </View>
-        <Text>Rollover available: {formatMoney(carry)}</Text>
-        {/* MONTH SELECTOR */}
-        <View style={styles.monthSelector}>
-          <TouchableOpacity onPress={() => changeMonth(-1)}>
-            <Ionicons name="chevron-back" size={24} color="#555" />
-          </TouchableOpacity>
-          <Text style={styles.monthText}>
-            {selectedDate.toLocaleDateString('en-IN', {
-              month: 'long',
-              year: 'numeric',
-            })}
-          </Text>
-          <TouchableOpacity onPress={() => changeMonth(1)}>
-            <Ionicons name="chevron-forward" size={24} color="#555" />
-          </TouchableOpacity>
-        </View>
-
-        {/* 1. OVERALL BUDGET */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>MONTHLY LIMIT</Text>
-          <View style={styles.inputRow}>
-            <Text style={styles.currency}>₹</Text>
-            <TextInput
-              style={styles.mainInput}
-              value={overallBudget}
-              onChangeText={setOverallBudget}
-              onEndEditing={saveOverallBudget}
-              keyboardType="numeric"
-              placeholder="Total Limit"
+          <View style={[styles.pill, { backgroundColor: t.card, borderColor: t.border }]}>
+            <IconButton
+              icon="chevron-back"
+              label="Previous month"
+              onPress={() => setMonth(shiftMonth(month, -1))}
+            />
+            <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+              {month.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+            </Text>
+            <IconButton
+              icon="chevron-forward"
+              label="Next month"
+              color={isNow ? t.border : t.text}
+              onPress={() => !isNow && setMonth(shiftMonth(month, 1))}
             />
           </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: t.card, borderColor: t.border }]}>
+          <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 15 }}>
+            Spent of monthly budget
+          </Text>
           <View
-            style={{
-              marginTop: 15,
-            }}
+            style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginTop: space.xs }}
           >
-            <View
+            <Text
+              testID="budget-spent"
               style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                marginBottom: 5,
+                color: total && spent > total ? t.expense : t.text,
+                fontFamily: fonts.display,
+                fontSize: 34,
               }}
             >
-              <Text
-                style={{
-                  color: '#666',
-                }}
-              >
-                Spent: {formatMoney(overallSpent)}
-              </Text>
-              <Text
-                style={{
-                  fontWeight: 'bold',
-                }}
-              >
-                {Math.round(safePercent(overallSpent, (parseAmount(overallBudget) || 0) + carry) * 100)}%
-              </Text>
+              {formatMoney(Math.round(spent))}
+            </Text>
+            <Text style={{ color: t.muted, fontFamily: fonts.medium, fontSize: 18, marginLeft: space.sm }}>
+              / {total ? formatMoney(Math.round(total)) : 'no budget'}
+            </Text>
+          </View>
+          {total ? (
+            <View style={[styles.track, { backgroundColor: t.divider, marginTop: space.md }]}>
+              <View
+                style={[
+                  styles.fill,
+                  {
+                    width: `${Math.min(100, (spent / total) * 100)}%`,
+                    backgroundColor: spent > total ? t.expense : spent / total > 0.9 ? '#B26A00' : t.primary,
+                  },
+                ]}
+              />
             </View>
-            {parseAmount(overallBudget) ? (
-              renderProgressBar(overallSpent, (parseAmount(overallBudget) || 0) + carry, '#4CAF50')
-            ) : (
+          ) : null}
+          <Text
+            style={{
+              color: t.text2,
+              fontFamily: fonts.semibold,
+              fontSize: 15,
+              marginTop: space.lg,
+              marginBottom: space.sm,
+            }}
+          >
+            Monthly budget
+          </Text>
+          <View style={{ flexDirection: 'row', gap: space.sm }}>
+            <View style={[styles.input, { borderColor: t.inputBorder }]}>
               <Text
-                style={{
-                  color: '#999',
-                  fontSize: 12,
-                }}
+                style={{ color: t.muted, fontFamily: fonts.semibold, fontSize: 17, marginRight: space.sm }}
               >
-                No budget set
+                ₹
               </Text>
-            )}
+              <TextInput
+                testID="budget-input"
+                accessibilityLabel="Monthly budget"
+                value={budgetText}
+                onChangeText={setBudgetText}
+                keyboardType="numeric"
+                placeholder="e.g. 40,000"
+                placeholderTextColor={t.placeholder}
+                style={{ flex: 1, color: t.text, fontFamily: fonts.body, fontSize: 17 }}
+              />
+            </View>
+            <AppButton
+              title="Set"
+              size="lg"
+              style={{ marginVertical: 0, paddingHorizontal: space.xl }}
+              onPress={saveBudget}
+            />
+          </View>
+          <View style={{ borderTopWidth: 1, borderColor: t.divider, marginTop: space.lg }}>
+            <AppSwitch
+              label="Carry unused budget forward"
+              sublabel={`Leftover from ${previousMonthName(month)}: ${formatMoney(Math.round(carry))}`}
+              value={rollover}
+              onValueChange={async (v) => {
+                setRollover(v);
+                await saveMonthlyBudget(month, { rollover: v });
+                await load();
+              }}
+            />
           </View>
         </View>
 
-        {/* 2. ADD CATEGORY (Only show if viewing Current Month) */}
-        {isSameMonth(selectedDate, new Date()) && (
-          <>
-            <Text style={styles.heading}>Set Category Limit</Text>
-            <View style={styles.addSection}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{
-                  marginBottom: 10,
-                }}
+        <View style={styles.catHead}>
+          <Text
+            accessibilityRole="header"
+            style={{ color: t.text, fontFamily: fonts.displaySemi, fontSize: 20 }}
+          >
+            By category
+          </Text>
+          <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 14 }}>
+            Tap a row to set a limit
+          </Text>
+        </View>
+        <View style={[styles.card, { backgroundColor: t.card, borderColor: t.border, paddingVertical: 0 }]}>
+          {rows.length === 0 ? (
+            <Text style={{ color: t.muted, fontFamily: fonts.body, paddingVertical: space.lg }}>
+              No spending this month.
+            </Text>
+          ) : (
+            rows.map((r, i) => (
+              <Pressable
+                key={r.name}
+                testID={`cat-${r.name}`}
+                accessibilityRole="button"
+                accessibilityLabel={`${r.name}, ${formatMoney(Math.round(r.spent))}${r.limit ? ` of ${formatMoney(r.limit)}` : ', no limit'}. Set limit`}
+                onPress={() => setEditing({ name: r.name, text: r.limit ? String(r.limit) : '' })}
+                style={({ pressed }) => [
+                  styles.catRow,
+                  {
+                    borderColor: t.divider,
+                    borderBottomWidth: i < rows.length - 1 ? 1 : 0,
+                    opacity: pressed ? 0.6 : 1,
+                  },
+                ]}
               >
-                {availableCats.map((cat) => (
-                  <Chip
-                    key={cat}
-                    label={cat}
-                    selected={selectedCat === cat}
-                    onPress={() => setSelectedCat(cat)}
-                  />
-                ))}
-              </ScrollView>
-              <View style={styles.row}>
-                <TextInput
-                  style={styles.smallInput}
-                  placeholder="Limit"
-                  keyboardType="numeric"
-                  value={newCatAmount}
-                  onChangeText={setNewCatAmount}
-                />
-                <TouchableOpacity style={styles.addBtn} onPress={saveCategoryBudget}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text
+                    numberOfLines={1}
+                    style={{ flex: 1, color: t.text, fontFamily: fonts.semibold, fontSize: 17 }}
+                  >
+                    {r.name}
+                  </Text>
                   <Text
                     style={{
-                      color: '#fff',
-                      fontWeight: 'bold',
+                      color: r.status === 'over' ? t.expense : t.text,
+                      fontFamily: fonts.medium,
+                      fontSize: 16,
                     }}
                   >
-                    Set
+                    {formatMoney(Math.round(r.spent))}
                   </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </>
-        )}
-
-        {/* 3. LIST */}
-        <Text style={styles.heading}>Spending Overview</Text>
-        {masterCategoryList.map((cat) => {
-          const spent = catSpent[cat] || 0;
-          const limit = catBudgets[cat] || 0;
-          const hasBudget = limit > 0;
-          return (
-            <TouchableOpacity
-              key={cat}
-              style={[
-                styles.budgetRow,
-                selectedCat === cat && {
-                  borderColor: '#2196F3',
-                  borderWidth: 1,
-                },
-              ]}
-              onPress={() => setSelectedCat(cat)}
-            >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  marginBottom: 5,
-                }}
-              >
-                <Text style={styles.catName}>{cat}</Text>
-                {hasBudget ? (
-                  <TouchableOpacity onPress={() => deleteCategoryBudget(cat)}>
-                    <Ionicons name="trash-outline" size={16} color="#999" />
-                  </TouchableOpacity>
-                ) : (
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      color: '#999',
-                    }}
-                  >
-                    No Limit
+                  <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 16 }}>
+                    {r.limit ? ` / ${formatMoney(r.limit)}` : ' · Set limit'}
                   </Text>
-                )}
-              </View>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  marginBottom: 5,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: hasBudget && spent > limit ? 'red' : '#555',
-                  }}
-                >
-                  {hasBudget
-                    ? `${formatMoney(spent)} / ${formatMoney(limit)}`
-                    : `Spent: ${formatMoney(spent)}`}
-                </Text>
-              </View>
-              {hasBudget ? (
-                renderProgressBar(spent, limit, '#2196F3')
-              ) : (
-                <View
-                  style={[
-                    styles.progressBarBg,
-                    {
-                      backgroundColor: '#f0f0f0',
-                    },
-                  ]}
-                >
+                </View>
+                <View style={[styles.track, { backgroundColor: t.divider }]}>
                   <View
-                    style={{
-                      width: 0,
-                    }}
+                    style={[
+                      styles.fill,
+                      { width: `${Math.max(2, r.ratio * 100)}%`, backgroundColor: statusColor(r.status, i) },
+                    ]}
                   />
                 </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
+                {r.status === 'over' ? (
+                  <Text
+                    style={{ color: t.expense, fontFamily: fonts.medium, fontSize: 13, marginTop: space.xs }}
+                  >
+                    Over by {formatMoney(Math.round(r.spent - r.limit))}
+                  </Text>
+                ) : r.status === 'warn' ? (
+                  <Text
+                    style={{ color: t.warnText, fontFamily: fonts.medium, fontSize: 13, marginTop: space.xs }}
+                  >
+                    Almost at the limit
+                  </Text>
+                ) : null}
+              </Pressable>
+            ))
+          )}
+        </View>
+        <AppButton
+          title="Set a limit for another category"
+          variant="dashed"
+          icon="add"
+          onPress={() => setPicking(true)}
+        />
+        <AppButton
+          title="Spending reports"
+          variant="secondary"
+          icon="stats-chart-outline"
+          onPress={() => navigation.navigate('Analytics')}
+        />
       </ScrollView>
+
+      <OptionSheet
+        visible={picking}
+        title="Category"
+        options={categories.map((c) => ({
+          value: c,
+          label: c,
+          sublabel: limits[c] ? `Limit ${formatMoney(limits[c])}` : null,
+        }))}
+        onSelect={(c) => {
+          setPicking(false);
+          setEditing({ name: c, text: limits[c] ? String(limits[c]) : '' });
+        }}
+        onClose={() => setPicking(false)}
+      />
+
+      <Modal visible={!!editing} transparent animationType="slide" onRequestClose={() => setEditing(null)}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          style={{ flex: 1, backgroundColor: 'rgba(14,23,38,0.45)' }}
+          onPress={() => setEditing(null)}
+        />
+        <View style={[styles.sheet, { backgroundColor: t.card }]}>
+          <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>
+            {editing?.name} limit
+          </Text>
+          <Text
+            style={{ color: t.muted, fontFamily: fonts.body, marginTop: space.xs, marginBottom: space.md }}
+          >
+            Monthly limit for {editing?.name}. Leave empty to remove it. You get a notice at 90 %.
+          </Text>
+          <View style={[styles.input, { borderColor: t.inputBorder, flex: 0 }]}>
+            <Text style={{ color: t.muted, fontFamily: fonts.semibold, fontSize: 17, marginRight: space.sm }}>
+              ₹
+            </Text>
+            <TextInput
+              testID="limit-input"
+              accessibilityLabel="Limit"
+              value={editing?.text ?? ''}
+              onChangeText={(v) => setEditing((e) => ({ ...e, text: v }))}
+              keyboardType="numeric"
+              autoFocus
+              style={{ flex: 1, color: t.text, fontFamily: fonts.body, fontSize: 17 }}
+            />
+          </View>
+          <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
+            <AppButton
+              title="Cancel"
+              variant="secondary"
+              style={{ flex: 1 }}
+              onPress={() => setEditing(null)}
+            />
+            <AppButton
+              title="Save limit"
+              style={{ flex: 1 }}
+              onPress={() => saveLimit(editing.name, editing.text)}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9f9f9',
-  },
-  header: {
+  header: { flexDirection: 'row', alignItems: 'center', paddingTop: space.lg, paddingBottom: space.lg },
+  pill: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
     alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  monthSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 20,
-    marginHorizontal: 20,
-    elevation: 2,
-  },
-  monthText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.xs,
   },
   card: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 25,
-    marginHorizontal: 20,
-    elevation: 2,
+    borderWidth: 1,
+    borderRadius: radius.xl,
+    padding: space.xl,
+    paddingHorizontal: space.xl,
+    marginBottom: space.md,
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#999',
-    marginBottom: 10,
-  },
-  inputRow: {
+  input: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-    paddingBottom: 5,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: space.lg,
+    minHeight: 52,
   },
-  currency: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginRight: 10,
-  },
-  mainInput: {
-    flex: 1,
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  heading: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    marginLeft: 25,
-  },
-  addSection: {
-    marginBottom: 20,
-    marginHorizontal: 20,
-  },
-  row: {
+  catHead: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: space.lg,
+    marginBottom: space.sm,
   },
-  smallInput: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 10,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  addBtn: {
-    backgroundColor: '#333',
-    padding: 12,
-    borderRadius: 10,
-    paddingHorizontal: 20,
-  },
-  chip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginRight: 8,
-    backgroundColor: '#fff',
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#555',
-  },
-  budgetRow: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-    marginHorizontal: 20,
-    elevation: 1,
-  },
-  catName: {
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  progressBarBg: {
-    height: 8,
-    backgroundColor: '#eee',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
+  catRow: { paddingVertical: space.lg },
+  track: { height: 8, borderRadius: 4, overflow: 'hidden', marginTop: space.sm },
+  fill: { height: 8, borderRadius: 4 },
+  sheet: {
+    padding: space.xl,
+    paddingBottom: space.xxl,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
   },
 });
