@@ -1,6 +1,7 @@
 import { View, Text } from './Theme';
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, Button } from 'react-native';
+import { AppState } from 'react-native';
+import AppButton from './ui/AppButton';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 export const LOCK_KEY = 'wealthmanager_app_lock';
@@ -75,7 +76,7 @@ export default function AppLock({ children }) {
       <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#20242B' }}>
         <Text style={{ color: 'white', fontSize: 20 }}>WealthManager {loaded ? 'locked' : 'loading'}</Text>
         <Text style={{ color: 'white' }}>{error}</Text>
-        {loaded && !hidden ? <Button title="Unlock" onPress={unlock} /> : null}
+        {loaded && !hidden ? <AppButton title="Unlock" onPress={unlock} /> : null}
       </View>
     );
   return children;

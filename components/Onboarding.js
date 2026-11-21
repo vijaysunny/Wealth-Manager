@@ -1,6 +1,7 @@
 import { View, Text } from './Theme';
 import React, { useEffect, useState } from 'react';
-import { Button, PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
+import AppButton from './ui/AppButton';
 import Storage from '../data/Storage';
 import { setSmsTracking } from '../utils/SmsTracking';
 export default function Onboarding({ children }) {
@@ -42,8 +43,8 @@ export default function Onboarding({ children }) {
           Your finances stay on this device. SMS access lets the app capture bank payments and notifications
           show spending alerts. You can use manual entry without SMS access.
         </Text>
-        <Button disabled={busy} title="Enable bank SMS tracking" onPress={() => finish(true)} />
-        <Button disabled={busy} title="Use manual entry" onPress={() => finish(false)} />
+        <AppButton disabled={busy} title="Enable bank SMS tracking" onPress={() => finish(true)} />
+        <AppButton disabled={busy} title="Use manual entry" onPress={() => finish(false)} />
       </View>
     );
   return children;

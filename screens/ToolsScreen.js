@@ -1,6 +1,7 @@
 import { View, Text, TextInput, ScrollView, SafeAreaView } from '../components/Theme';
 import React, { useCallback, useState } from 'react';
-import { Button, Alert, Switch } from 'react-native';
+import { Alert, Switch } from 'react-native';
+import AppButton from '../components/ui/AppButton';
 
 import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
@@ -36,10 +37,12 @@ const Field = ({ label, value, onChangeText, number = false }) => (
 const Choices = ({ items, value, onChange }) => (
   <ScrollView horizontal>
     {items.map((item) => (
-      <Button
+      <AppButton
         key={String(item.id)}
         title={item.name}
-        color={String(value) === String(item.id) ? '#1976D2' : '#777'}
+        variant={String(value) === String(item.id) ? 'primary' : 'secondary'}
+        size="sm"
+        style={{ marginRight: 8 }}
         onPress={() => onChange(item.id)}
       />
     ))}
@@ -113,14 +116,23 @@ export default function ToolsScreen({ navigation, route }) {
   const selectedGoal = goals.find((g) => String(g.id) === String(goalId));
   return (
     <SafeAreaView style={{ flex: 1, padding: 16, backgroundColor: '#f5f5f5' }}>
-      <Button title="Back" onPress={() => navigation.goBack()} />
+      <AppButton
+        title="Back"
+        icon="arrow-back"
+        variant="secondary"
+        size="sm"
+        style={{ alignSelf: 'flex-start' }}
+        onPress={() => navigation.goBack()}
+      />
       <Text style={{ fontSize: 24, fontWeight: 'bold', marginVertical: 12 }}>Money tools</Text>
-      <ScrollView horizontal style={{ maxHeight: 48 }}>
+      <ScrollView horizontal style={{ maxHeight: 56 }}>
         {tabs.map((name) => (
-          <Button
+          <AppButton
             key={name}
             title={name}
-            color={tab === name ? '#1976D2' : '#777'}
+            variant={tab === name ? 'primary' : 'secondary'}
+            size="sm"
+            style={{ marginRight: 8 }}
             onPress={() => setTab(name)}
           />
         ))}
@@ -134,7 +146,7 @@ export default function ToolsScreen({ navigation, route }) {
                 const bank = accounts.find((b) => String(b.id) === String(w.linkedBankId));
                 return (
                   <View key={`short_${w.id}`} style={{ flexDirection: 'row', marginBottom: 6 }}>
-                    <Button
+                    <AppButton
                       title={`Top-up ${w.name}`}
                       disabled={!bank}
                       onPress={() => {
@@ -142,7 +154,7 @@ export default function ToolsScreen({ navigation, route }) {
                         setTo(w.id);
                       }}
                     />
-                    <Button
+                    <AppButton
                       title="Withdraw to bank"
                       disabled={!bank}
                       onPress={() => {
@@ -158,7 +170,7 @@ export default function ToolsScreen({ navigation, route }) {
             <Text>To account</Text>
             <Choices items={spendable} value={to} onChange={setTo} />
             <Field label="Amount (₹)" value={amount} onChangeText={setAmount} number />
-            <Button
+            <AppButton
               title="Save transfer"
               onPress={() =>
                 run(async () => {
@@ -197,7 +209,7 @@ export default function ToolsScreen({ navigation, route }) {
             <Text style={{ fontWeight: 'bold' }}>Category rules (first match wins)</Text>
             <Field label="Merchant / VPA / text contains" value={pattern} onChangeText={setPattern} />
             <Field label="Category" value={category} onChangeText={setCategory} />
-            <Button
+            <AppButton
               title="Add rule"
               onPress={() =>
                 run(async () => {
@@ -216,7 +228,7 @@ export default function ToolsScreen({ navigation, route }) {
                 <Text>
                   {rule.pattern} → {rule.category}
                 </Text>
-                <Button
+                <AppButton
                   title="Remove rule"
                   onPress={() =>
                     run(() => mutateList('category_rules', (list) => list.filter((r) => r.id !== rule.id)))
@@ -233,7 +245,7 @@ export default function ToolsScreen({ navigation, route }) {
                 </Text>
                 {reviewHint(tx) ? <Text style={{ color: '#E65100' }}>{reviewHint(tx)}</Text> : null}
                 {tx.reviewReason === 'new_account' && (
-                  <Button
+                  <AppButton
                     title={`Create "${tx.suggestedAccount?.name || 'account'}"`}
                     onPress={() => run(() => resolveCaptureAccount(tx.id, { create: true }))}
                   />
@@ -257,18 +269,18 @@ export default function ToolsScreen({ navigation, route }) {
                   />
                 )}
                 {!tx.accountUnresolved && (
-                  <Button
+                  <AppButton
                     title="Confirm"
                     onPress={() => run(() => update(tx.id, { reviewStatus: 'confirmed' }))}
                   />
                 )}
-                <Button
+                <AppButton
                   title="Edit"
                   onPress={() => navigation.navigate('EditTransaction', { transaction: tx })}
                 />
-                <Button
+                <AppButton
                   title="Undo capture"
-                  color="#C62828"
+                  variant="danger"
                   onPress={() =>
                     Alert.alert('Undo capture?', 'Delete this transaction and reverse its balance change?', [
                       { text: 'Cancel' },
@@ -302,15 +314,15 @@ export default function ToolsScreen({ navigation, route }) {
             <Text>
               {filtered.length} matches · {selected.length} selected
             </Text>
-            <Button title="Export matching CSV" onPress={() => run(() => exportHistory(filtered))} />
-            <Button
+            <AppButton title="Export matching CSV" onPress={() => run(() => exportHistory(filtered))} />
+            <AppButton
               title="Export matching Excel"
               onPress={() => run(() => exportHistory(filtered, 'xlsx'))}
             />
-            <Button title="Select matching rows" onPress={() => setSelected(filtered.map((t) => t.id))} />
-            <Button title="Clear selection" onPress={() => setSelected([])} />
+            <AppButton title="Select matching rows" onPress={() => setSelected(filtered.map((t) => t.id))} />
+            <AppButton title="Clear selection" onPress={() => setSelected([])} />
             <Field label="New category for selected rows" value={category} onChangeText={setCategory} />
-            <Button
+            <AppButton
               title="Apply category to selection"
               onPress={() =>
                 run(async () => {
@@ -321,9 +333,9 @@ export default function ToolsScreen({ navigation, route }) {
                 })
               }
             />
-            <Button
+            <AppButton
               title="Delete selected"
-              color="#C62828"
+              variant="danger"
               onPress={() => {
                 if (!selected.length) return;
                 Alert.alert(
@@ -357,7 +369,7 @@ export default function ToolsScreen({ navigation, route }) {
                     {tx.date} · {tx.title} · {formatMoney(tx.amount)} · {tx.type}
                   </Text>
                 </View>
-                <Button
+                <AppButton
                   title="Edit"
                   onPress={() => navigation.navigate('EditTransaction', { transaction: tx })}
                 />
@@ -378,12 +390,12 @@ export default function ToolsScreen({ navigation, route }) {
                   {selectedGoal.name}: {formatMoney(selectedGoal.savedAmount)} /{' '}
                   {formatMoney(selectedGoal.targetAmount)}
                 </Text>
-                <Button
+                <AppButton
                   title="Edit goal or linked account"
                   onPress={() => navigation.navigate('AddGoal', { goal: selectedGoal })}
                 />
                 <Field label="Contribution (₹)" value={contribution} onChangeText={setContribution} number />
-                <Button
+                <AppButton
                   title="Record contribution"
                   onPress={() =>
                     run(async () => {
@@ -405,7 +417,7 @@ export default function ToolsScreen({ navigation, route }) {
         )}
         {tab === 'Wealth' && (
           <View>
-            <Button
+            <AppButton
               title="Save today’s net worth snapshot"
               onPress={() => run(() => saveNetWorthSnapshot())}
             />
@@ -429,7 +441,7 @@ export default function ToolsScreen({ navigation, route }) {
               style={{ minHeight: 100, borderWidth: 1, borderColor: '#999', padding: 10 }}
               placeholder={'2025-01-01,-10000\n2026-01-01,11000'}
             />
-            <Button
+            <AppButton
               title="Calculate XIRR"
               onPress={() =>
                 run(async () => {
@@ -454,7 +466,7 @@ export default function ToolsScreen({ navigation, route }) {
             <Field label="Annual interest %" value={rate} onChangeText={setRate} number />
             <Field label="Monthly EMI" value={emi} onChangeText={setEmi} number />
             <Field label="Immediate prepayment" value={prepayment} onChangeText={setPrepayment} number />
-            <Button
+            <AppButton
               title="Compare repayment plans"
               onPress={() =>
                 run(async () => {
@@ -486,7 +498,7 @@ export default function ToolsScreen({ navigation, route }) {
               onChange={setCard}
             />
             <Field label="Monthly due day (1–31)" value={due} onChangeText={setDue} number />
-            <Button
+            <AppButton
               title="Schedule reminders for 12 months"
               onPress={() =>
                 run(async () => {

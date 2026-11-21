@@ -1,6 +1,7 @@
 import { View, Text, TextInput, useAppTheme } from './Theme';
 import React, { useEffect, useState } from 'react';
-import { Button, Switch, Alert } from 'react-native';
+import { Switch, Alert } from 'react-native';
+import AppButton from './ui/AppButton';
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
@@ -92,7 +93,7 @@ export default function SecurityPanel() {
         autoCapitalize="none"
         style={{ borderWidth: 1, borderColor: '#999', padding: 10, borderRadius: 8, marginVertical: 8 }}
       />
-      <Button
+      <AppButton
         disabled={busy}
         title={busy ? 'Working…' : 'Export encrypted backup'}
         onPress={() =>
@@ -106,7 +107,7 @@ export default function SecurityPanel() {
           })
         }
       />
-      <Button disabled={busy} title="Restore or merge backup" onPress={() => run(restore)} />
+      <AppButton disabled={busy} title="Restore or merge backup" onPress={() => run(restore)} />
       <Text style={{ fontSize: 12, marginTop: 8 }}>
         Keep your passphrase: encrypted backups cannot be recovered without it. App lock protects access to
         the app; database files use the device’s storage protection.

@@ -5,7 +5,8 @@
  */
 import { View, Text, TextInput } from './Theme';
 import React, { useEffect, useState, useCallback } from 'react';
-import { Button, Switch, Alert, Linking } from 'react-native';
+import { Switch, Alert, Linking } from 'react-native';
+import AppButton from './ui/AppButton';
 import { PROVIDERS } from '../utils/ai/AiProviders';
 import { loadAiSettings, saveAiSettings, getApiKey, setApiKey } from '../utils/ai/AiConfig';
 import { testProvider } from '../utils/ai/AiClient';
@@ -116,11 +117,25 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
               onEndEditing={() => update({}).catch(() => {})}
             />
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Button title={busy === id ? '…' : 'Save key'} disabled={!!busy} onPress={() => saveKey(id)} />
-              <Button title="Test" disabled={!!busy} onPress={() => test(id)} />
+              <AppButton
+                title="Save key"
+                size="sm"
+                loading={busy === id}
+                disabled={!!busy}
+                onPress={() => saveKey(id)}
+              />
+              <AppButton
+                title="Test"
+                variant="secondary"
+                size="sm"
+                disabled={!!busy}
+                onPress={() => test(id)}
+              />
               {idx > 0 && (
-                <Button
+                <AppButton
                   title="Move up"
+                  variant="secondary"
+                  size="sm"
                   disabled={!!busy}
                   onPress={() => {
                     const order = [...settings.order];
@@ -147,7 +162,7 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
       ))}
       {onOpenAssistant && (
         <View style={{ marginTop: 8 }}>
-          <Button title="Open AI Assistant" onPress={onOpenAssistant} />
+          <AppButton title="Open AI Assistant" onPress={onOpenAssistant} />
         </View>
       )}
     </View>

@@ -4,7 +4,8 @@
  */
 import { View, Text, TextInput, ScrollView, SafeAreaView } from '../components/Theme';
 import React, { useCallback, useState } from 'react';
-import { Button, Alert, ActivityIndicator } from 'react-native';
+import { Alert, ActivityIndicator } from 'react-native';
+import AppButton from '../components/ui/AppButton';
 import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
 import { getAll } from '../data/TransactionRepo';
@@ -88,7 +89,7 @@ export default function AiAssistantScreen({ navigation }) {
 
   return (
     <SafeAreaView style={{ flex: 1, padding: 16, backgroundColor: '#f5f5f5' }}>
-      <Button title="Back" onPress={() => navigation.goBack()} />
+      <AppButton title="Back" onPress={() => navigation.goBack()} />
       <Text style={{ fontSize: 24, fontWeight: 'bold', marginVertical: 12 }}>AI Assistant</Text>
       {!ready.insights && !ready.categorize ? (
         <Text>
@@ -99,7 +100,7 @@ export default function AiAssistantScreen({ navigation }) {
           {ready.categorize && (
             <View style={{ marginBottom: 16 }}>
               <Text>{generalCount} transactions are in “General”.</Text>
-              <Button
+              <AppButton
                 title="Categorize them with AI"
                 disabled={busy || generalCount === 0}
                 onPress={categorizeAll}
@@ -115,7 +116,7 @@ export default function AiAssistantScreen({ navigation }) {
                 multiline
                 style={{ borderWidth: 1, borderColor: '#999', padding: 10, borderRadius: 8, minHeight: 60 }}
               />
-              <Button title={busy ? 'Thinking…' : 'Ask'} disabled={busy} onPress={() => ask()} />
+              <AppButton title={busy ? 'Thinking…' : 'Ask'} disabled={busy} onPress={() => ask()} />
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 8 }}>
                 {SUGGESTIONS.map((s) => (
                   <Text

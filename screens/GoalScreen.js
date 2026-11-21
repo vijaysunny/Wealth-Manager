@@ -1,6 +1,7 @@
 import { Text, View, ScrollView, TouchableOpacity, SafeAreaView } from '../components/Theme';
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Button } from 'react-native';
+import { StyleSheet } from 'react-native';
+import AppButton from '../components/ui/AppButton';
 import AsyncStorage from '../data/Storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -59,7 +60,7 @@ export default function GoalScreen({ navigation }) {
   };
   return (
     <SafeAreaView style={styles.container}>
-      <Button
+      <AppButton
         title="Contributions and goal history"
         onPress={() =>
           navigation.navigate('Tools', {

@@ -4,7 +4,7 @@
  * `open` is injectable for tests.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button } from 'react-native';
+import AppButton from './ui/AppButton';
 import { View, Text } from './Theme';
 import { getDatabase } from '../data/Database';
 
@@ -24,7 +24,7 @@ export default function Bootstrap({ children, open = getDatabase }) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
         <Text>{error || 'Preparing your saved data…'}</Text>
-        {error ? <Button title="Retry migration" onPress={start} /> : null}
+        {error ? <AppButton title="Retry migration" onPress={start} /> : null}
       </View>
     );
   return children;

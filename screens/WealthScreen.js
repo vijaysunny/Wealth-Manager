@@ -2,7 +2,8 @@ import AsyncStorage, { updateAccount as persistAccount } from '../data/Storage';
 import { deleteAccount as removeAccount } from '../data/Collections';
 import { Text, View, ScrollView, TouchableOpacity, TextInput, SafeAreaView } from '../components/Theme';
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Button, RefreshControl, Alert, Modal } from 'react-native';
+import { StyleSheet, RefreshControl, Alert, Modal } from 'react-native';
+import AppButton from '../components/ui/AppButton';
 
 import { Ionicons } from '@expo/vector-icons';
 import { fetchMutualFundNAV, fetchStockPrice } from '../utils/InvestmentApi';
@@ -309,7 +310,10 @@ export default function WealthScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* HEADER */}
-      <Button title="Wealth calculations" onPress={() => navigation.navigate('Tools', { tab: 'Wealth' })} />
+      <AppButton
+        title="Wealth calculations"
+        onPress={() => navigation.navigate('Tools', { tab: 'Wealth' })}
+      />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Net Worth</Text>
         <TouchableOpacity onPress={() => navigation.navigate('AddAsset')}>

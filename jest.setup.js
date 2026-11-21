@@ -23,3 +23,12 @@ jest.mock('expo-sqlite', () => {
     },
   };
 });
+
+// @expo/vector-icons pulls in expo-font/expo-asset, which jest-expo does not provide. Icons render
+// as an empty View so screens using shared UI components can be tested.
+jest.mock('@expo/vector-icons', () => {
+  const R = require('react');
+  const { View } = require('react-native');
+  const Icon = ({ testID, accessibilityLabel }) => R.createElement(View, { testID, accessibilityLabel });
+  return new Proxy({}, { get: (_, key) => (key === '__esModule' ? false : Icon) });
+});
