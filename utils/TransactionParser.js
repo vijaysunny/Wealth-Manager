@@ -41,6 +41,9 @@ const IGNORE_RE = new RegExp(
     '\\breward points?\\b',
     '\\boffer\\b',
     '\\bexpires?\\b',
+    // A7: card limit-change notices ("request to re-set the limit … is set at Rs. 156000")
+    '\\bre-?set the limit\\b',
+    '\\blimit\\b[^.]{0,80}\\b(?:is set at|has been (?:set|changed|updated|accepted))',
   ].join('|'),
   'i'
 );
@@ -306,7 +309,8 @@ export const detectDirection = (text = '') => {
 const CATEGORY_RULES = [
   [
     'Food',
-    /zomato|swiggy|dominos|pizza|burger|restaurant|\bfood\b|\bcafe\b|\bkfc\b|\bmcd\b|mcdonald|blinkit|zepto|grofer|dunzo|bigbasket|ananda ?bhavan|\ba2b\b/i,
+    // "ADYAR ANAND" = Adyar Ananda Bhavan, cut off by the card network (A7)
+    /zomato|swiggy|dominos|pizza|burger|restaurant|\bfood\b|\bcafe\b|\bkfc\b|\bmcd\b|mcdonald|blinkit|zepto|grofer|dunzo|bigbasket|ananda ?bhavan|adyar ?anand|\ba2b\b/i,
   ],
   [
     'Transport',
@@ -463,11 +467,22 @@ export const ownAccountText = (text = '') => {
   if (payee && !NOT_MERCHANT_RE.test(payee.trim())) t = t.replace(payee, ' ');
   return t;
 };
+// A7: NACH/ACH auto-debit narration "ACH-DR-BAJAJ FINANCE LTD-V" → "Bajaj Finance"
+const ACH_DR_RE = /\bN?ACH[-\s]*DR[-\s]+([^\n]{2,60})/i;
+const COMPANY_SUFFIX_RE = /\s+(?:ltd|limited|pvt|private|co|corp|inc|llp)\.?$/i;
+const titleCase = (v) => v.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+export const extractAchPayee = (text = '') => {
+  const m = String(text).match(ACH_DR_RE);
+  if (!m) return null;
+  let name = m[1].split(/\s*-\s*/)[0].trim();
+  while (COMPANY_SUFFIX_RE.test(name)) name = name.replace(COMPANY_SUFFIX_RE, '');
+  return /[a-z]{2}/i.test(name) ? titleCase(name) : null;
+};
 export const extractMerchant = (text = '') => {
   const s = String(text);
   const vpa = s.match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
   const slash = s.match(CHANNEL_SLASH_RE);
-  let merchant = slash ? cleanSlashPayee(slash[4]) : null;
+  let merchant = slash ? cleanSlashPayee(slash[4]) : extractAchPayee(s);
   if (!merchant) {
     const candidate = s.match(MERCHANT_RE)?.[1]?.trim();
     if (candidate && !NOT_MERCHANT_RE.test(candidate)) merchant = candidate;

@@ -18,15 +18,7 @@ const { rules: OWNER_RULES } = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', '..', '__fixtures__', 'category_rules.owner.json'), 'utf8')
 );
 
-const KNOWN_FAILING = new Set([
-  // A7: Adyar Anand (Bhavan cut off by the card network) is Food
-  'axis-cc-spend-adyar-01.category',
-  // A7: card limit-change notice is not a transaction
-  'sbi-cc-limit-reset-01.parsed',
-  // A7: ACH-DR-<name> payee
-  'axis-ach-bajaj-01.merchant',
-  'axis-ach-bajaj-02.merchant',
-]);
+const KNOWN_FAILING = new Set([]);
 
 // Fixture key → parser output key, where the names differ.
 const FIELD_MAP = { bank: 'bankName' };

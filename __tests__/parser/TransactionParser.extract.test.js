@@ -185,3 +185,17 @@ describe('A6: cleanSlashPayee', () => {
     ['.View bal', null],
   ])('%j → %j', (raw, want) => expect(cleanSlashPayee(raw)).toBe(want));
 });
+
+describe('A7: extractAchPayee', () => {
+  const { extractAchPayee } = require('../../utils/TransactionParser');
+  test.each([
+    [
+      'Debit INR 538.00\nAxis Bank A/c XX0973\n07-11-26 14:25:34\nACH-DR-BAJAJ FINANCE LTD-V\nWhatsApp BAL',
+      'Bajaj Finance',
+    ],
+    ['NACH DR HDFC LIFE INSURANCE CO LTD', 'Hdfc Life Insurance'],
+    ['ACH-DR-TATA CAPITAL PRIVATE LIMITED-X', 'Tata Capital'],
+    ['ACH-DR-12345', null],
+    ['no ach here', null],
+  ])('%j → %j', (text, want) => expect(extractAchPayee(text)).toBe(want));
+});
