@@ -1,5 +1,5 @@
 {
-  "_note": "Real samples supplied by the owner. 'expected' = DESIRED behaviour; 'currentlyWrong' = observed in the Phase 10 parser. Sender IDs are unknown (samples were copied from chat) - replace with the real sender from the phone. If this repo is ever pushed to a public GitHub, replace third-party names (HARISH, NANDINI H), the autopay mandate VPA and reference numbers.",
+  "_note": "Real samples supplied by the owner. 'expected' = DESIRED behaviour; 'currentlyWrong' = observed in the Phase 10 parser. Sender IDs are unknown (samples were copied from chat) - replace with the real sender from the phone. If this repo is ever pushed to a public GitHub, replace third-party names (HARISH, NANDINI H), the autopay mandate VPA and reference numbers. Phase 12 (2026-11-21): 25 more real samples added from the owner's chat paste; WhatsApp joined the lines, so line breaks were restored to match the bank's layout. Third-party UPI names in the new samples are fakes (Kavya, LATHA); their reference numbers and personalised bank links were replaced with made-up values before pushing (2026-11-22).",
   "messages": [
     {
       "id": "axis-cc-spend-01",
@@ -201,6 +201,333 @@
         "last4": "1987"
       },
       "currentlyWrong": "last4 not extracted"
+    },
+    {
+      "id": "axis-upilite-topup-01",
+      "sender": "",
+      "body": "UPI LITE top-up on UPI App amounting to INR 500.00 has been successful. Ref no. 100000000101 - Axis Bank",
+      "expected": {
+        "type": "transfer",
+        "kind": "wallet_topup",
+        "subType": "UPI Lite",
+        "amount": 500,
+        "bank": "Axis Bank",
+        "refNo": "100000000101",
+        "flow": "out",
+        "accountType": "Bank Account"
+      }
+    },
+    {
+      "id": "axis-debit-irctc-01",
+      "sender": "",
+      "body": "INR 67.90 debited\nA/c no. XX0973\n14-11-26, 08:02:46\nUPI/P2M/080000000202/Indian Railways UTS\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 67.9,
+        "accountType": "Bank Account",
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "Indian Railways UTS",
+        "category": "Transport",
+        "refNo": "080000000202"
+      }
+    },
+    {
+      "id": "axis-debit-ccbill-amazon-01",
+      "sender": "",
+      "body": "INR 12511.38 debited\nA/c no. XX0973\n03-11-26, 18:11:07\nUPI/P2M/600000000303/Amazon Pay Credit C\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expected": {
+        "type": "transfer",
+        "kind": "cc_bill",
+        "flow": "out",
+        "amount": 12511.38,
+        "accountType": "Bank Account",
+        "bank": "Axis Bank",
+        "last4": "0973"
+      }
+    },
+    {
+      "id": "axis-cc-spend-adyar-01",
+      "sender": "",
+      "body": "Spent INR 281 \nusing Axis Bank Credit Card no. XX9070 on 31-10-26 14:49:07 IST at \nADYAR ANAND. \nAvl limit: INR 267922.62. Not you? SMS BLOCK 9070 to +919951860002.",
+      "expected": {
+        "type": "expense",
+        "amount": 281,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070",
+        "merchant": "ADYAR ANAND",
+        "category": "Food",
+        "availableLimit": 267922.62
+      }
+    },
+    {
+      "id": "axis-cc-spend-ods-01",
+      "sender": "",
+      "body": "Spent INR 30 \nusing Axis Bank Credit Card no. XX9070 on 16-10-26 18:21:20 IST at \nODS PROTECT. \nAvl limit: INR 273138.43. Not you? SMS BLOCK 9070 to +919951860002.",
+      "expected": {
+        "type": "expense",
+        "amount": 30,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070",
+        "merchant": "ODS PROTECT",
+        "availableLimit": 273138.43
+      }
+    },
+    {
+      "id": "axis-cc-payment-01",
+      "sender": "",
+      "body": "Payment of INR 9145.91 has been received towards your Axis Bank Credit Card XX9070 on 06-07-26 - Axis Bank",
+      "expected": {
+        "type": "transfer",
+        "kind": "cc_payment",
+        "flow": "in",
+        "amount": 9145.91,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070"
+      }
+    },
+    {
+      "id": "axis-cc-spend-swiggy-01",
+      "sender": "",
+      "body": "Spent INR 322 \nusing Axis Bank Credit Card no. XX9070 on 15-11-26 10:38:56 IST at \nSWIGGY INST. \nAvl limit: INR 275662.19. Not you? SMS BLOCK 9070 to +919951860002.",
+      "expected": {
+        "type": "expense",
+        "amount": 322,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070",
+        "category": "Food",
+        "availableLimit": 275662.19
+      }
+    },
+    {
+      "id": "axis-debit-paytm-travel-01",
+      "sender": "",
+      "body": "INR 50.00 debited\nA/c no. XX0973\n13-11-26, 18:21:34\nUPI/P2M/300000000404/PAYTM TRAVEL\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 50,
+        "accountType": "Bank Account",
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "PAYTM TRAVEL",
+        "refNo": "300000000404"
+      }
+    },
+    {
+      "id": "sbi-cc-recharge-01",
+      "sender": "",
+      "body": "Rs.1,020.58 spent on your SBI Credit Card ending 1987 at RECHARGESPPFSS on 13/11/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expected": {
+        "type": "expense",
+        "amount": 1020.58,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": "1987",
+        "category": "Bills"
+      }
+    },
+    {
+      "id": "sbi-cc-insurance-01",
+      "sender": "",
+      "body": "Rs.607.55 spent on your SBI Credit Card ending 1987 at INSURANCEPPFSS on 06/11/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expected": {
+        "type": "expense",
+        "amount": 607.55,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": "1987",
+        "category": "Insurance"
+      }
+    },
+    {
+      "id": "sbi-cc-limit-reset-01",
+      "sender": "",
+      "body": "Dear SBI Cardholder, your request to re-set the limit for Domestic POS Trxn. on your SBI Credit Card ending 1987 has been accepted and is set at Rs. 156000. SR No. 1400000000505. To customize your limit, click https://sbicard.com/manage-card-usage.",
+      "expected": {
+        "parsed": false
+      }
+    },
+    {
+      "id": "sbi-cc-zomato-01",
+      "sender": "",
+      "body": "Rs.106.97 spent on your SBI Credit Card ending 1987 at ZOMATOCYBS on 09/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expected": {
+        "type": "expense",
+        "amount": 106.97,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "last4": "1987",
+        "category": "Food"
+      }
+    },
+    {
+      "id": "axis-debit-gopalan-01",
+      "sender": "",
+      "body": "INR 309.00 debited\nA/c no. XX0973\n11-02-26, 16:59:16\nUPI/P2M/400000000606/NEW U GOPALAN ARCAD\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 309,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "NEW U GOPALAN ARCAD"
+      }
+    },
+    {
+      "id": "axis-debit-uidai-01",
+      "sender": "",
+      "body": "INR 75.00 debited\nA/c no. XX0973\n17-11-26, 10:24:58\nUPI/P2M/100000000707/UIDAI PVC SERVICES\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 75,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "UIDAI PVC SERVICES"
+      }
+    },
+    {
+      "id": "axis-cc-spend-anjanadri-01",
+      "sender": "",
+      "body": "Spent INR 350 \nusing Axis Bank Credit Card no. XX9070 on 09-11-26 08:26:16 IST at \nAnjanadri E. \nAvl limit: INR 277089.56. Not you? SMS BLOCK 9070 to +919951860002.",
+      "expected": {
+        "type": "expense",
+        "amount": 350,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070",
+        "merchant": "Anjanadri E"
+      }
+    },
+    {
+      "id": "axis-debit-medical-01",
+      "sender": "",
+      "body": "INR 16.00 debited\nA/c no. XX0973\n06-11-26, 21:27:49\nUPI/P2M/700000000808/Shri Manjunath Medi\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 16,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "Shri Manjunath Medi"
+      }
+    },
+    {
+      "id": "axis-cc-spend-bangalo-01",
+      "sender": "",
+      "body": "Spent INR 250 \nusing Axis Bank Credit Card no. XX9070 on 05-11-26 08:24:06 IST at \nTHE_BANGALO. \nAvl limit: INR 278518.58. Not you? SMS BLOCK 9070 to +919951860002.",
+      "expected": {
+        "type": "expense",
+        "amount": 250,
+        "accountType": "Credit Card",
+        "bank": "Axis Bank",
+        "last4": "9070",
+        "availableLimit": 278518.58
+      }
+    },
+    {
+      "id": "axis-autopay-paused-01",
+      "sender": "",
+      "body": "The UPI Autopay mandate set towards OpenAI LLC with INR 399.00 is paused from 04-11-26 to 31-12-26, 500000000909. Kindly undo",
+      "expected": {
+        "parsed": false
+      },
+      "_note": "Truncated as pasted by the owner."
+    },
+    {
+      "id": "axis-neft-credit-01",
+      "sender": "",
+      "body": "INR 136193.00 credited to Axis Bank A/c XX0973 on 30-10-26 at 16:33:42 IST. Ref: NEFT/SBIN326000001010/C DA.View bal: https://ccm.axis.bank.in/AXISBK/aB12cD34",
+      "expected": {
+        "type": "income",
+        "amount": 136193,
+        "accountType": "Bank Account",
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "channel": "NEFT",
+        "counterparty": "C DA"
+      }
+    },
+    {
+      "id": "axis-neft-credit-baja-01",
+      "sender": "",
+      "body": "INR 40000.00 credited to A/c no. XX0973 on 17-06-26 at 07:01:43 IST. Info - NEFT/SBIN326000001111/BAJA. Chk Bal https://ccm.axis.bank.in/AXISBK/eF56gH78 - Axis Bank",
+      "expected": {
+        "type": "income",
+        "amount": 40000,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "channel": "NEFT",
+        "counterparty": "BAJA"
+      }
+    },
+    {
+      "id": "sbi-cc-payment-bbps-01",
+      "sender": "",
+      "body": "We have received payment of Rs.23,618.82 via BBPS & the same has been credited to your SBI Credit Card. Your available limit is Rs.172,916.66.",
+      "expected": {
+        "type": "transfer",
+        "kind": "cc_payment",
+        "flow": "in",
+        "amount": 23618.82,
+        "accountType": "Credit Card",
+        "bank": "SBI",
+        "availableLimit": 172916.66,
+        "channel": "BBPS"
+      }
+    },
+    {
+      "id": "axis-upi-credit-person-01",
+      "sender": "",
+      "body": "INR 30000.00 credited\nA/c no. XX0973\n19-05-26, 19:08:12 IST\nUPI/P2A/500000001212/Kavya/SBIN/Paym - Axis Bank",
+      "expected": {
+        "type": "income",
+        "amount": 30000,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "counterparty": "Kavya",
+        "refNo": "500000001212"
+      }
+    },
+    {
+      "id": "axis-upi-credit-person-02",
+      "sender": "",
+      "body": "INR 50000.00 credited\nA/c no. XX0973\n27-03-26, 16:11:02 IST\nUPI/P2A/300000001313/LATHA/CNRB/Sent u - Axis Bank",
+      "expected": {
+        "type": "income",
+        "amount": 50000,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "counterparty": "LATHA",
+        "refNo": "300000001313"
+      }
+    },
+    {
+      "id": "axis-ach-bajaj-01",
+      "sender": "",
+      "body": "Debit INR 538.00\nAxis Bank A/c XX0973\n07-11-26 14:25:34\nACH-DR-BAJAJ FINANCE LTD-V\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002",
+      "expected": {
+        "type": "expense",
+        "amount": 538,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "Bajaj Finance",
+        "category": "Loan/EMI"
+      }
+    },
+    {
+      "id": "axis-ach-bajaj-02",
+      "sender": "",
+      "body": "Debit INR 160.00\nAxis Bank A/c XX0973\n07-07-26 14:39:07\nACH-DR-BAJAJ FINANCE LTD-V\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002",
+      "expected": {
+        "type": "expense",
+        "amount": 160,
+        "bank": "Axis Bank",
+        "last4": "0973",
+        "merchant": "Bajaj Finance",
+        "category": "Loan/EMI"
+      }
     }
   ],
   "_owner_accounts": "Owner-confirmed own accounts: Axis savings (XX0973), Axis credit card (XX9070), SBI credit card (1987), Equitas Small Finance Bank savings (1246). Balances from these SMS must be applied."

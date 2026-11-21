@@ -18,7 +18,29 @@ const { rules: OWNER_RULES } = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', '..', '__fixtures__', 'category_rules.owner.json'), 'utf8')
 );
 
-const KNOWN_FAILING = new Set([]);
+const KNOWN_FAILING = new Set([
+  // A5: bank-named UPI Lite top-up must be the bank leg (bank → wallet)
+  'axis-upilite-topup-01.flow',
+  'axis-upilite-topup-01.accountType',
+  // A4: card bill paid from the bank is a transfer, not spending
+  'axis-debit-ccbill-amazon-01.type',
+  'axis-debit-ccbill-amazon-01.kind',
+  'axis-debit-ccbill-amazon-01.flow',
+  // A7: Adyar Anand (Bhavan cut off by the card network) is Food
+  'axis-cc-spend-adyar-01.category',
+  // A3: "INR 9145.91" decimal point stopped CC_PAYMENT_RE
+  'axis-cc-payment-01.type',
+  'axis-cc-payment-01.kind',
+  'axis-cc-payment-01.flow',
+  // A7: card limit-change notice is not a transaction
+  'sbi-cc-limit-reset-01.parsed',
+  // A6: counterparty runs into "View bal"/"Chk Bal" links
+  'axis-neft-credit-01.counterparty',
+  'axis-neft-credit-baja-01.counterparty',
+  // A7: ACH-DR-<name> payee
+  'axis-ach-bajaj-01.merchant',
+  'axis-ach-bajaj-02.merchant',
+]);
 
 // Fixture key → parser output key, where the names differ.
 const FIELD_MAP = { bank: 'bankName' };
