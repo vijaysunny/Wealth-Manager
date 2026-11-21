@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView as NativeSafeArea } from 'react-native-safe-area-context';
 import { tokens } from './tokens';
-const ThemeContext = createContext({ dark: false, setDark: () => {} });
+const ThemeContext = createContext({ dark: false, setDark: () => {}, t: null });
 export const ThemeProvider = ({ children }) => {
   const [dark, setValue] = useState(false);
   React.useEffect(() => {
@@ -22,9 +22,19 @@ export const ThemeProvider = ({ children }) => {
     await Storage.setItem('dark_mode', String(value));
     setValue(value);
   };
-  return <ThemeContext.Provider value={{ dark, setDark }}>{children}</ThemeContext.Provider>;
+  const value = useMemo(() => ({ dark, setDark, t: dark ? tokens.dark : tokens.light }), [dark]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
-export const useAppTheme = () => useContext(ThemeContext);
+/**
+ * { dark, setDark, t }: t is the token palette for the current mode (C2). Dark mode is opt-in
+ * from Settings; the phone's system setting does not leak in (app.json pins light).
+ */
+export const useAppTheme = () => {
+  const ctx = useContext(ThemeContext);
+  return ctx.t ? ctx : { ...ctx, t: ctx.dark ? tokens.dark : tokens.light };
+};
+// LEGACY: guesses dark colours from the hard-coded light ones. Only screens not yet rebuilt in
+// Phase 12 C5 still go through it; new components use tokens. Delete when C5 is finished.
 const shade = (value, key) => {
   if (typeof value !== 'string' || !/^#[\da-f]{3,8}$/i.test(value)) return value;
   const full =
@@ -89,4 +99,4 @@ export const Text = themed(NativeText),
   TouchableOpacity = themed(NativeTouch),
   SafeAreaView = themed(NativeSafeArea);
 /** Token palette for the current theme (Phase 12 C2). */
-export const useTokens = () => (useAppTheme().dark ? tokens.dark : tokens.light);
+export const useTokens = () => useAppTheme().t;

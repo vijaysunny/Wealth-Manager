@@ -67,3 +67,17 @@ test('app.json pins the light interface style so the system theme does not leak 
   expect(app.expo.userInterfaceStyle).toBe('light');
   expect(app.expo.android.userInterfaceStyle).toBe('light');
 });
+
+test('C2: useAppTheme returns the token palette for the mode', async () => {
+  const { useAppTheme } = require('../components/Theme');
+  let seen;
+  const Probe = () => {
+    seen = useAppTheme();
+    return null;
+  };
+  render(<Probe />);
+  expect(seen.t).toBe(tokens.light);
+  await renderIn(true, <Probe />);
+  expect(seen.dark).toBe(true);
+  expect(seen.t).toBe(tokens.dark);
+});
