@@ -23,8 +23,10 @@ import { backupStatus, LAST_BACKUP_KEY } from '../utils/BackupReminder';
 import { permissionWarnings } from '../utils/PermissionHealth';
 import { hasReceivePermission, isTrackingEnabled } from '../utils/SmsTracking';
 import { notificationsAllowed } from '../utils/NotificationService';
+import { discoverAccounts, waitingCount } from '../utils/AccountDiscovery';
 export default function HomeScreen({ navigation }) {
   const [transactions, setTransactions] = useState([]);
+  const discovered = React.useMemo(() => discoverAccounts(transactions), [transactions]);
   const [summary, setSummary] = useState({
     income: 0,
     expense: 0,
@@ -206,6 +208,33 @@ export default function HomeScreen({ navigation }) {
             </Text>
           </View>
         </View>
+
+        {/* A2: accounts found in SMS that are not added yet */}
+        {discovered.length > 0 && (
+          <TouchableOpacity
+            testID="review-card"
+            accessibilityRole="button"
+            accessibilityLabel={`${discovered.length} new accounts found in SMS. Review`}
+            onPress={() => navigation.navigate('ReviewAccounts')}
+            style={styles.reviewCard}
+          >
+            <View style={styles.reviewIcon}>
+              <Ionicons name="list-outline" size={22} color="#1F4FD8" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.reviewTitle}>
+                {discovered.length} new account{discovered.length === 1 ? '' : 's'} found in SMS
+              </Text>
+              <Text style={styles.reviewSub}>
+                {waitingCount(discovered)} transaction{waitingCount(discovered) === 1 ? '' : 's'} waiting ·
+                tap to confirm
+              </Text>
+            </View>
+            <View style={styles.reviewBadge}>
+              <Text style={styles.reviewBadgeText}>{waitingCount(discovered)}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Month Nav */}
         <View style={styles.monthNav}>
@@ -506,6 +535,39 @@ export default function HomeScreen({ navigation }) {
   );
 }
 const styles = StyleSheet.create({
+  reviewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E3E6EC',
+    borderWidth: 1,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 16,
+  },
+  reviewIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#E8EEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  reviewTitle: { color: '#0E1726', fontSize: 16, fontWeight: '700' },
+  reviewSub: { color: '#5B6475', fontSize: 14, marginTop: 2 },
+  reviewBadge: {
+    minWidth: 32,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#1F4FD8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    marginLeft: 8,
+  },
+  reviewBadgeText: { color: '#FFFFFF', fontWeight: '700' },
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',

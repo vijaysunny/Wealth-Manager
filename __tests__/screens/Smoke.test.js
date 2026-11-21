@@ -184,6 +184,38 @@ describe('HomeScreen (B2)', () => {
   });
 });
 
+describe('HomeScreen review card (A2)', () => {
+  const HomeScreen = require('../../screens/HomeScreen').default;
+  const { addMany } = require('../../data/TransactionRepo');
+  const card = (i, o = {}) => ({
+    id: `c${i}`,
+    smsId: `sms:H:${i}`,
+    type: 'expense',
+    amount: 10,
+    fullDate: new Date(Date.UTC(2026, 10, 1, 0, 0, i)).toISOString(),
+    accountType: 'Credit Card',
+    bankName: 'SBI',
+    last4: '1987',
+    ...o,
+  });
+  test('shows "N new accounts found in SMS" with the waiting count and opens Review', async () => {
+    await addMany([card(1), card(2), card(3, { bankName: 'HDFC Bank', last4: '5555' })], {
+      balanceMode: 'captured',
+    });
+    const n = nav();
+    render(<HomeScreen navigation={n} />);
+    expect(await screen.findByText('2 new accounts found in SMS')).toBeTruthy();
+    expect(screen.getByText(/3 transactions waiting/)).toBeTruthy();
+    fireEvent.press(screen.getByTestId('review-card'));
+    expect(n.navigate).toHaveBeenCalledWith('ReviewAccounts');
+  });
+  test('hidden when nothing is waiting', async () => {
+    render(<HomeScreen navigation={nav()} />);
+    await screen.findByText(/Hello/);
+    expect(screen.queryByTestId('review-card')).toBeNull();
+  });
+});
+
 describe('ImportScreen', () => {
   const ImportScreen = require('../../screens/ImportScreen').default;
   test('renders the idle state', async () => {

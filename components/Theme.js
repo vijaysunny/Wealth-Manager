@@ -88,3 +88,5 @@ export const Text = themed(NativeText),
   ScrollView = themed(NativeScroll),
   TouchableOpacity = themed(NativeTouch),
   SafeAreaView = themed(NativeSafeArea);
+/** Token palette for the current theme (Phase 12 C2). */
+export const useTokens = () => (useAppTheme().dark ? tokens.dark : tokens.light);

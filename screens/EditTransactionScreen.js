@@ -7,6 +7,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { AVAILABLE_ICONS } from '../utils/icons';
 import { update, remove } from '../data/TransactionRepo';
 import { parseAmount } from '../utils/Format';
+import { resolveCaptureAccount } from '../utils/FeatureService';
 
 // NEW: Added the Chip Component for the Category selector
 const Chip = ({ label, selected, onPress, color = '#2196F3' }) => (
@@ -47,6 +48,12 @@ export default function EditTransactionScreen({ route, navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(transaction.account || 'Cash');
   const [availableAccounts, setAvailableAccounts] = useState([]);
+  // A2: a capture from an account not added yet can create it right here
+  const [resolvedHere, setResolvedHere] = useState(false);
+  const suggested =
+    transaction.accountUnresolved && !resolvedHere && transaction.suggestedAccount
+      ? transaction.suggestedAccount
+      : null;
 
   // Exclude Toggle State
   const [excludeFromReports, setExcludeFromReports] = useState(transaction.excludeFromReports || false);
@@ -67,6 +74,16 @@ export default function EditTransactionScreen({ route, navigation }) {
     if (newAmount === null) {
       Alert.alert('Error', 'Enter a valid amount greater than 0');
       return;
+    }
+    const picked = availableAccounts.find((a) => a.name === selectedAccount);
+    if (transaction.accountUnresolved && !resolvedHere && picked?.id) {
+      // Resolve through the review path so similar pending captures move too
+      try {
+        await resolveCaptureAccount(transaction.id, { accountId: picked.id });
+      } catch (e) {
+        Alert.alert('Account', e.message);
+        return;
+      }
     }
     const json = await AsyncStorage.getItem('user_transactions');
     let data = JSON.parse(json);
@@ -193,6 +210,28 @@ export default function EditTransactionScreen({ route, navigation }) {
           {/* ACCOUNT SELECTOR */}
           <Text style={styles.label}>Account / Payment Method</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.accountScroll}>
+            {suggested && (
+              <TouchableOpacity
+                testID="add-suggested-account"
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${suggested.name}`}
+                style={[styles.accountChip, styles.suggestChip]}
+                onPress={async () => {
+                  try {
+                    await resolveCaptureAccount(transaction.id, { create: true });
+                    setResolvedHere(true);
+                    await loadData();
+                    setSelectedAccount(suggested.name);
+                  } catch (e) {
+                    Alert.alert('Account', e.message);
+                  }
+                }}
+              >
+                <Text style={[styles.accountText, { color: '#1F4FD8', fontWeight: '600' }]}>
+                  + Add {suggested.name}
+                </Text>
+              </TouchableOpacity>
+            )}
             {availableAccounts.map((acc, i) => (
               <TouchableOpacity
                 key={i}
@@ -400,6 +439,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eee',
     marginRight: 10,
   },
+  suggestChip: { borderColor: '#1F4FD8', borderStyle: 'dashed', backgroundColor: '#E8EEFF' },
   activeAccount: {
     backgroundColor: '#2196F3',
   },

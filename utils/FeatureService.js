@@ -1,10 +1,23 @@
 import { atomic, insertRow, decodeRow, sourceId } from '../data/Database';
 import { readValue, writeValue } from '../data/Storage';
 import { getAll, updateInDb, removeInDb, writeRow, moveBalances } from '../data/TransactionRepo';
-import { assignCapture, captureSignature, linkToCounter, newAccountId } from './AccountResolver';
+import {
+  assignCapture,
+  captureSignature,
+  linkToCounter,
+  newAccountId,
+  resolveAccount,
+} from './AccountResolver';
+import { findTransferPair, isOpenCardPayment, isBankSideOfCardBill, pairedSmsIdsOf } from './TransferPairing';
+import { discoverAccounts } from './AccountDiscovery';
 import { filterNew } from './DeduplicationEngine';
 import { validateBackup, BACKUP_FIELDS } from './BackupService';
-import { computeNetWorth, applyCapturedToAccounts, applyToAccounts } from './BalanceService';
+import {
+  computeNetWorth,
+  applyCapturedToAccounts,
+  applyToAccounts,
+  reverseOnAccounts,
+} from './BalanceService';
 import { reconcileTransaction } from './WalletReconcile';
 export const bulkUpdate = (ids, changes) =>
   atomic(async (db) => {
@@ -64,8 +77,8 @@ export const resolveCaptureAccount = (id, choice = {}) =>
       if (!account || !SPENDABLE.includes(account.type)) throw new Error('Choose an account');
     }
     const signature = captureSignature(target);
-    const similar = (await db.getAllAsync('SELECT data FROM transactions'))
-      .map(decodeRow)
+    const all = (await db.getAllAsync('SELECT data FROM transactions')).map(decodeRow);
+    const similar = all
       .filter(
         (t) =>
           String(t.id) === String(target.id) ||
@@ -73,17 +86,85 @@ export const resolveCaptureAccount = (id, choice = {}) =>
       )
       .sort((a, b) => new Date(a.fullDate) - new Date(b.fullDate));
     const resolved = [];
-    for (const tx of similar) {
+    const assign = async (tx) => {
       const current = accounts.find((a) => String(a.id) === String(account.id)) || account;
       const r = assignCapture(accounts, tx, current, { newId: newAccountId });
       accounts = r.accounts;
       resolved.push(r.tx);
       await writeRow(db, r.tx);
+    };
+    for (const tx of similar) await assign(tx);
+    // A2: other new-account captures that now match this account unambiguously (e.g. an Axis
+    // debit SMS without digits once Axis ••0973 exists) resolve in the same tap.
+    const done = new Set(similar.map((t) => String(t.id)));
+    const others = all
+      .filter(
+        (t) =>
+          !done.has(String(t.id)) &&
+          t.accountUnresolved &&
+          t.reviewStatus === 'pending' &&
+          t.reviewReason === 'new_account'
+      )
+      .sort((a, b) => new Date(a.fullDate) - new Date(b.fullDate));
+    for (const tx of others) {
+      const r = resolveAccount(accounts, tx);
+      if (r.status === 'matched' && String(r.account.id) === String(account.id)) await assign(tx);
     }
-    const finalAccounts = applyCapturedToAccounts(accounts, resolved);
-    await moveBalances(db, () => finalAccounts);
+    accounts = applyCapturedToAccounts(accounts, resolved);
+    accounts = await pairResolvedCardBills(db, accounts, resolved);
+    await moveBalances(db, () => accounts);
     return { resolved: resolved.length, accountId: account.id };
   });
+
+/**
+ * After captures get their accounts, a card bill seen twice (bank cc_bill + card cc_payment)
+ * can pair for the first time. Merge each pair into ONE transfer bank → card: both one-sided
+ * effects are reversed and the linked transfer applied, so net worth does not change.
+ */
+const pairResolvedCardBills = async (db, accounts, resolved) => {
+  let next = accounts;
+  const byId = (id) => next.find((a) => String(a.id) === String(id));
+  const live = (await db.getAllAsync('SELECT data FROM transactions'))
+    .map(decodeRow)
+    .filter((r) => r.balanceMode === 'captured');
+  for (const tx of resolved) {
+    const row = live.find((r) => String(r.id) === String(tx.id));
+    if (!row || !(isOpenCardPayment(row) || isBankSideOfCardBill(row))) continue;
+    const partner = findTransferPair(row, live);
+    if (!partner) continue;
+    const [cardSide, bankSide] = isOpenCardPayment(row) ? [row, partner] : [partner, row];
+    const card = byId(cardSide.accountId);
+    const bank = byId(bankSide.accountId);
+    if (!card || !bank) continue;
+    next = reverseOnAccounts(reverseOnAccounts(next, cardSide), bankSide);
+    const merged = {
+      ...linkToCounter(cardSide, card, bank),
+      pairedSmsIds: [...pairedSmsIdsOf(cardSide), ...pairedSmsIdsOf(bankSide), bankSide.smsId].filter(
+        Boolean
+      ),
+    };
+    await db.runAsync('DELETE FROM transactions WHERE id=?', String(bankSide.id));
+    await writeRow(db, merged);
+    next = applyToAccounts(next, merged);
+    live.splice(live.indexOf(bankSide), 1);
+    live[live.indexOf(cardSide)] = merged;
+  }
+  return next;
+};
+
+/** Pending new-account groups from the stored transactions (Review accounts, Home card). */
+export const discoveredAccounts = async () => discoverAccounts(await getAll());
+
+/**
+ * "Add all N accounts": create every discovered account and resolve its captures.
+ * Each group is its own atomic step; a group already resolved by an earlier one is skipped.
+ */
+export const addAllDiscoveredAccounts = async () => {
+  const groups = await discoveredAccounts();
+  let resolved = 0;
+  for (const g of groups) resolved += (await resolveCaptureAccount(g.firstTxId, { create: true })).resolved;
+  return { accounts: groups.length, resolved };
+};
 
 /** Link a top-up/withdraw that matched several wallets to the one the user picked. */
 export const pickCaptureWallet = (id, walletId) =>

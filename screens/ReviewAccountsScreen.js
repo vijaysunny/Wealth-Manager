@@ -1,0 +1,321 @@
+/**
+ * Review accounts (Phase 12 A2, design C5.4 / docs/design/Review new accounts found.png).
+ * "New accounts": one card per account found in SMS. Add creates it and moves every matching
+ * capture to it; Link to existing assigns them to an account the owner already has.
+ * "Check": the other review items (pick account, pick wallet, possible self-transfer …).
+ */
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import Storage from '../data/Storage';
+import { getAll, update } from '../data/TransactionRepo';
+import {
+  addAllDiscoveredAccounts,
+  pickCaptureWallet,
+  rejectCapture,
+  resolveCaptureAccount,
+} from '../utils/FeatureService';
+import { discoverAccounts, checkItems } from '../utils/AccountDiscovery';
+import { describeCapture, reviewHint } from '../utils/ReviewText';
+import { formatMoney } from '../utils/Format';
+import { useTokens } from '../components/Theme';
+import { radius, space } from '../components/tokens';
+import AppButton from '../components/ui/AppButton';
+import Card from '../components/ui/Card';
+import Segmented from '../components/ui/Segmented';
+
+const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
+
+const initials = (name = '') =>
+  name
+    .replace(/[^A-Za-z ]/g, ' ')
+    .trim()
+    .slice(0, 2)
+    .toUpperCase();
+
+export const groupSubtitle = (g) => {
+  const n = `${g.count} transaction${g.count === 1 ? '' : 's'}`;
+  if (g.suggested.type === 'Credit Card')
+    return Number.isFinite(g.availableLimit)
+      ? `Credit card · limit seen ${formatMoney(g.availableLimit, { maximumFractionDigits: 0 })} · ${n}`
+      : `Credit card · ${n}`;
+  if (g.suggested.type === 'Wallet') return `Wallet · ${n}`;
+  return `Savings account · ${n}`;
+};
+
+export default function ReviewAccountsScreen({ navigation, route }) {
+  const t = useTokens();
+  const [rows, setRows] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [tab, setTab] = useState(route?.params?.tab || 'new');
+  const [busy, setBusy] = useState(false);
+  const [linking, setLinking] = useState(null); // group being linked to an existing account
+
+  const load = useCallback(async () => {
+    setAccounts(JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]'));
+    setRows(await getAll());
+  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      load().catch((e) => Alert.alert('Load error', e.message));
+    }, [load])
+  );
+
+  const groups = useMemo(() => discoverAccounts(rows), [rows]);
+  const checks = useMemo(() => checkItems(rows), [rows]);
+
+  const run = async (action) => {
+    setBusy(true);
+    try {
+      await action();
+      await load();
+    } catch (e) {
+      Alert.alert('Cannot complete', e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const linkChoices = linking
+    ? accounts.filter((a) => SPENDABLE.includes(a.type) && a.type === linking.suggested.type)
+    : [];
+
+  const renderGroup = ({ item: g }) => {
+    const isCard = g.suggested.type === 'Credit Card';
+    return (
+      <Card testID={`group-${g.signature}`}>
+        <View style={styles.groupHead}>
+          <View style={[styles.badge, { backgroundColor: isCard ? t.primarySoft : t.dangerBg }]}>
+            {isCard ? (
+              <Ionicons name="card-outline" size={22} color={t.primary} />
+            ) : (
+              <Text style={{ color: t.dangerText, fontWeight: '700' }}>{initials(g.suggested.name)}</Text>
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.groupName, { color: t.text }]}>{g.suggested.name}</Text>
+            <Text style={{ color: t.muted, fontSize: 14 }}>{groupSubtitle(g)}</Text>
+          </View>
+        </View>
+        <View style={styles.buttons}>
+          <AppButton
+            title={isCard ? 'Add card' : 'Add account'}
+            accessibilityLabel={`Add ${g.suggested.name}`}
+            disabled={busy}
+            style={{ flex: 1 }}
+            onPress={() => run(() => resolveCaptureAccount(g.firstTxId, { create: true }))}
+          />
+          <AppButton
+            title="Link to existing"
+            accessibilityLabel={`Link ${g.suggested.name} to an existing account`}
+            variant="secondary"
+            disabled={busy}
+            style={{ flex: 1 }}
+            onPress={() => setLinking(g)}
+          />
+        </View>
+      </Card>
+    );
+  };
+
+  const renderCheck = ({ item: tx }) => (
+    <Card>
+      <Text style={{ color: t.text, fontWeight: '600', fontSize: 15 }}>{describeCapture(tx)}</Text>
+      <Text style={{ color: t.muted, marginTop: 2 }}>
+        {tx.category} · {tx.date || String(tx.fullDate || '').slice(0, 10)}
+      </Text>
+      {reviewHint(tx) ? <Text style={{ color: t.warnText, marginTop: 4 }}>{reviewHint(tx)}</Text> : null}
+      {tx.reviewReason === 'pick_account' && (
+        <View style={styles.chips}>
+          {accounts
+            .filter((a) => (tx.accountCandidates || []).map(String).includes(String(a.id)))
+            .map((a) => (
+              <AppButton
+                key={a.id}
+                title={a.name}
+                size="sm"
+                variant="secondary"
+                style={{ marginRight: space.sm }}
+                onPress={() => run(() => resolveCaptureAccount(tx.id, { accountId: a.id }))}
+              />
+            ))}
+        </View>
+      )}
+      {tx.reviewReason === 'pick_wallet' && (
+        <View style={styles.chips}>
+          {accounts
+            .filter((a) => a.type === 'Wallet')
+            .map((a) => (
+              <AppButton
+                key={a.id}
+                title={a.name}
+                size="sm"
+                variant="secondary"
+                style={{ marginRight: space.sm }}
+                onPress={() => run(() => pickCaptureWallet(tx.id, a.id))}
+              />
+            ))}
+        </View>
+      )}
+      <View style={styles.buttons}>
+        {!tx.accountUnresolved && (
+          <AppButton
+            title="Confirm"
+            size="sm"
+            style={{ flex: 1 }}
+            onPress={() => run(() => update(tx.id, { reviewStatus: 'confirmed' }))}
+          />
+        )}
+        <AppButton
+          title="Edit"
+          size="sm"
+          variant="secondary"
+          style={{ flex: 1 }}
+          onPress={() => navigation.navigate('EditTransaction', { transaction: tx })}
+        />
+        <AppButton
+          title="Undo"
+          size="sm"
+          variant="danger"
+          style={{ flex: 1 }}
+          accessibilityLabel="Undo capture"
+          onPress={() =>
+            Alert.alert('Undo capture?', 'Delete this transaction and reverse its balance change?', [
+              { text: 'Cancel' },
+              { text: 'Undo', onPress: () => run(() => rejectCapture(tx.id)) },
+            ])
+          }
+        />
+      </View>
+    </Card>
+  );
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
+      <View style={styles.header}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => navigation.goBack()}
+          style={styles.iconBtn}
+        >
+          <Ionicons name="chevron-back" size={24} color={t.text} />
+        </Pressable>
+        <Text style={[styles.title, { color: t.text }]}>Review</Text>
+      </View>
+      <Text style={[styles.intro, { color: t.text2 }]}>
+        We read these accounts from your bank SMS. Add each one once and every matching transaction moves to
+        it.
+      </Text>
+      <Segmented
+        style={{ marginHorizontal: space.xl, marginBottom: space.md }}
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'new', label: `New accounts · ${groups.length}` },
+          { value: 'check', label: `Check · ${checks.length}` },
+        ]}
+      />
+      {tab === 'new' ? (
+        <FlatList
+          data={groups}
+          keyExtractor={(g) => g.signature}
+          renderItem={renderGroup}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Text style={{ color: t.muted, textAlign: 'center', marginTop: space.xxl }}>
+              No new accounts in your SMS.
+            </Text>
+          }
+        />
+      ) : (
+        <FlatList
+          data={checks}
+          keyExtractor={(tx) => String(tx.id)}
+          renderItem={renderCheck}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Text style={{ color: t.muted, textAlign: 'center', marginTop: space.xxl }}>
+              Nothing to check.
+            </Text>
+          }
+        />
+      )}
+      {tab === 'new' && groups.length > 0 && (
+        <View style={[styles.footer, { borderColor: t.border, backgroundColor: t.bg }]}>
+          <AppButton
+            title={`Add all ${groups.length} account${groups.length === 1 ? '' : 's'}`}
+            size="lg"
+            loading={busy}
+            onPress={() => run(() => addAllDiscoveredAccounts())}
+          />
+        </View>
+      )}
+
+      <Modal visible={!!linking} transparent animationType="slide" onRequestClose={() => setLinking(null)}>
+        <View style={styles.sheetWrap}>
+          <View style={[styles.sheet, { backgroundColor: t.card }]}>
+            <Text style={[styles.groupName, { color: t.text, marginBottom: space.sm }]}>
+              Link {linking?.suggested.name} to
+            </Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {linkChoices.length === 0 ? (
+                <Text style={{ color: t.muted }}>
+                  You have no{' '}
+                  {linking?.suggested.type === 'Credit Card' ? 'credit cards' : 'accounts of this type'} yet.
+                  Use Add instead.
+                </Text>
+              ) : (
+                linkChoices.map((a) => (
+                  <AppButton
+                    key={a.id}
+                    title={a.name}
+                    variant="secondary"
+                    onPress={() => {
+                      const g = linking;
+                      setLinking(null);
+                      run(() => resolveCaptureAccount(g.firstTxId, { accountId: a.id }));
+                    }}
+                  />
+                ))
+              )}
+            </ScrollView>
+            <AppButton title="Cancel" variant="secondary" onPress={() => setLinking(null)} />
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.md, paddingTop: space.sm },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 24, fontWeight: '700', marginLeft: space.xs },
+  intro: { fontSize: 15, lineHeight: 21, paddingHorizontal: space.xl, marginVertical: space.md },
+  list: { paddingHorizontal: space.xl, paddingBottom: 120 },
+  groupHead: { flexDirection: 'row', alignItems: 'center', marginBottom: space.md },
+  badge: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: space.md,
+  },
+  groupName: { fontSize: 17, fontWeight: '700' },
+  buttons: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', marginTop: space.sm },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: space.xl,
+    borderTopWidth: 1,
+  },
+  sheetWrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
+  sheet: { padding: space.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+});
