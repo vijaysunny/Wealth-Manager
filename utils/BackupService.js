@@ -9,6 +9,7 @@
  * validateBackup() refuses anything that is not a plain object of the expected
  * shapes; summarizeBackup() gives the counts shown before overwriting.
  */
+import { readAttachmentFiles } from './Attachments';
 import AsyncStorage from '../data/Storage';
 import { BACKUP_VERSION } from './appInfo';
 
@@ -149,4 +150,16 @@ export const restoreBackup = async (data, storage = AsyncStorage) => {
   }
   if (pairs.length) await storage.multiSet(pairs);
   return pairs.length;
+};
+
+/**
+ * B1: backup with the transactions' files as base64 under attachmentFiles["attachments/<txId>/<id>"].
+ * includeAttachments defaults to on. Returns { data, missing } (files that could not be read).
+ */
+export const buildFullBackup = async ({ includeAttachments = true, storage, fs } = {}) => {
+  const data = await buildBackup(storage);
+  if (!includeAttachments) return { data, missing: 0 };
+  const { files, missing } = await readAttachmentFiles(data.transactions || [], fs);
+  if (Object.keys(files).length) data.attachmentFiles = files;
+  return { data, missing };
 };

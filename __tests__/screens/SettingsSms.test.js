@@ -143,3 +143,28 @@ describe('C5.8 Categories and Backup screens', () => {
     expect(screen.getByRole('button', { name: 'Delete all data' })).toBeTruthy();
   });
 });
+
+test('B1: a backup over 50 MB of files asks first and offers Without files', async () => {
+  const { addMany } = require('../../data/TransactionRepo');
+  await addMany(
+    [
+      {
+        id: 'big',
+        type: 'expense',
+        amount: 1,
+        fullDate: '2026-11-01T00:00:00Z',
+        attachments: [{ id: 'f', name: 'scan.pdf', size: 60 * 1048576 }],
+      },
+    ],
+    { dedup: false }
+  );
+  const alert = jest.spyOn(RN.Alert, 'alert').mockImplementation(() => {});
+  const Backup = require('../../screens/BackupScreen').default;
+  render(<Backup navigation={nav()} />);
+  fireEvent.press(await screen.findByRole('button', { name: 'Back up now' }));
+  await waitFor(() =>
+    expect(alert).toHaveBeenCalledWith('Large backup', expect.stringMatching(/60\.0 MB/), expect.any(Array))
+  );
+  const buttons = alert.mock.calls.find((c) => c[0] === 'Large backup')[2].map((b) => b.text);
+  expect(buttons).toEqual(['Cancel', 'Without files', 'With files']);
+});

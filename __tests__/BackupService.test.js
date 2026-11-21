@@ -142,3 +142,62 @@ describe('summary + partial restore', () => {
     expect(st.m.user_name).toBe('Keep');
   });
 });
+
+describe('B1: backups carry attachment files', () => {
+  const { buildFullBackup } = require('../utils/BackupService');
+  const { restoreAttachmentFiles } = require('../utils/Attachments');
+  const withFile = () =>
+    memStorage({
+      user_transactions: JSON.stringify([
+        {
+          id: 'g1',
+          type: 'expense',
+          amount: 10,
+          fullDate: '2026-11-18T10:00:00Z',
+          attachments: [
+            {
+              id: 'f1',
+              name: 'a.png',
+              mime: 'image/png',
+              size: 3,
+              uri: 'file:///old/attachments/g1/f1-a.png',
+            },
+          ],
+        },
+      ]),
+    });
+  const fs = (files) => ({
+    documentDirectory: 'file:///new/',
+    readAsStringAsync: async (uri) => {
+      if (!(uri in files)) throw new Error('missing');
+      return files[uri];
+    },
+    makeDirectoryAsync: async () => {},
+    writeAsStringAsync: async (uri, data) => {
+      files[uri] = data;
+    },
+  });
+
+  test('included by default, round-trips through restore', async () => {
+    const src = { 'file:///old/attachments/g1/f1-a.png': 'QUJD' };
+    const { data, missing } = await buildFullBackup({ storage: withFile(), fs: fs(src) });
+    expect(missing).toBe(0);
+    expect(data.attachmentFiles).toEqual({
+      'attachments/g1/f1': { name: 'a.png', mime: 'image/png', data: 'QUJD' },
+    });
+    const parsed = JSON.parse(JSON.stringify(data));
+    expect(validateBackup(parsed).ok).toBe(true);
+    const dest = {};
+    const restored = await restoreAttachmentFiles(parsed, fs(dest));
+    expect(restored.transactions[0].attachments[0].uri).toBe('file:///new/attachments/g1/f1-a.png');
+    expect(dest['file:///new/attachments/g1/f1-a.png']).toBe('QUJD');
+  });
+
+  test('without files: no attachmentFiles; a missing file is counted, not fatal', async () => {
+    const off = await buildFullBackup({ includeAttachments: false, storage: withFile(), fs: fs({}) });
+    expect(off.data.attachmentFiles).toBeUndefined();
+    const gone = await buildFullBackup({ storage: withFile(), fs: fs({}) });
+    expect(gone.missing).toBe(1);
+    expect(gone.data.attachmentFiles).toBeUndefined();
+  });
+});

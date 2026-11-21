@@ -11,7 +11,9 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
-import { buildBackup, validateBackup, formatSummary, restoreBackup } from '../utils/BackupService';
+import { buildFullBackup, validateBackup, formatSummary, restoreBackup } from '../utils/BackupService';
+import { attachmentsSize, restoreAttachmentFiles, sizeLabel, BACKUP_WARN_BYTES } from '../utils/Attachments';
+import { getAll } from '../data/TransactionRepo';
 import { encryptBackup, decryptBackup } from '../utils/EncryptedBackup';
 import { mergeRestore } from '../utils/FeatureService';
 import { backupStatus, LAST_BACKUP_KEY } from '../utils/BackupReminder';
@@ -56,19 +58,48 @@ export default function BackupScreen({ navigation }) {
     await Storage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
   };
 
+  // B1: files are included by default; above 50 MB ask first and offer a backup without them.
+  const withFileChoice = async (go) => {
+    const bytes = attachmentsSize(await getAll());
+    if (bytes <= BACKUP_WARN_BYTES) return go(true);
+    Alert.alert(
+      'Large backup',
+      `Your files add about ${sizeLabel(bytes)}. A backup this size can be slow to share.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Without files', onPress: () => go(false) },
+        { text: 'With files', onPress: () => go(true) },
+      ]
+    );
+  };
+
+  const build = async (includeAttachments) => {
+    const { data, missing } = await buildFullBackup({ includeAttachments });
+    if (missing)
+      Alert.alert(
+        'Some files are missing',
+        `${missing} attached file${missing === 1 ? ' was' : 's were'} not found and are left out.`
+      );
+    return data;
+  };
+
   const backupPlain = () =>
-    run('plain', async () =>
-      share(FileSystem.documentDirectory + 'wealthmanager_backup.json', await buildBackup())
+    withFileChoice((files) =>
+      run('plain', async () =>
+        share(FileSystem.documentDirectory + 'wealthmanager_backup.json', await build(files))
+      )
     );
 
   const backupEncrypted = () =>
-    run('encrypted', async () => {
-      await share(
-        FileSystem.cacheDirectory + 'wealthmanager_encrypted.json',
-        encryptBackup(await buildBackup(), password)
-      );
-      setPassword('');
-    });
+    withFileChoice((files) =>
+      run('encrypted', async () => {
+        await share(
+          FileSystem.cacheDirectory + 'wealthmanager_encrypted.json',
+          encryptBackup(await build(files), password)
+        );
+        setPassword('');
+      })
+    );
 
   const restore = () =>
     run('restore', async () => {
@@ -80,20 +111,23 @@ export default function BackupScreen({ navigation }) {
       } catch {
         throw new Error('This file is not a WealthManager backup.');
       }
-      const data = content.encrypted ? decryptBackup(content, password) : content;
-      const check = validateBackup(data);
+      const raw = content.encrypted ? decryptBackup(content, password) : content;
+      const check = validateBackup(raw);
       if (!check.ok) throw new Error(check.errors.join('\n'));
+      const fileCount = Object.keys(raw.attachmentFiles || {}).length;
+      // B1: the backup's files are written into this phone's folder only after Merge / Replace
+      const withFiles = () => restoreAttachmentFiles(raw);
       const note = check.warnings.length ? `\n\n${check.warnings.join('\n')}` : '';
       Alert.alert(
         'Restore backup?',
-        `${formatSummary(data)}${note}\n\nMerge keeps current balances and settings, adds new rows and skips duplicates. Replace overwrites what is in the backup.`,
+        `${formatSummary(raw)}${fileCount ? `\n• Files: ${fileCount}` : ''}${note}\n\nMerge keeps current balances and settings, adds new rows and skips duplicates. Replace overwrites what is in the backup.`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Merge',
             onPress: () =>
               run('merge', async () => {
-                const r = await mergeRestore(data);
+                const r = await mergeRestore(await withFiles());
                 setPassword('');
                 Alert.alert('Merged', `${r.added} transactions added; ${r.skipped} skipped.`);
               }),
@@ -103,7 +137,7 @@ export default function BackupScreen({ navigation }) {
             style: 'destructive',
             onPress: () =>
               run('replace', async () => {
-                await restoreBackup(data);
+                await restoreBackup(await withFiles());
                 setPassword('');
                 Alert.alert('Restored', 'Restart the app to load the restored data.');
               }),
@@ -158,7 +192,8 @@ export default function BackupScreen({ navigation }) {
               marginTop: space.xs,
             }}
           >
-            Makes one file with everything and opens Share so you can save it outside the app.
+            Makes one file with everything, including attached bills and files, and opens Share so you can
+            save it outside the app.
           </Text>
           <AppButton
             title="Back up now"
