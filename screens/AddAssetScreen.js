@@ -8,13 +8,34 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { parseAmount, parseNonNegative } from '../utils/Format';
 import AsyncStorage from '../data/Storage';
 import { WALLET_SUBTYPES } from '../utils/TransactionParser';
+import { depositValue } from '../utils/DepositValue';
+import { scheduleMaturityReminder } from '../utils/MaturityReminder';
 import { walletFields, WALLET_PROVIDER_CHOICES as WALLET_PROVIDERS } from '../utils/WalletAccounts';
+
+const DEPOSITS = ['Fixed Deposit', 'Recurring Deposit'];
+const COMPOUNDING = [
+  ['quarterly', 'Quarterly'],
+  ['monthly', 'Monthly'],
+  ['simple', 'Simple'],
+];
 
 export default function AddAssetScreen({ navigation, route }) {
   // Common State
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [type, setType] = useState('Mutual Fund');
+  // C5.5 "Add" rows on Accounts pass a kind
+  const [type, setType] = useState(
+    () =>
+      ({ mf: 'Mutual Fund', stocks: 'Stocks / Equity', fd: 'Fixed Deposit', other: 'Provident Fund' })[
+        route?.params?.kind
+      ] || 'Mutual Fund'
+  );
+  // B3: FD / RD
+  const [maturityDate, setMaturityDate] = useState(null);
+  const [showMaturityPicker, setShowMaturityPicker] = useState(false);
+  const [compounding, setCompounding] = useState('quarterly');
+  // B3: platform the SIP is debited to (Groww, Zerodha…)
+  const [platform, setPlatform] = useState('');
 
   // Mutual Fund State
   const [schemeCode, setSchemeCode] = useState('');
@@ -149,7 +170,40 @@ export default function AddAssetScreen({ navigation, route }) {
       }
       finalBalance = qty;
     }
-    // 4. OTHERS
+    // 4. FD / RD (B3): value grows with interest, see utils/DepositValue
+    else if (type === 'Fixed Deposit' || type === 'Recurring Deposit') {
+      if (!qty) {
+        Alert.alert(
+          'Error',
+          type === 'Fixed Deposit' ? 'Enter the amount deposited' : 'Enter the monthly instalment'
+        );
+        return;
+      }
+      if (!rate) {
+        Alert.alert('Error', 'Enter the interest rate');
+        return;
+      }
+      if (type === 'Recurring Deposit' && !(tenureMonths > 0)) {
+        Alert.alert('Error', 'Enter the number of months');
+        return;
+      }
+      if (type === 'Fixed Deposit' && maturityDate && maturityDate <= startDate) {
+        Alert.alert('Error', 'Maturity must be after the start date');
+        return;
+      }
+      finalBalance =
+        depositValue({
+          subType: type,
+          principal: qty,
+          monthly: qty,
+          interestRate: rate,
+          startDate: startDate.toISOString(),
+          tenure: tenureMonths,
+          compounding,
+          maturityDate: maturityDate ? maturityDate.toISOString() : null,
+        }) || 0;
+    }
+    // 5. OTHERS
     else {
       const bal = parseNonNegative(quantity); // a new account may legitimately start at 0
       if (bal === null) {
@@ -175,13 +229,24 @@ export default function AddAssetScreen({ navigation, route }) {
       originalAmount: type === 'Loan' ? qty : null,
       loanType: type === 'Loan' ? loanType : null,
       emiAmount: type === 'Loan' ? emi || 0 : null,
-      startDate: type === 'Loan' ? startDate.toISOString() : null,
-      tenure: type === 'Loan' && Number.isFinite(tenureMonths) && tenureMonths > 0 ? tenureMonths : null,
+      startDate: ['Loan', ...DEPOSITS].includes(type) ? startDate.toISOString() : null,
+      tenure:
+        ['Loan', 'Recurring Deposit'].includes(type) && Number.isFinite(tenureMonths) && tenureMonths > 0
+          ? tenureMonths
+          : null,
+      // FD / RD (B3)
+      ...(type === 'Fixed Deposit'
+        ? { principal: qty, compounding, maturityDate: maturityDate ? maturityDate.toISOString() : null }
+        : {}),
+      ...(type === 'Recurring Deposit' ? { monthly: qty } : {}),
+      ...(platform.trim() ? { platform: platform.trim() } : {}),
       // PF / Loan Interest
       interestRate: rate,
       ...(type === 'Wallet' ? walletFields({ name, walletSubType, provider, linkedBankId }) : {}),
     };
     await putAccount(newAsset);
+    // B3: maturity reminder 7 days before (permission refused → saved without a reminder)
+    if (DEPOSITS.includes(type)) await scheduleMaturityReminder(newAsset).catch(() => {});
     navigation.goBack();
   };
   return (
@@ -620,16 +685,138 @@ export default function AddAssetScreen({ navigation, route }) {
           </View>
         )}
 
+        {/* B3: SIP debits to this platform become transfers into this investment */}
+        {['Mutual Fund', 'Stocks / Equity', 'Gold / Silver'].includes(type) && (
+          <View style={styles.formSection}>
+            <Text style={styles.label}>Platform (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={platform}
+              onChangeText={setPlatform}
+              placeholder="e.g. Groww, Zerodha, Kuvera"
+              accessibilityLabel="Platform"
+            />
+            <Text style={styles.hint}>
+              SIP debits from your bank to this platform are then counted as a move into this investment, not
+              spending.
+            </Text>
+          </View>
+        )}
+
+        {/* FD / RD FORM (B3) */}
+        {DEPOSITS.includes(type) && (
+          <View style={styles.formSection}>
+            <Text style={styles.label}>Name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. SBI FD 2027"
+            />
+            <Text style={styles.label}>
+              {type === 'Fixed Deposit' ? 'Amount deposited (₹)' : 'Monthly instalment (₹)'}
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={quantity}
+              onChangeText={setQuantity}
+              keyboardType="numeric"
+              accessibilityLabel={type === 'Fixed Deposit' ? 'Amount deposited' : 'Monthly instalment'}
+            />
+            <Text style={styles.label}>Interest rate (% a year)</Text>
+            <TextInput
+              style={styles.input}
+              value={interestRate}
+              onChangeText={setInterestRate}
+              keyboardType="numeric"
+              placeholder="7.1"
+              accessibilityLabel="Interest rate"
+            />
+            <Text style={styles.label}>Start date</Text>
+            <TouchableOpacity
+              style={styles.dateBtn}
+              onPress={() => setShowPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Start date"
+            >
+              <Text>{startDate.toDateString()}</Text>
+              <Ionicons name="calendar" size={20} />
+            </TouchableOpacity>
+            {showPicker && (
+              <DateTimePicker
+                value={startDate}
+                mode="date"
+                onChange={(e, d) => {
+                  setShowPicker(false);
+                  if (d) setStartDate(d);
+                }}
+              />
+            )}
+            {type === 'Fixed Deposit' ? (
+              <>
+                <Text style={styles.label}>Maturity date</Text>
+                <TouchableOpacity
+                  style={styles.dateBtn}
+                  onPress={() => setShowMaturityPicker(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Maturity date"
+                >
+                  <Text>{maturityDate ? maturityDate.toDateString() : 'Pick a date (for the reminder)'}</Text>
+                  <Ionicons name="calendar" size={20} />
+                </TouchableOpacity>
+                {showMaturityPicker && (
+                  <DateTimePicker
+                    value={
+                      maturityDate ||
+                      new Date(startDate.getFullYear() + 1, startDate.getMonth(), startDate.getDate())
+                    }
+                    mode="date"
+                    onChange={(e, d) => {
+                      setShowMaturityPicker(false);
+                      if (d) setMaturityDate(d);
+                    }}
+                  />
+                )}
+                <Text style={styles.label}>Interest compounds</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {COMPOUNDING.map(([key, label]) => (
+                    <TouchableOpacity
+                      key={key}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: compounding === key }}
+                      onPress={() => setCompounding(key)}
+                      style={[
+                        styles.chip,
+                        compounding === key && { backgroundColor: '#2196F3', borderColor: '#2196F3' },
+                      ]}
+                    >
+                      <Text style={{ color: compounding === key ? '#fff' : '#333' }}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Number of months</Text>
+                <TextInput
+                  style={styles.input}
+                  value={tenure}
+                  onChangeText={setTenure}
+                  keyboardType="numeric"
+                  placeholder="12"
+                  accessibilityLabel="Number of months"
+                />
+              </>
+            )}
+            <Text style={styles.hint}>
+              The value grows with interest every day until maturity. You get a reminder 7 days before it
+              matures.
+            </Text>
+          </View>
+        )}
+
         {/* 5. DEFAULT FORM */}
-        {[
-          'Bank Account',
-          'Credit Card',
-          'Real Estate',
-          'Fixed Deposit',
-          'Recurring Deposit',
-          'Cash',
-          'Wallet',
-        ].includes(type) && (
+        {['Bank Account', 'Credit Card', 'Real Estate', 'Cash', 'Wallet'].includes(type) && (
           <View style={styles.formSection}>
             <Text style={styles.label}>Name</Text>
             <TextInput

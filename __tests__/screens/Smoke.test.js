@@ -219,6 +219,40 @@ describe('AddAssetScreen (A6)', () => {
     expect(screen.getByText('PhonePe')).toBeTruthy();
     expect(await screen.findByText('Axis Bank')).toBeTruthy();
   });
+
+  test("B3: kind fd opens the FD form; saving stores principal, rate, dates and today's value", async () => {
+    const n = nav();
+    render(<AddAssetScreen navigation={n} route={{ params: { kind: 'fd' } }} />);
+    fireEvent.changeText(await screen.findByPlaceholderText('e.g. SBI FD 2027'), 'SBI FD');
+    fireEvent.changeText(screen.getByLabelText('Amount deposited'), '100000');
+    fireEvent.changeText(screen.getByLabelText('Interest rate'), '7');
+    fireEvent.press(screen.getByText('Monthly'));
+    fireEvent.press(screen.getByText('Save Asset'));
+    await waitFor(() => expect(n.goBack).toHaveBeenCalled());
+    const fd = JSON.parse(await Storage.getItem('user_wealth_accounts')).find((a) => a.name === 'SBI FD');
+    expect(fd).toMatchObject({
+      subType: 'Fixed Deposit',
+      principal: 100000,
+      interestRate: 7,
+      compounding: 'monthly',
+      balance: 100000,
+    });
+    expect(fd.startDate).toBeTruthy();
+  });
+
+  test('B3: RD needs months; mutual fund shows Platform', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    render(<AddAssetScreen navigation={nav()} route={{ params: { kind: 'fd' } }} />);
+    fireEvent.press(await screen.findByText('Recurring Deposit'));
+    fireEvent.changeText(screen.getByPlaceholderText('e.g. SBI FD 2027'), 'RD');
+    fireEvent.changeText(screen.getByLabelText('Monthly instalment'), '1000');
+    fireEvent.changeText(screen.getByLabelText('Interest rate'), '7');
+    fireEvent.press(screen.getByText('Save Asset'));
+    expect(alert).toHaveBeenCalledWith('Error', 'Enter the number of months');
+    fireEvent.press(screen.getByText('Mutual Fund'));
+    expect(screen.getByLabelText('Platform')).toBeTruthy();
+    alert.mockRestore();
+  });
 });
 
 describe('ToolsScreen (A6 shortcuts)', () => {

@@ -28,12 +28,15 @@ import { pickFromCamera, pickFromGallery, pickAnyFile, openAttachment } from '..
 import { resolveCaptureAccount } from '../utils/FeatureService';
 import { normalizeTag, recentTags, visibleTags, SYSTEM_TAGS } from '../utils/Tags';
 import { shortAccountName } from '../utils/TransactionList';
+import { isSipDebit, linkToInvestment } from '../utils/InvestmentLink';
+import { isInvestment } from '../utils/AccountsOverview';
 import { payeeOf } from '../components/ui/TransactionRow';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import {
   AppButton,
   AppSwitch,
+  Banner,
   Card,
   Chip,
   Collapsible,
@@ -80,10 +83,11 @@ export default function EditTransactionScreen({ route, navigation }) {
       ? transaction.suggestedAccount
       : null;
 
+  const [investments, setInvestments] = useState([]); // B3: targets for "Link to an investment"
   const load = useCallback(async () => {
-    const accs = JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]').filter((a) =>
-      SPENDABLE.includes(a.type)
-    );
+    const all = JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]');
+    setInvestments(all.filter(isInvestment));
+    const accs = all.filter((a) => SPENDABLE.includes(a.type));
     if (!accs.some((a) => a.name === 'Cash')) accs.push({ id: null, name: 'Cash', type: 'Cash' });
     setAccounts(accs);
     const saved = JSON.parse((await Storage.getItem('user_categories')) || 'null');
@@ -118,6 +122,25 @@ export default function EditTransactionScreen({ route, navigation }) {
     setTagInput('');
   };
 
+  const linkInvestment = async (inv) => {
+    if (!inv) return;
+    try {
+      const linked = linkToInvestment({ ...transaction, accountId: account.id, account: account.name }, inv);
+      await update(transaction.id, {
+        type: linked.type,
+        kind: linked.kind,
+        category: linked.category,
+        accountId: linked.accountId,
+        account: linked.account,
+        toAccountId: linked.toAccountId,
+        toAccount: linked.toAccount,
+      });
+      Alert.alert('Linked', `Counted as money moved into ${inv.name}.`);
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Could not link', e.message);
+    }
+  };
   const [fileBusy, setFileBusy] = useState(null);
   const attach = async (label, pick) => {
     setFileBusy(label);
@@ -577,6 +600,26 @@ export default function EditTransactionScreen({ route, navigation }) {
             ) : null}
           </Collapsible>
 
+          {/* B3: a SIP debit not matched to an investment automatically */}
+          {!isTransfer &&
+          isSipDebit(transaction) &&
+          investments.length &&
+          account?.type === 'Bank Account' ? (
+            <View style={{ marginBottom: space.md }}>
+              <Banner
+                tone="info"
+                title="Looks like a SIP"
+                body="Link it to an investment and it counts as money moved, not spending."
+              />
+              <AppButton
+                title="Link to an investment"
+                variant="secondary"
+                icon="trending-up-outline"
+                onPress={() => setSheet('investment')}
+              />
+            </View>
+          ) : null}
+
           {source ? (
             <View style={{ backgroundColor: t.divider, borderRadius: radius.lg, padding: space.lg }}>
               <Text style={{ color: t.text2, fontFamily: fonts.semibold, fontSize: 14 }}>{source}</Text>
@@ -625,6 +668,20 @@ export default function EditTransactionScreen({ route, navigation }) {
         onSelect={(v) => {
           setAccountName(v);
           setSheet(null);
+        }}
+        onClose={() => setSheet(null)}
+      />
+      <OptionSheet
+        visible={sheet === 'investment'}
+        title="Link to an investment"
+        options={investments.map((a) => ({
+          value: String(a.id),
+          label: a.name,
+          sublabel: a.subType || a.type,
+        }))}
+        onSelect={(v) => {
+          setSheet(null);
+          linkInvestment(investments.find((a) => String(a.id) === v));
         }}
         onClose={() => setSheet(null)}
       />

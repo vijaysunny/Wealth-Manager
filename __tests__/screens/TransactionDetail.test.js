@@ -204,3 +204,40 @@ test('B1: deleting a transaction deletes its folder', async () => {
   await remove('g1');
   expect(fsm.deleteAsync).toHaveBeenCalledWith('file:///doc/attachments/g1/', { idempotent: true });
 });
+
+test('B3: a SIP-looking debit can be linked to an investment (becomes a transfer)', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await Storage.setItem(
+    'user_wealth_accounts',
+    JSON.stringify([
+      { id: 'axis', name: 'Axis Bank', type: 'Bank Account', last4: '0973', balance: 1000 },
+      { id: 'mf', name: 'Parag Parikh Flexi', type: 'Mutual Fund', subType: 'Mutual Fund', balance: 9000 },
+    ])
+  );
+  const sip = {
+    ...base,
+    id: 'sip',
+    smsId: 'sms:AX:2:500',
+    merchant: 'GROWW',
+    title: 'GROWW',
+    category: 'Investment',
+    amount: 500,
+    attachments: [],
+  };
+  await addMany([sip], { dedup: false, balanceMode: 'captured' });
+  const n = await open(sip);
+  fireEvent.press(screen.getByRole('button', { name: 'Link to an investment' }));
+  fireEvent.press(await screen.findByText('Parag Parikh Flexi'));
+  await waitFor(() => expect(n.goBack).toHaveBeenCalled());
+  const saved = (await getAll()).find((x) => x.id === 'sip');
+  expect(saved).toMatchObject({ type: 'transfer', kind: 'investment', accountId: 'axis', toAccountId: 'mf' });
+  const accs = JSON.parse(await Storage.getItem('user_wealth_accounts'));
+  expect(accs.find((a) => a.id === 'mf').balance).toBe(9500);
+  expect(accs.find((a) => a.id === 'axis').balance).toBe(500); // debited once, not twice
+  alert.mockRestore();
+});
+
+test('B3: no SIP banner for ordinary payees', async () => {
+  await open();
+  expect(screen.queryByText('Looks like a SIP')).toBeNull();
+});

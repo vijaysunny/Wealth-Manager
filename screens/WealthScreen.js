@@ -40,6 +40,7 @@ import {
   monthCounts,
 } from '../utils/AccountsOverview';
 import { shortAccountName } from '../utils/TransactionList';
+import { depositValue } from '../utils/DepositValue';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space, type } from '../components/tokens';
 import { AppButton, Collapsible, Section } from '../components/ui';
@@ -143,6 +144,13 @@ export default function WealthScreen({ navigation }) {
               acc.balance = parseFloat(acc.balance) + interestEarned;
               acc.lastInterestCalc = now.toISOString(); // Update timestamp
             }
+          }
+
+          // 5. FD / RD (B3): value from principal, rate and dates; capped at maturity
+          const deposit = depositValue(acc);
+          if (deposit !== null && !acc.priceOverride) {
+            acc.balance = deposit;
+            acc.lastUpdated = new Date().toISOString();
           }
 
           if (!['Bank Account', 'Credit Card', 'Cash', 'Wallet'].includes(acc.type))
@@ -590,9 +598,10 @@ export default function WealthScreen({ navigation }) {
               </View>
             ))}
             <Text style={[type.meta, { color: t.muted, fontSize: 13, lineHeight: 19, marginTop: space.md }]}>
-              Net worth counts only accounts added here. Mutual funds use the daily NAV, stocks and gold the
-              price when you pull to refresh, PF adds interest daily and loans recompute what is owed. SIP
-              debits from your bank will be moved here as transfers once the investment is added.
+              Net worth counts only accounts added here; nothing is created from SMS. Mutual funds use the
+              daily NAV, stocks and gold the price when you pull to refresh. PF, FD and RD add interest daily
+              (FD/RD stop at maturity, with a reminder 7 days before). Loans recompute what is owed. A SIP
+              debit becomes a transfer here when the investment’s platform (Groww, Zerodha…) is set.
             </Text>
             <AppButton
               title="Money calculators"
