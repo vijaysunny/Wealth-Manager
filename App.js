@@ -12,7 +12,7 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import TabBar from './components/ui/TabBar';
 import { AppState } from 'react-native';
 
 // --- SCREENS ---
@@ -63,27 +63,12 @@ import { saveNetWorthSnapshot } from './utils/FeatureService';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// C4: five tabs with the shared TabBar. "Wealth" is now "Accounts"; Money tools hub removed.
 function MainTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: '#2196F3',
-        tabBarInactiveTintColor: 'gray',
-        tabBarStyle: { paddingBottom: 5, height: 60 },
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-          if (route.name === 'HomeTab') iconName = focused ? 'home' : 'home-outline';
-          else if (route.name === 'WealthTab') iconName = focused ? 'wallet' : 'wallet-outline';
-          else if (route.name === 'BudgetTab') iconName = focused ? 'pie-chart' : 'pie-chart-outline';
-          else if (route.name === 'GoalTab') iconName = focused ? 'flag' : 'flag-outline';
-          else if (route.name === 'SettingsTab') iconName = focused ? 'settings' : 'settings-outline';
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
-      })}
-    >
+    <Tab.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
       <Tab.Screen name="HomeTab" component={HomeScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="WealthTab" component={WealthScreen} options={{ title: 'Wealth' }} />
+      <Tab.Screen name="AccountsTab" component={WealthScreen} options={{ title: 'Accounts' }} />
       <Tab.Screen name="BudgetTab" component={BudgetScreen} options={{ title: 'Budget' }} />
       <Tab.Screen name="GoalTab" component={GoalScreen} options={{ title: 'Goals' }} />
       <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: 'Settings' }} />
@@ -138,21 +123,21 @@ function AppContent() {
       <StatusBar style="auto" />
       <Stack.Navigator initialRouteName="Main">
         <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Tools" component={ToolsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="MoneyTool" component={ToolsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="AiAssistant" component={AiAssistantScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Income" component={IncomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Expense" component={ExpenseScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="AddAsset" component={AddAssetScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="AddInvestment" component={AddAssetScreen} options={{ headerShown: false }} />
         <Stack.Screen name="EditAsset" component={EditAssetScreen} options={{ headerShown: false }} />
         <Stack.Screen name="SearchAsset" component={SearchAssetScreen} options={{ headerShown: false }} />
         <Stack.Screen
-          name="AllTransactions"
+          name="Transactions"
           component={AllTransactionsScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen
-          name="EditTransaction"
+          name="TransactionDetail"
           component={EditTransactionScreen}
           options={{ headerShown: false }}
         />

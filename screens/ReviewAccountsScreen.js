@@ -227,7 +227,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
           size="sm"
           variant="secondary"
           style={{ flex: 1 }}
-          onPress={() => navigation.navigate('EditTransaction', { transaction: tx })}
+          onPress={() => navigation.navigate('TransactionDetail', { transaction: tx })}
         />
         <AppButton
           title="Undo"

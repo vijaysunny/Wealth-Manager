@@ -454,8 +454,18 @@ export default function SettingsScreen({ navigation }) {
         <SectionCard title="Money tools">
           <RowButton
             icon="swap-horizontal"
-            label="Transfers, review, history and wealth tools"
-            onPress={() => navigation.navigate('Tools')}
+            label="New transfer between accounts"
+            onPress={() => navigation.navigate('MoneyTool', { tab: 'Transfers' })}
+          />
+          <RowButton
+            icon="git-branch-outline"
+            label="Category rules"
+            onPress={() => navigation.navigate('MoneyTool', { tab: 'Rules' })}
+          />
+          <RowButton
+            icon="list-outline"
+            label="Review captured transactions"
+            onPress={() => navigation.navigate('ReviewAccounts', { tab: 'check' })}
           />
         </SectionCard>
         {isAiAvailable() && (

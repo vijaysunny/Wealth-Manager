@@ -361,7 +361,7 @@ export default function HomeScreen({ navigation }) {
               label: 'History',
               icon: 'list',
               color: '#555',
-              route: 'AllTransactions',
+              route: 'Transactions',
             },
             {
               label: 'Reports',
@@ -385,7 +385,7 @@ export default function HomeScreen({ navigation }) {
               label: 'Wealth',
               icon: 'wallet-outline',
               color: '#009688',
-              route: 'WealthTab',
+              route: 'AccountsTab',
             },
           ].map((item) => (
             <TouchableOpacity
@@ -411,7 +411,7 @@ export default function HomeScreen({ navigation }) {
         {/* Recent */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Transactions</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('AllTransactions')}>
+          <TouchableOpacity onPress={() => navigation.navigate('Transactions')}>
             <Text
               style={{
                 color: '#2196F3',
@@ -435,7 +435,7 @@ export default function HomeScreen({ navigation }) {
               key={item.id}
               style={styles.item}
               onPress={() =>
-                navigation.navigate('EditTransaction', {
+                navigation.navigate('TransactionDetail', {
                   transaction: item,
                 })
               }

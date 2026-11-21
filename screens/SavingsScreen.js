@@ -349,7 +349,7 @@ export default function SavingsScreen({ navigation }) {
                 <Text style={styles.accBal}>₹{(acc.balance || 0).toLocaleString('en-IN')}</Text>
               </View>
             ))}
-            <TouchableOpacity style={styles.addAccBtn} onPress={() => navigation.navigate('AddAsset')}>
+            <TouchableOpacity style={styles.addAccBtn} onPress={() => navigation.navigate('AddInvestment')}>
               <Ionicons name="add-circle-outline" size={16} color="#2196F3" />
               <Text style={styles.addAccText}>Add Savings Account</Text>
             </TouchableOpacity>

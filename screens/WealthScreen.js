@@ -312,11 +312,11 @@ export default function WealthScreen({ navigation }) {
       {/* HEADER */}
       <AppButton
         title="Wealth calculations"
-        onPress={() => navigation.navigate('Tools', { tab: 'Wealth' })}
+        onPress={() => navigation.navigate('MoneyTool', { tab: 'Wealth' })}
       />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Net Worth</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('AddAsset')}>
+        <TouchableOpacity onPress={() => navigation.navigate('AddInvestment')}>
           <Ionicons name="add-circle" size={32} color="#2196F3" />
         </TouchableOpacity>
       </View>
@@ -386,7 +386,7 @@ export default function WealthScreen({ navigation }) {
         {totals.assets === 0 && totals.debt === 0 && (
           <View style={{ alignItems: 'center', marginTop: 50 }}>
             <Text style={{ color: '#999' }}>No assets found.</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AddAsset')}>
+            <TouchableOpacity onPress={() => navigation.navigate('AddInvestment')}>
               <Text style={{ color: '#2196F3', fontWeight: 'bold', marginTop: 10 }}>
                 + Add your first asset
               </Text>

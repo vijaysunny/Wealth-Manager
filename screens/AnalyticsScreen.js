@@ -348,7 +348,7 @@ export default function AnalyticsScreen({ navigation }) {
         style={styles.manageBtn}
         onPress={() =>
           navigation.navigate('Main', {
-            screen: 'WealthTab',
+            screen: 'AccountsTab',
           })
         }
       >

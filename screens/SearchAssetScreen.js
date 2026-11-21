@@ -30,7 +30,7 @@ export default function SearchAssetScreen({ navigation }) {
 
   const handleSelect = (item) => {
     // Pass the selected data back to the previous screen
-    navigation.navigate('AddAsset', {
+    navigation.navigate('AddInvestment', {
       selectedScheme: {
         code: item.schemeCode,
         name: item.schemeName,

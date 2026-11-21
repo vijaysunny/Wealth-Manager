@@ -63,7 +63,7 @@ export default function GoalScreen({ navigation }) {
       <AppButton
         title="Contributions and goal history"
         onPress={() =>
-          navigation.navigate('Tools', {
+          navigation.navigate('MoneyTool', {
             tab: 'Goals',
           })
         }

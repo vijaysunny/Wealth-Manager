@@ -1,28 +1,27 @@
-import { View, Text, TextInput, ScrollView, SafeAreaView } from '../components/Theme';
+import { View, Text, TextInput, ScrollView, SafeAreaView, useTokens } from '../components/Theme';
 import React, { useCallback, useState } from 'react';
 import { Alert, Switch } from 'react-native';
 import AppButton from '../components/ui/AppButton';
+import ScreenHeader from '../components/ui/ScreenHeader';
 
 import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
-import { add, getAll, update } from '../data/TransactionRepo';
-import {
-  reviewQueue,
-  rejectCapture,
-  bulkUpdate,
-  bulkDelete,
-  contributeToGoal,
-  saveNetWorthSnapshot,
-  resolveCaptureAccount,
-  pickCaptureWallet,
-} from '../utils/FeatureService';
-import { describeCapture, reviewHint } from '../utils/ReviewText';
+import { add, getAll } from '../data/TransactionRepo';
+import { bulkUpdate, bulkDelete, contributeToGoal, saveNetWorthSnapshot } from '../utils/FeatureService';
 import { filterHistory, xirr, amortize } from '../utils/FinanceTools';
 import { exportHistory } from '../utils/HistoryExport';
 import { parseAmount, parseNonNegative, formatMoney } from '../utils/Format';
 import { mutateList } from '../data/Collections';
 import { scheduleCardReminder } from '../utils/CardReminders';
-const tabs = ['Transfers', 'Review', 'History', 'Goals', 'Wealth'];
+// C4: the Money tools hub is gone. Each section is its own screen (route MoneyTool, param tab),
+// opened from where it belongs; review lives in Review accounts.
+export const TOOL_TITLES = {
+  Transfers: 'New transfer',
+  Rules: 'Category rules',
+  History: 'Bulk edit & export',
+  Goals: 'Goal contributions',
+  Wealth: 'Money calculators',
+};
 const Field = ({ label, value, onChangeText, number = false }) => (
   <View style={{ marginVertical: 6 }}>
     <Text>{label}</Text>
@@ -49,10 +48,10 @@ const Choices = ({ items, value, onChange }) => (
   </ScrollView>
 );
 export default function ToolsScreen({ navigation, route }) {
-  const [tab, setTab] = useState(route.params?.tab || 'Transfers');
+  const t = useTokens();
+  const tab = TOOL_TITLES[route.params?.tab] ? route.params.tab : 'Transfers';
   const [accounts, setAccounts] = useState([]),
     [rows, setRows] = useState([]),
-    [review, setReview] = useState([]),
     [goals, setGoals] = useState([]),
     [rules, setRules] = useState([]),
     [snapshots, setSnapshots] = useState([]);
@@ -87,7 +86,6 @@ export default function ToolsScreen({ navigation, route }) {
     setRules(JSON.parse(values.category_rules || '[]'));
     setSnapshots(JSON.parse(values.networth_history || '[]'));
     setRows(await getAll());
-    setReview(await reviewQueue());
   }, []);
   useFocusEffect(
     useCallback(() => {
@@ -115,29 +113,9 @@ export default function ToolsScreen({ navigation, route }) {
   );
   const selectedGoal = goals.find((g) => String(g.id) === String(goalId));
   return (
-    <SafeAreaView style={{ flex: 1, padding: 16, backgroundColor: '#f5f5f5' }}>
-      <AppButton
-        title="Back"
-        icon="arrow-back"
-        variant="secondary"
-        size="sm"
-        style={{ alignSelf: 'flex-start' }}
-        onPress={() => navigation.goBack()}
-      />
-      <Text style={{ fontSize: 24, fontWeight: 'bold', marginVertical: 12 }}>Money tools</Text>
-      <ScrollView horizontal style={{ maxHeight: 56 }}>
-        {tabs.map((name) => (
-          <AppButton
-            key={name}
-            title={name}
-            variant={tab === name ? 'primary' : 'secondary'}
-            size="sm"
-            style={{ marginRight: 8 }}
-            onPress={() => setTab(name)}
-          />
-        ))}
-      </ScrollView>
-      <ScrollView style={{ marginTop: 12 }} contentContainerStyle={{ paddingBottom: 40 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
+      <ScreenHeader title={TOOL_TITLES[tab]} onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
         {tab === 'Transfers' && (
           <View>
             {accounts
@@ -204,7 +182,7 @@ export default function ToolsScreen({ navigation, route }) {
             />
           </View>
         )}
-        {tab === 'Review' && (
+        {tab === 'Rules' && (
           <View>
             <Text style={{ fontWeight: 'bold' }}>Category rules (first match wins)</Text>
             <Field label="Merchant / VPA / text contains" value={pattern} onChangeText={setPattern} />
@@ -232,60 +210,6 @@ export default function ToolsScreen({ navigation, route }) {
                   title="Remove rule"
                   onPress={() =>
                     run(() => mutateList('category_rules', (list) => list.filter((r) => r.id !== rule.id)))
-                  }
-                />
-              </View>
-            ))}
-            <Text style={{ fontWeight: 'bold', marginTop: 16 }}>Pending captures: {review.length}</Text>
-            {review.map((tx) => (
-              <View key={tx.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: '#ccc' }}>
-                <Text style={{ fontWeight: '600' }}>{describeCapture(tx)}</Text>
-                <Text>
-                  {tx.category} · {tx.date}
-                </Text>
-                {reviewHint(tx) ? <Text style={{ color: '#E65100' }}>{reviewHint(tx)}</Text> : null}
-                {tx.reviewReason === 'new_account' && (
-                  <AppButton
-                    title={`Create "${tx.suggestedAccount?.name || 'account'}"`}
-                    onPress={() => run(() => resolveCaptureAccount(tx.id, { create: true }))}
-                  />
-                )}
-                {tx.accountUnresolved && (
-                  <Choices
-                    items={spendable.filter(
-                      (a) =>
-                        (tx.accountCandidates || []).map(String).includes(String(a.id)) ||
-                        (!tx.accountCandidates && a.type === (tx.suggestedAccount?.type || a.type))
-                    )}
-                    value=""
-                    onChange={(accountId) => run(() => resolveCaptureAccount(tx.id, { accountId }))}
-                  />
-                )}
-                {tx.reviewReason === 'pick_wallet' && (
-                  <Choices
-                    items={accounts.filter((a) => a.type === 'Wallet')}
-                    value=""
-                    onChange={(walletId) => run(() => pickCaptureWallet(tx.id, walletId))}
-                  />
-                )}
-                {!tx.accountUnresolved && (
-                  <AppButton
-                    title="Confirm"
-                    onPress={() => run(() => update(tx.id, { reviewStatus: 'confirmed' }))}
-                  />
-                )}
-                <AppButton
-                  title="Edit"
-                  onPress={() => navigation.navigate('EditTransaction', { transaction: tx })}
-                />
-                <AppButton
-                  title="Undo capture"
-                  variant="danger"
-                  onPress={() =>
-                    Alert.alert('Undo capture?', 'Delete this transaction and reverse its balance change?', [
-                      { text: 'Cancel' },
-                      { text: 'Undo', onPress: () => run(() => rejectCapture(tx.id)) },
-                    ])
                   }
                 />
               </View>
@@ -371,7 +295,7 @@ export default function ToolsScreen({ navigation, route }) {
                 </View>
                 <AppButton
                   title="Edit"
-                  onPress={() => navigation.navigate('EditTransaction', { transaction: tx })}
+                  onPress={() => navigation.navigate('TransactionDetail', { transaction: tx })}
                 />
               </View>
             ))}

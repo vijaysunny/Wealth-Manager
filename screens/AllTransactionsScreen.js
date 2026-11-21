@@ -150,7 +150,7 @@ export default function AllTransactionsScreen({ navigation }) {
       <TouchableOpacity
         style={styles.txRow}
         onPress={() =>
-          navigation.navigate('EditTransaction', {
+          navigation.navigate('TransactionDetail', {
             transaction: item,
           })
         }
@@ -322,7 +322,7 @@ export default function AllTransactionsScreen({ navigation }) {
       <AppButton
         title="Search, filters, export and bulk actions"
         onPress={() =>
-          navigation.navigate('Tools', {
+          navigation.navigate('MoneyTool', {
             tab: 'History',
           })
         }
@@ -349,7 +349,7 @@ export default function AllTransactionsScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() =>
-              navigation.navigate('Tools', {
+              navigation.navigate('MoneyTool', {
                 tab: 'History',
               })
             }
