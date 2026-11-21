@@ -1,30 +1,36 @@
 /**
- * AiSettingsPanel.js - Settings → AI assistant.
- * Keys are written straight to SecureStore and never shown again (only "saved ✓").
+ * AiSettingsPanel.js (C5.9 status card) - shown at the top of AI assistant.
+ * Use AI switch with the privacy note, then providers in order: status ("Working · model",
+ * "No key", or the API error) and Test / Add key. Tapping a provider opens its key editor.
+ * Keys are written straight to SecureStore and never shown again.
  * Opt-in: nothing is sent to a provider until "Use AI" is on.
  */
-import { View, Text, TextInput } from './Theme';
-import React, { useEffect, useState, useCallback } from 'react';
-import { Switch, Alert, Linking } from 'react-native';
-import AppButton from './ui/AppButton';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { PROVIDERS } from '../utils/ai/AiProviders';
-import { loadAiSettings, saveAiSettings, getApiKey, setApiKey } from '../utils/ai/AiConfig';
+import { loadAiSettings, saveAiSettings, getApiKey, setApiKey, SHORT_NAMES } from '../utils/ai/AiConfig';
 import { runProviderTest } from '../utils/ai/AiClient';
+import { useTokens } from './Theme';
+import { fonts, radius, space } from './tokens';
+import AppButton from './ui/AppButton';
+import AppSwitch from './ui/AppSwitch';
+import Collapsible from './ui/Collapsible';
 
 const FEATURE_LABELS = {
   sms: 'Read bank SMS the parser misses',
   categorize: "Categorize 'General' transactions",
   statements: 'Read statements the parser misses',
-  insights: 'Spending questions (AI Assistant)',
+  insights: 'Spending questions (AI assistant)',
 };
-const input = { borderWidth: 1, borderColor: '#999', padding: 8, borderRadius: 8, marginVertical: 4 };
 
-export default function AiSettingsPanel({ onOpenAssistant }) {
+export default function AiSettingsPanel({ onChange }) {
+  const t = useTokens();
   const [settings, setSettings] = useState(null);
   const [hasKey, setHasKey] = useState({});
   const [drafts, setDrafts] = useState({});
   const [busy, setBusy] = useState(null);
   const [status, setStatus] = useState({}); // A9: last Test result per provider
+  const [open, setOpen] = useState(null); // provider whose key editor is open
 
   const refresh = useCallback(async () => {
     setSettings(await loadAiSettings());
@@ -37,7 +43,11 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
     refresh().catch(() => {});
   }, [refresh]);
 
-  const update = async (patch) => setSettings(await saveAiSettings({ ...settings, ...patch }));
+  const update = async (patch) => {
+    const next = await saveAiSettings({ ...settings, ...patch });
+    setSettings(next);
+    onChange?.(next);
+  };
 
   const run = async (label, task) => {
     if (busy) return;
@@ -65,10 +75,12 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
       await setApiKey(id, key);
       setDrafts((d) => ({ ...d, [id]: '' }));
       await refresh();
+      onChange?.();
       if (!key) {
         setStatus((st) => ({ ...st, [id]: { ok: false, line: 'No key' } }));
         return;
       }
+      setOpen(null);
       // A9: test right away, so a bad key or "no suitable model" shows here, not later
       await checkKey(id, key);
       if (firstKey && !settings.enabled)
@@ -79,7 +91,7 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
     });
 
   const test = (id) =>
-    run(id, async () => {
+    run(`test-${id}`, async () => {
       const key = drafts[id] || (await getApiKey(id));
       if (!key) throw new Error('Enter a key first.');
       await checkKey(id, key);
@@ -88,116 +100,200 @@ export default function AiSettingsPanel({ onOpenAssistant }) {
   if (!settings) return null;
   const anyKey = Object.values(hasKey).some(Boolean);
 
-  return (
-    <View>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={{ flex: 1, fontWeight: '600' }}>Use AI</Text>
-        <Switch
-          accessibilityLabel="Use AI"
-          value={settings.enabled}
-          onValueChange={(enabled) =>
-            run('toggle', async () => {
-              if (enabled && !anyKey) throw new Error('Save at least one API key below first.');
-              await update({ enabled });
-            })
-          }
-        />
-      </View>
-      <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
-        When on, SMS text (long numbers masked), transaction titles or monthly totals are sent to the provider
-        below. Providers are tried in order; free tiers first, the next is used if one fails or hits its
-        limit.
-      </Text>
+  const statusLine = (id, idx) => {
+    if (status[id]) return status[id];
+    if (hasKey[id]) return { ok: null, line: 'Key saved · tap Test to check it' };
+    const prev = idx > 0 ? SHORT_NAMES[settings.order[idx - 1]] : null;
+    return { ok: null, line: prev ? `No key · used if ${prev} fails` : 'No key' };
+  };
 
+  return (
+    <View
+      testID="ai-status-card"
+      style={{
+        backgroundColor: t.card,
+        borderColor: t.border,
+        borderWidth: 1,
+        borderRadius: radius.lg,
+        paddingHorizontal: space.lg,
+        marginBottom: space.md,
+      }}
+    >
+      <AppSwitch
+        label="Use AI"
+        sublabel="Sends SMS text (numbers masked) or monthly totals to the provider"
+        value={settings.enabled}
+        onValueChange={(enabled) =>
+          run('toggle', async () => {
+            if (enabled && !anyKey) throw new Error('Save at least one API key below first.');
+            await update({ enabled });
+          })
+        }
+      />
+      <View style={{ height: 1, backgroundColor: t.divider }} />
       {settings.order.map((id, idx) => {
         const p = PROVIDERS[id];
+        const st = statusLine(id, idx);
+        const editing = open === id;
         return (
-          <View key={id} style={{ borderTopWidth: 1, borderColor: '#E5E7EB', paddingVertical: 8 }}>
-            <Text style={{ fontWeight: '600' }}>
-              {idx + 1}. {p.label} {hasKey[id] ? '· key saved' : '· no key'}
-            </Text>
-            {status[id] ? (
-              <Text
-                testID={`ai-status-${id}`}
-                style={{
-                  fontSize: 13,
-                  marginTop: 2,
-                  color: status[id].ok ? '#0E7C4A' : status[id].ok === false ? '#7A1A24' : '#5B6475',
-                }}
+          <View key={id} style={{ paddingVertical: space.md }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${p.label}: ${hasKey[id] ? 'key saved' : 'no key'}. Edit key`}
+                accessibilityState={{ expanded: editing }}
+                onPress={() => setOpen(editing ? null : id)}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
               >
-                {status[id].line}
-              </Text>
-            ) : null}
-            <Text style={{ fontSize: 12, color: '#2196F3' }} onPress={() => Linking.openURL(p.keyUrl)}>
-              Get a {p.free ? 'free ' : ''}key: {p.keyUrl}
-            </Text>
-            <TextInput
-              style={input}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={hasKey[id] ? 'Replace key (leave empty + Save to remove)' : 'Paste API key'}
-              value={drafts[id] || ''}
-              onChangeText={(v) => setDrafts((d) => ({ ...d, [id]: v }))}
-            />
-            <TextInput
-              style={input}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="Model (optional, auto-picked if empty)"
-              value={settings.models[id] || ''}
-              onChangeText={(v) => setSettings((s) => ({ ...s, models: { ...s.models, [id]: v.trim() } }))}
-              onEndEditing={() => update({}).catch(() => {})}
-            />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <AppButton
-                title="Save key"
-                size="sm"
-                loading={busy === id}
-                disabled={!!busy}
-                onPress={() => saveKey(id)}
-              />
-              <AppButton
-                title="Test"
-                variant="secondary"
-                size="sm"
-                disabled={!!busy}
-                onPress={() => test(id)}
-              />
-              {idx > 0 && (
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: radius.sm,
+                    backgroundColor: idx === 0 ? t.primarySoft : t.divider,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: space.md,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: idx === 0 ? t.primary : t.text2,
+                      fontFamily: fonts.semibold,
+                      fontSize: 15,
+                    }}
+                  >
+                    {idx + 1}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, paddingRight: space.sm }}>
+                  <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+                    {p.label} {hasKey[id] ? '· key saved' : '· no key'}
+                  </Text>
+                  <Text
+                    testID={`ai-status-${id}`}
+                    style={{
+                      fontFamily: st.ok ? fonts.medium : fonts.body,
+                      fontSize: 13,
+                      marginTop: 2,
+                      color: st.ok ? t.income : st.ok === false ? t.dangerText : t.muted,
+                    }}
+                  >
+                    {st.line}
+                  </Text>
+                </View>
+              </Pressable>
+              {hasKey[id] ? (
                 <AppButton
-                  title="Move up"
+                  title="Test"
                   variant="secondary"
                   size="sm"
+                  accessibilityLabel={`Test ${p.label}`}
+                  loading={busy === `test-${id}`}
                   disabled={!!busy}
-                  onPress={() => {
-                    const order = [...settings.order];
-                    [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
-                    update({ order });
-                  }}
+                  onPress={() => test(id)}
+                />
+              ) : (
+                <AppButton
+                  title="Add key"
+                  variant="secondary"
+                  size="sm"
+                  accessibilityLabel={`Add key for ${p.label}`}
+                  onPress={() => setOpen(editing ? null : id)}
                 />
               )}
             </View>
+            {editing || !anyKey ? (
+              <View style={{ marginTop: space.sm, marginLeft: 48 }}>
+                <Text
+                  accessibilityRole="link"
+                  style={{ color: t.primary, fontFamily: fonts.medium, fontSize: 13 }}
+                  onPress={() => Linking.openURL(p.keyUrl)}
+                >
+                  Get a {p.free ? 'free ' : ''}key: {p.keyUrl}
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: t.inputBorder,
+                    borderRadius: radius.md,
+                    padding: space.md,
+                    marginTop: space.sm,
+                    color: t.text,
+                    fontFamily: fonts.body,
+                  }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder={hasKey[id] ? 'Replace key (leave empty + Save to remove)' : 'Paste API key'}
+                  placeholderTextColor={t.placeholder}
+                  value={drafts[id] || ''}
+                  onChangeText={(v) => setDrafts((d) => ({ ...d, [id]: v }))}
+                />
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: t.inputBorder,
+                    borderRadius: radius.md,
+                    padding: space.md,
+                    marginTop: space.sm,
+                    color: t.text,
+                    fontFamily: fonts.body,
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="Model (optional, picked automatically)"
+                  placeholderTextColor={t.placeholder}
+                  value={settings.models[id] || ''}
+                  onChangeText={(v) =>
+                    setSettings((s) => ({ ...s, models: { ...s.models, [id]: v.trim() } }))
+                  }
+                  onEndEditing={() => update({}).catch(() => {})}
+                />
+                <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.xs }}>
+                  <AppButton
+                    title="Save key"
+                    size="sm"
+                    loading={busy === id}
+                    disabled={!!busy}
+                    onPress={() => saveKey(id)}
+                  />
+                  {idx > 0 && (
+                    <AppButton
+                      title="Move up"
+                      variant="secondary"
+                      size="sm"
+                      disabled={!!busy}
+                      onPress={() => {
+                        const order = [...settings.order];
+                        [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+                        update({ order });
+                      }}
+                    />
+                  )}
+                </View>
+              </View>
+            ) : null}
           </View>
         );
       })}
-
-      <Text style={{ fontWeight: '600', marginTop: 8 }}>Use AI for</Text>
-      {Object.entries(FEATURE_LABELS).map(([f, label]) => (
-        <View key={f} style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ flex: 1 }}>{label}</Text>
-          <Switch
-            value={settings.features[f] !== false}
-            disabled={!settings.enabled}
-            onValueChange={(v) => update({ features: { ...settings.features, [f]: v } })}
-          />
-        </View>
-      ))}
-      {onOpenAssistant && (
-        <View style={{ marginTop: 8 }}>
-          <AppButton title="Open AI Assistant" onPress={onOpenAssistant} />
-        </View>
-      )}
+      <View style={{ marginHorizontal: -space.lg }}>
+        <Collapsible
+          title="Use AI for"
+          summary="SMS, categories, statements, questions"
+          style={{ borderWidth: 0, marginBottom: 0 }}
+        >
+          {Object.entries(FEATURE_LABELS).map(([f, label]) => (
+            <AppSwitch
+              key={f}
+              label={label}
+              value={settings.features[f] !== false}
+              disabled={!settings.enabled}
+              onValueChange={(v) => update({ features: { ...settings.features, [f]: v } })}
+            />
+          ))}
+        </Collapsible>
+      </View>
     </View>
   );
 }

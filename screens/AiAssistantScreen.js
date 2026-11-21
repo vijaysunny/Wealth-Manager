@@ -1,24 +1,39 @@
 /**
- * AiAssistantScreen.js - ask questions about your spending; bulk-categorize 'General' rows.
- * Only an aggregated monthly summary (totals per category / top merchants) is sent, never SMS text.
+ * AI assistant (Phase 12 C5.9, docs/design/AI assistant.png).
+ * Status card (Use AI + providers) · "Ask about your money" chips (incl. categorize the
+ * 'General' rows) · chat bubbles · input bar fixed at the bottom.
+ * Only an aggregated monthly summary (totals per category / top merchants) is sent for
+ * questions, never SMS text.
  */
-import { View, Text, TextInput, ScrollView, SafeAreaView } from '../components/Theme';
-import React, { useCallback, useState } from 'react';
-import { Alert, ActivityIndicator } from 'react-native';
-import AppButton from '../components/ui/AppButton';
+import React, { useCallback, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
 import { getAll } from '../data/TransactionRepo';
 import { bulkUpdate } from '../utils/FeatureService';
-import { isAiReady } from '../utils/ai/AiConfig';
-import { PROVIDERS } from '../utils/ai/AiProviders';
+import { isAiReady, SHORT_NAMES } from '../utils/ai/AiConfig';
 import { aiInsights, aiCategorize, buildSpendingSummary, DEFAULT_CATEGORIES } from '../utils/ai/AiTasks';
+import AiSettingsPanel from '../components/AiSettingsPanel';
+import { useTokens } from '../components/Theme';
+import { fonts, radius, space } from '../components/tokens';
+import { Banner, Section, ScreenHeader } from '../components/ui';
 
 const SUGGESTIONS = [
   'Where did my money go this month?',
-  'Which categories are over budget?',
+  'Which subscriptions can I cut?',
   'How does this month compare with last month?',
-  'Where can I save ₹5,000 next month?',
 ];
 
 const readJson = async (key, fallback) => {
@@ -30,21 +45,22 @@ const readJson = async (key, fallback) => {
 };
 
 export default function AiAssistantScreen({ navigation }) {
+  const t = useTokens();
   const [ready, setReady] = useState({ insights: false, categorize: false });
   const [question, setQuestion] = useState('');
-  const [chat, setChat] = useState([]); // [{ q, a, provider }]
+  const [chat, setChat] = useState([]); // [{ q, a, provider }] oldest first
   const [busy, setBusy] = useState(false);
   const [generalCount, setGeneralCount] = useState(0);
+  const scroller = useRef(null);
 
+  const refresh = useCallback(async () => {
+    setReady({ insights: await isAiReady('insights'), categorize: await isAiReady('categorize') });
+    setGeneralCount((await getAll()).filter((x) => x.type !== 'transfer' && x.category === 'General').length);
+  }, []);
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        setReady({ insights: await isAiReady('insights'), categorize: await isAiReady('categorize') });
-        setGeneralCount(
-          (await getAll()).filter((t) => t.type !== 'transfer' && t.category === 'General').length
-        );
-      })().catch(() => {});
-    }, [])
+      refresh().catch(() => {});
+    }, [refresh])
   );
 
   const ask = async (q) => {
@@ -56,8 +72,9 @@ export default function AiAssistantScreen({ navigation }) {
         budgets: await readJson('user_category_budgets', {}),
       });
       const { text: answer, provider } = await aiInsights(text, summary);
-      setChat((c) => [{ q: text, a: answer, provider }, ...c]);
+      setChat((c) => [...c, { q: text, a: answer, provider }]);
       setQuestion('');
+      setTimeout(() => scroller.current?.scrollToEnd?.({ animated: true }), 50);
     } catch (e) {
       Alert.alert('AI', e.message);
     } finally {
@@ -69,7 +86,7 @@ export default function AiAssistantScreen({ navigation }) {
     if (busy) return;
     setBusy(true);
     try {
-      const general = (await getAll()).filter((t) => t.type !== 'transfer' && t.category === 'General');
+      const general = (await getAll()).filter((x) => x.type !== 'transfer' && x.category === 'General');
       const categories = await readJson('user_categories', DEFAULT_CATEGORIES);
       const map = await aiCategorize(general.slice(0, 200), { categories });
       const byCat = new Map();
@@ -87,79 +104,157 @@ export default function AiAssistantScreen({ navigation }) {
     }
   };
 
+  const off = !ready.insights && !ready.categorize;
+  const chip = (label, onPress, key) => (
+    <Pressable
+      key={key || label}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={busy}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignSelf: 'flex-start',
+        backgroundColor: t.card,
+        borderColor: t.border,
+        borderWidth: 1,
+        borderRadius: radius.pill,
+        paddingHorizontal: space.lg,
+        minHeight: 44,
+        justifyContent: 'center',
+        marginBottom: space.sm,
+        opacity: pressed || busy ? 0.6 : 1,
+      })}
+    >
+      <Text style={{ color: t.text, fontFamily: fonts.medium, fontSize: 15 }}>{label}</Text>
+    </Pressable>
+  );
+
   return (
-    <SafeAreaView style={{ flex: 1, padding: 16, backgroundColor: '#f5f5f5' }}>
-      <AppButton title="Back" onPress={() => navigation.goBack()} />
-      <Text style={{ fontSize: 24, fontWeight: 'bold', marginVertical: 12 }}>AI Assistant</Text>
-      {!ready.insights && !ready.categorize ? (
-        <View
-          testID="ai-off-card"
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderColor: '#E3E6EC',
-            borderWidth: 1,
-            borderRadius: 16,
-            padding: 16,
-          }}
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
+      <ScreenHeader title="AI assistant" onBack={() => navigation.goBack()} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          ref={scroller}
+          contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: space.xxl }}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={{ color: '#0E1726', fontSize: 17, fontWeight: '700' }}>AI is off</Text>
-          <Text style={{ color: '#3A4456', fontSize: 15, lineHeight: 21, marginTop: 4 }}>
-            Turn on “Use AI” and save a free Gemini or Groq key in Settings → AI assistant.
-          </Text>
-          <AppButton
-            title="Turn on AI"
-            style={{ marginTop: 12 }}
-            onPress={() => navigation.navigate('Main', { screen: 'SettingsTab' })}
-          />
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          {ready.categorize && (
-            <View style={{ marginBottom: 16 }}>
-              <Text>{generalCount} transactions are in “General”.</Text>
-              <AppButton
-                title="Categorize them with AI"
-                disabled={busy || generalCount === 0}
-                onPress={categorizeAll}
+          <AiSettingsPanel onChange={() => refresh().catch(() => {})} />
+
+          {off ? (
+            <View testID="ai-off-card">
+              <Banner
+                tone="info"
+                title="AI is off"
+                body="Turn on Use AI above and save a free Gemini or Groq key. Nothing is sent until then."
               />
             </View>
+          ) : (
+            <Section title="Ask about your money">
+              {ready.insights && SUGGESTIONS.map((s) => chip(s, () => ask(s)))}
+              {ready.categorize &&
+                generalCount > 0 &&
+                chip(`Categorize ${generalCount} “General” items`, categorizeAll, 'categorize')}
+            </Section>
           )}
-          {ready.insights && (
-            <View>
-              <TextInput
-                value={question}
-                onChangeText={setQuestion}
-                placeholder="Ask about your spending…"
-                multiline
-                style={{ borderWidth: 1, borderColor: '#999', padding: 10, borderRadius: 8, minHeight: 60 }}
-              />
-              <AppButton title={busy ? 'Thinking…' : 'Ask'} disabled={busy} onPress={() => ask()} />
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 8 }}>
-                {SUGGESTIONS.map((s) => (
-                  <Text
-                    key={s}
-                    onPress={() => ask(s)}
-                    style={{ color: '#2196F3', marginRight: 12, marginBottom: 6 }}
-                  >
-                    {s}
-                  </Text>
-                ))}
+
+          {chat.map((m, i) => (
+            <View key={i} style={{ marginTop: space.md }}>
+              <View
+                style={{
+                  alignSelf: 'flex-end',
+                  maxWidth: '85%',
+                  backgroundColor: t.primary,
+                  borderRadius: radius.lg,
+                  borderBottomRightRadius: 4,
+                  paddingHorizontal: space.lg,
+                  paddingVertical: space.md,
+                }}
+              >
+                <Text style={{ color: t.onPrimary, fontFamily: fonts.medium, fontSize: 16 }}>{m.q}</Text>
               </View>
-              {busy && <ActivityIndicator />}
-              {chat.map((m, i) => (
-                <View key={i} style={{ backgroundColor: '#fff', borderRadius: 8, padding: 12, marginTop: 8 }}>
-                  <Text style={{ fontWeight: '600' }}>{m.q}</Text>
-                  <Text style={{ marginTop: 6 }}>{m.a}</Text>
-                  <Text style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>
-                    via {PROVIDERS[m.provider]?.label || m.provider} · AI can be wrong; check figures in
-                    Analytics
-                  </Text>
-                </View>
-              ))}
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  maxWidth: '92%',
+                  backgroundColor: t.card,
+                  borderColor: t.border,
+                  borderWidth: 1,
+                  borderRadius: radius.lg,
+                  borderBottomLeftRadius: 4,
+                  padding: space.lg,
+                  marginTop: space.sm,
+                }}
+              >
+                <Text
+                  selectable
+                  style={{ color: t.text, fontFamily: fonts.body, fontSize: 16, lineHeight: 23 }}
+                >
+                  {m.a}
+                </Text>
+                <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13, marginTop: space.sm }}>
+                  via {SHORT_NAMES[m.provider] || m.provider} · AI can be wrong; check figures in Reports
+                </Text>
+              </View>
             </View>
-          )}
+          ))}
+          {busy ? <ActivityIndicator style={{ marginTop: space.md }} color={t.primary} /> : null}
         </ScrollView>
-      )}
+
+        {ready.insights ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space.sm,
+              padding: space.md,
+              paddingHorizontal: space.lg,
+              borderTopWidth: 1,
+              borderColor: t.border,
+              backgroundColor: t.bg,
+            }}
+          >
+            <TextInput
+              testID="ai-question"
+              accessibilityLabel="Ask about your spending"
+              value={question}
+              onChangeText={setQuestion}
+              onSubmitEditing={() => ask()}
+              returnKeyType="send"
+              placeholder="Ask about your spending"
+              placeholderTextColor={t.placeholder}
+              style={{
+                flex: 1,
+                minHeight: 52,
+                borderWidth: 1,
+                borderColor: t.inputBorder,
+                borderRadius: radius.pill,
+                paddingHorizontal: space.lg,
+                backgroundColor: t.card,
+                color: t.text,
+                fontFamily: fonts.body,
+                fontSize: 16,
+              }}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send"
+              disabled={busy || !question.trim()}
+              onPress={() => ask()}
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 26,
+                backgroundColor: t.primary,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: busy || !question.trim() ? 0.5 : 1,
+              }}
+            >
+              <Ionicons name="arrow-forward" size={24} color={t.onPrimary} />
+            </Pressable>
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

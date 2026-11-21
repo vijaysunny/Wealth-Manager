@@ -53,15 +53,33 @@ test('panel: cannot enable without a key; saved key goes to SecureStore and is n
   expect(screen.queryByDisplayValue('secret-gemini-key')).toBeNull();
 });
 
-test('assistant screen: visible "AI is off" card with a Turn on AI button (A9)', async () => {
-  const navigate = jest.fn();
-  render(<AiAssistantScreen navigation={{ goBack: jest.fn(), navigate }} />);
+test('assistant screen (C5.9): status card on top, visible "AI is off" note, no input bar', async () => {
+  ['gemini', 'groq', 'xai'].forEach((id) => delete secure[`ai_key_${id}`]);
+  render(<AiAssistantScreen navigation={{ goBack: jest.fn(), navigate: jest.fn() }} />);
   expect(await screen.findByTestId('ai-off-card')).toBeTruthy();
+  expect(await screen.findByTestId('ai-status-card')).toBeTruthy();
   const title = screen.getByText('AI is off');
   // the regression: text must carry an explicit colour, never the system default
   expect(require('react-native').StyleSheet.flatten(title.props.style).color).toBe('#0E1726');
-  fireEvent.press(screen.getByRole('button', { name: 'Turn on AI' }));
-  expect(navigate).toHaveBeenCalledWith('Main', { screen: 'SettingsTab' });
+  expect(screen.getByText('No key · used if Gemini fails')).toBeTruthy();
+  expect(screen.queryByTestId('ai-question')).toBeNull();
+});
+
+test('assistant screen: with AI on, chips ask and the reply bubble names the provider', async () => {
+  secure.ai_key_gemini = 'k';
+  const Storage = require('../../data/Storage').default;
+  await Storage.setItem('ai_settings', JSON.stringify({ enabled: true }));
+  const tasks = require('../../utils/ai/AiTasks');
+  jest.spyOn(tasks, 'aiInsights').mockResolvedValue({ text: 'Mostly food.', provider: 'gemini' });
+  render(<AiAssistantScreen navigation={{ goBack: jest.fn(), navigate: jest.fn() }} />);
+  fireEvent.press(await screen.findByRole('button', { name: 'Where did my money go this month?' }));
+  expect(await screen.findByText('Mostly food.')).toBeTruthy();
+  expect(screen.getByText(/via Gemini/)).toBeTruthy();
+  fireEvent.changeText(screen.getByTestId('ai-question'), 'And transport?');
+  fireEvent.press(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(screen.getAllByText('Mostly food.')).toHaveLength(2));
+  await Storage.setItem('ai_settings', JSON.stringify({ enabled: false }));
+  delete secure.ai_key_gemini;
 });
 
 test('A9: Save key runs the Test, shows the status line and offers to turn AI on', async () => {
