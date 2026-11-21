@@ -412,7 +412,10 @@ export const extractAvailableLimit = (text = '') => {
 };
 
 // "We have received payment of Rs.5,770.00 via BBPS & the same has been credited to your SBI Credit Card"
-const CC_PAYMENT_RE = /\bpayment\b[^.]*\b(?:received|credited)\b|\b(?:received|credited)\b[^.]*\bpayment\b/i;
+// "Payment of INR 9145.91 has been received towards your Axis Bank Credit Card": the gap must allow
+// the decimal point in the amount, so it is a bounded lazy match rather than [^.]* (A3).
+const CC_PAYMENT_RE =
+  /\bpayment\b[\s\S]{0,80}?\b(?:received|credited)\b|\b(?:received|credited)\b[\s\S]{0,80}?\bpayment\b/i;
 const NOT_CC_PAYMENT_RE = /\brefund|\breversal|\bcashback|\bspent\b|\bpurchase\b/i;
 const isCardPayment = (body, accountType) =>
   accountType === 'Credit Card' && CC_PAYMENT_RE.test(body) && !NOT_CC_PAYMENT_RE.test(body);

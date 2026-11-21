@@ -28,10 +28,6 @@ const KNOWN_FAILING = new Set([
   'axis-debit-ccbill-amazon-01.flow',
   // A7: Adyar Anand (Bhavan cut off by the card network) is Food
   'axis-cc-spend-adyar-01.category',
-  // A3: "INR 9145.91" decimal point stopped CC_PAYMENT_RE
-  'axis-cc-payment-01.type',
-  'axis-cc-payment-01.kind',
-  'axis-cc-payment-01.flow',
   // A7: card limit-change notice is not a transaction
   'sbi-cc-limit-reset-01.parsed',
   // A6: counterparty runs into "View bal"/"Chk Bal" links
