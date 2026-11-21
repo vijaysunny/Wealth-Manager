@@ -35,6 +35,8 @@ import SavingsScreen from './screens/SavingsScreen';
 import RecurringScreen from './screens/RecurringScreen';
 import ReviewAccountsScreen from './screens/ReviewAccountsScreen';
 import ScanSmsScreen from './screens/ScanSmsScreen';
+import BackupScreen from './screens/BackupScreen';
+import CategoriesScreen from './screens/CategoriesScreen';
 
 // --- UTILS ---
 import { registerBackgroundSync } from './utils/BackgroundSync';
@@ -147,6 +149,8 @@ function AppContent() {
         <Stack.Screen name="Savings" component={SavingsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Recurring" component={RecurringScreen} options={{ headerShown: false }} />
         <Stack.Screen name="ScanSms" component={ScanSmsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Backup" component={BackupScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Categories" component={CategoriesScreen} options={{ headerShown: false }} />
         <Stack.Screen
           name="ReviewAccounts"
           component={ReviewAccountsScreen}

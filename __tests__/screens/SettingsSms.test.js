@@ -91,3 +91,55 @@ test('granted → no banner and the switch is on', async () => {
   expect(screen.queryByTestId('sms-blocked-banner')).toBeNull();
   expect(screen.queryByTestId('sms-needed-banner')).toBeNull();
 });
+
+describe('C5.8 Settings layout', () => {
+  test('grouped sections; rows open their screens; backup status shown', async () => {
+    const n = nav();
+    const S = SettingsScreen();
+    render(<S navigation={n} />);
+    expect(await screen.findByText('Capture')).toBeTruthy();
+    expect(screen.getByText('Money')).toBeTruthy();
+    expect(screen.getByText('Security & backup')).toBeTruthy();
+    expect(await screen.findByText('Never backed up')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: /^Backup & restore/ }));
+    expect(n.navigate).toHaveBeenCalledWith('Backup');
+    fireEvent.press(screen.getByRole('button', { name: /^Categories/ }));
+    expect(n.navigate).toHaveBeenCalledWith('Categories');
+    fireEvent.press(screen.getByRole('button', { name: 'Scan old SMS now' }));
+    expect(n.navigate).toHaveBeenCalledWith('ScanSms');
+    expect(screen.getByText('15')).toBeTruthy(); // default category count
+  });
+});
+
+describe('C5.8 Categories and Backup screens', () => {
+  test('add and remove a category', async () => {
+    const Categories = require('../../screens/CategoriesScreen').default;
+    const Storage = require('../../data/Storage').default;
+    const alert = jest.spyOn(RN.Alert, 'alert').mockImplementation(() => {});
+    render(<Categories navigation={nav()} />);
+    await screen.findByText('Food');
+    fireEvent.changeText(screen.getByTestId('new-category'), 'Pets');
+    fireEvent.press(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(async () => expect(JSON.parse(await Storage.getItem('user_categories'))).toContain('Pets'));
+    fireEvent.changeText(screen.getByTestId('new-category'), 'pets');
+    fireEvent.press(screen.getByRole('button', { name: 'Add' }));
+    expect(alert).toHaveBeenCalledWith('Category', expect.stringMatching(/already/));
+    fireEvent.press(screen.getByRole('button', { name: 'Remove Pets' }));
+    await alert.mock.calls
+      .at(-1)[2]
+      .find((b) => b.text === 'Remove')
+      .onPress();
+    await waitFor(async () =>
+      expect(JSON.parse(await Storage.getItem('user_categories'))).not.toContain('Pets')
+    );
+  });
+
+  test('Backup screen shows Never backed up and the actions', async () => {
+    const Backup = require('../../screens/BackupScreen').default;
+    render(<Backup navigation={nav()} />);
+    expect(await screen.findByText('Never backed up')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Back up now' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restore or merge a backup' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Delete all data' })).toBeTruthy();
+  });
+});

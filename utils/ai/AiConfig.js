@@ -78,3 +78,15 @@ export const isAiReady = async (feature) => {
   for (const id of s.order) if (await getApiKey(id)) return true;
   return false;
 };
+
+export const SHORT_NAMES = { gemini: 'Gemini', groq: 'Groq', xai: 'Grok' };
+
+/** One line for Settings → AI assistant: "Gemini key saved · AI is off", "On · Gemini", "No key yet". */
+export const aiSummary = (settings, hasKey = {}) => {
+  const s = normalizeSettings(settings);
+  const withKey = s.order.filter((id) => hasKey[id] && PROVIDERS[id]);
+  if (!withKey.length) return s.enabled ? 'On · no key yet' : 'No key yet · AI is off';
+  const names = withKey.map((id) => SHORT_NAMES[id] || id);
+  if (!s.enabled) return `${names.join(', ')} key${names.length === 1 ? '' : 's'} saved · AI is off`;
+  return `On · ${names[0]}`;
+};

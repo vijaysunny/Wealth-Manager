@@ -113,7 +113,7 @@ export default function HomeScreen({ navigation }) {
             }
             action={{
               label: 'Back up',
-              onPress: () => navigation.navigate('Main', { screen: 'SettingsTab' }),
+              onPress: () => navigation.navigate('Backup'),
             }}
           />
         )}
