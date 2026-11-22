@@ -32,6 +32,8 @@ import { isSipDebit, linkToInvestment } from '../utils/InvestmentLink';
 import { isInvestment } from '../utils/AccountsOverview';
 import { payeeOf } from '../components/ui/TransactionRow';
 import { trackAsEmiPrefill } from '../utils/LoanForm';
+import { canLink } from '../utils/LoanLink';
+import { isCardEmi } from '../utils/LoanCalculator';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import {
@@ -85,9 +87,11 @@ export default function EditTransactionScreen({ route, navigation }) {
       : null;
 
   const [investments, setInvestments] = useState([]); // B3: targets for "Link to an investment"
+  const [loans, setLoans] = useState([]); // C6: targets for "Link to loan"
   const load = useCallback(async () => {
     const all = JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]');
     setInvestments(all.filter(isInvestment));
+    setLoans(all.filter((a) => a.type === 'Loan' && !isCardEmi(a)));
     const accs = all.filter((a) => SPENDABLE.includes(a.type));
     if (!accs.some((a) => a.name === 'Cash')) accs.push({ id: null, name: 'Cash', type: 'Cash' });
     setAccounts(accs);
@@ -109,6 +113,11 @@ export default function EditTransactionScreen({ route, navigation }) {
   }, [load]);
 
   const account = accounts.find((a) => a.name === accountName);
+  const accountsById = Object.fromEntries(accounts.map((a) => [String(a.id), a]));
+  const linkedLoan = transaction.loanLink
+    ? loans.find((l) => String(l.id) === String(transaction.loanLink.loanId)) || null
+    : null;
+  const linkable = canLink(transaction, accountsById) && (loans.length > 0 || !!transaction.loanLink);
   const emiPrefill = trackAsEmiPrefill(
     transaction,
     accounts.find((a) => transaction.accountId != null && String(a.id) === String(transaction.accountId)) ||
@@ -633,6 +642,17 @@ export default function EditTransactionScreen({ route, navigation }) {
             </View>
           ) : null}
 
+          {/* C6: a bank debit (or the loan amount coming in) can be linked to a loan */}
+          {linkable ? (
+            <AppButton
+              title={linkedLoan ? `Linked to ${linkedLoan.name} · Edit` : 'Link to loan'}
+              accessibilityLabel={linkedLoan ? `Linked to ${linkedLoan.name}, edit link` : 'Link to loan'}
+              variant="secondary"
+              icon="link-outline"
+              style={{ marginBottom: space.md }}
+              onPress={() => navigation.navigate('LoanLink', { txId: transaction.id, fromTx: true })}
+            />
+          ) : null}
           {/* C2: a card purchase of ₹1,000 or more can be tracked as an EMI (the purchase is not changed) */}
           {emiPrefill ? (
             <AppButton

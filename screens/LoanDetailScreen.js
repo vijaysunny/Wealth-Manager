@@ -248,6 +248,20 @@ export default function LoanDetailScreen({ navigation, route }) {
           <Text accessibilityRole="header" style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>
             Payments
           </Text>
+          {!inCard && !closed ? (
+            <Text
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('LoanLink', { loanId: loan.id })}
+              style={{
+                color: t.primary,
+                fontFamily: fonts.semibold,
+                fontSize: 16,
+                textDecorationLine: 'underline',
+              }}
+            >
+              + Link a payment
+            </Text>
+          ) : null}
         </View>
         <Card padding={0}>
           {groups.length === 0 ? (
@@ -286,9 +300,12 @@ export default function LoanDetailScreen({ navigation, route }) {
             }
             const row = g.row;
             return (
-              <View
+              <Pressable
                 key={`${row.kind}${row.txId || row.prepaymentId || row.emiNo}`}
                 testID={`payment-${row.txId || row.prepaymentId}`}
+                accessibilityRole={row.txId != null ? 'button' : undefined}
+                disabled={row.txId == null}
+                onPress={() => navigation.navigate('LoanLink', { txId: row.txId, loanId: loan.id })}
                 style={[{ padding: space.lg }, border]}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -322,7 +339,7 @@ export default function LoanDetailScreen({ navigation, route }) {
                     {sourceText(row)}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </Card>

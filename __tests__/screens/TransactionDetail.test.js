@@ -279,3 +279,22 @@ test('C2: no "Track as EMI" on a bank expense', async () => {
   await open();
   expect(screen.queryByRole('button', { name: 'Track as EMI' })).toBeNull();
 });
+
+test('C6: a bank debit offers "Link to loan" once a loan exists; a linked one shows which loan', async () => {
+  await open();
+  expect(screen.queryByRole('button', { name: 'Link to loan' })).toBeNull();
+  screen.unmount();
+  await Storage.setItem(
+    'user_wealth_accounts',
+    JSON.stringify([
+      { id: 'axis', name: 'Axis Bank', type: 'Bank Account', last4: '0973', balance: 1000 },
+      { id: 'pl', name: 'Personal loan', type: 'Loan', balance: 0 },
+    ])
+  );
+  let n = await open();
+  fireEvent.press(screen.getByRole('button', { name: 'Link to loan' }));
+  expect(n.navigate).toHaveBeenCalledWith('LoanLink', { txId: 'g1', fromTx: true });
+  screen.unmount();
+  n = await open({ ...base, loanLink: { loanId: 'pl', kind: 'emi', principal: 1, interest: 1997.19 } });
+  expect(screen.getByRole('button', { name: 'Linked to Personal loan, edit link' })).toBeTruthy();
+});
