@@ -51,6 +51,7 @@ export default function AiAssistantScreen({ navigation }) {
   const [chat, setChat] = useState([]); // [{ q, a, provider }] oldest first
   const [busy, setBusy] = useState(false);
   const [generalCount, setGeneralCount] = useState(0);
+  const [geminiFailed, setGeminiFailed] = useState(false); // A2.6: show the Groq hint
   const scroller = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -73,9 +74,14 @@ export default function AiAssistantScreen({ navigation }) {
       });
       const { text: answer, provider } = await aiInsights(text, summary);
       setChat((c) => [...c, { q: text, a: answer, provider }]);
+      setGeminiFailed(false);
       setQuestion('');
       setTimeout(() => scroller.current?.scrollToEnd?.({ animated: true }), 50);
     } catch (e) {
+      if ((e.attempts || []).some((a) => a.provider === 'gemini')) {
+        setGeminiFailed(true);
+        scroller.current?.scrollTo?.({ y: 0, animated: true });
+      }
       Alert.alert('AI', e.message);
     } finally {
       setBusy(false);
@@ -138,7 +144,7 @@ export default function AiAssistantScreen({ navigation }) {
           contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: space.xxl }}
           keyboardShouldPersistTaps="handled"
         >
-          <AiSettingsPanel onChange={() => refresh().catch(() => {})} />
+          <AiSettingsPanel geminiFailed={geminiFailed} onChange={() => refresh().catch(() => {})} />
 
           {off ? (
             <View testID="ai-off-card">

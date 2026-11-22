@@ -13,7 +13,8 @@ import { isAiAvailable, aiProviderOrder } from '../Features';
 
 export const AI_SETTINGS_KEY = 'ai_settings';
 const keyName = (id) => `ai_key_${id}`;
-const modelCacheKey = (id) => `ai_model_${id}`;
+const modelCacheKey = (id, fast = false) => `ai_model_${id}${fast ? '_fast' : ''}`;
+const modelListKey = (id) => `ai_models_${id}`;
 
 export const AI_FEATURES = ['sms', 'categorize', 'statements', 'insights'];
 
@@ -63,12 +64,29 @@ export const setApiKey = async (id, value) => {
   const v = String(value || '').trim();
   if (v) await SecureStore.setItemAsync(keyName(id), v);
   else await SecureStore.deleteItemAsync(keyName(id));
-  await AsyncStorage.removeItem(modelCacheKey(id)); // new key → re-pick the model
+  // new key → re-pick the models and list them again
+  await AsyncStorage.removeItem(modelCacheKey(id));
+  await AsyncStorage.removeItem(modelCacheKey(id, true));
+  await AsyncStorage.removeItem(modelListKey(id));
 };
 
-export const getCachedModel = async (id) => (await AsyncStorage.getItem(modelCacheKey(id))) || null;
-export const setCachedModel = async (id, model) =>
-  model ? AsyncStorage.setItem(modelCacheKey(id), model) : AsyncStorage.removeItem(modelCacheKey(id));
+// A2: two picks per provider (normal and fast) and the listed models with a timestamp.
+export const getCachedModel = async (id, fast = false) =>
+  (await AsyncStorage.getItem(modelCacheKey(id, fast))) || null;
+export const setCachedModel = async (id, model, fast = false) =>
+  model
+    ? AsyncStorage.setItem(modelCacheKey(id, fast), model)
+    : AsyncStorage.removeItem(modelCacheKey(id, fast));
+export const getCachedModelList = async (id) => {
+  try {
+    const v = JSON.parse((await AsyncStorage.getItem(modelListKey(id))) || 'null');
+    return v && Number.isFinite(v.at) && Array.isArray(v.ids) ? v : null;
+  } catch {
+    return null;
+  }
+};
+export const setCachedModelList = (id, value) =>
+  AsyncStorage.setItem(modelListKey(id), JSON.stringify(value));
 
 /** True when AI is built in, switched on, the feature is on and at least one key is saved. */
 export const isAiReady = async (feature) => {

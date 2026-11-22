@@ -7,7 +7,14 @@
  * All I/O is injectable so tests never touch the network.
  */
 import { PROVIDERS, pickModel } from './AiProviders';
-import { loadAiSettings, getApiKey, getCachedModel, setCachedModel } from './AiConfig';
+import {
+  loadAiSettings,
+  getApiKey,
+  getCachedModel,
+  setCachedModel,
+  getCachedModelList,
+  setCachedModelList,
+} from './AiConfig';
 
 export class AiError extends Error {
   constructor(message, attempts = []) {
@@ -43,7 +50,42 @@ export const describeAiError = (e) => {
   return String(withStatus).slice(0, 120);
 };
 
-const DEFAULT_TIMEOUT_MS = 30000;
+/**
+ * A2: per-job settings. "fast" jobs prefer flash-lite with minimal thinking; chat questions use
+ * flash with low thinking. Gemini 3 models otherwise think at "high" and can take far longer
+ * than our timeout before the first token.
+ */
+export const JOBS = {
+  test: { fast: true, thinking: 'minimal', timeoutMs: 20000 },
+  sms: { fast: true, thinking: 'minimal', timeoutMs: 20000 },
+  categorize: { fast: true, thinking: 'minimal', timeoutMs: 20000 },
+  statement: { fast: true, thinking: 'minimal', timeoutMs: 20000 },
+  chat: { fast: false, thinking: 'low', timeoutMs: 45000 },
+};
+export const LIST_TIMEOUT_MS = 10000;
+export const RETRY_DELAY_MS = 2000;
+export const MODEL_LIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const jobOf = (name) => JOBS[name] || JOBS.chat;
+
+/** Gemini 3+ (and the -latest aliases) take thinkingConfig.thinkingLevel. */
+export const supportsThinkingLevel = (model) =>
+  /^gemini-(?:[3-9]|\d{2})|flash-latest|flash-lite-latest/.test(String(model || ''));
+
+class TimeoutError extends Error {
+  constructor(ms) {
+    super(`Timed out after ${Math.round(ms / 1000)} s`);
+    this.name = 'TimeoutError';
+    this.timeout = true;
+  }
+}
+// "Timed out after 20 s · gemini-3.1-flash-lite · generating"
+const withStep = (e, what, step) => {
+  if (e && e.timeout && !e.step) {
+    e.message = `${e.message} · ${what} · ${step}`;
+    e.step = step;
+  }
+  return e;
+};
 
 const defaultDeps = () => ({
   fetch: (...args) => globalThis.fetch(...args),
@@ -51,64 +93,122 @@ const defaultDeps = () => ({
   getKey: getApiKey,
   getCachedModel,
   setCachedModel,
+  getCachedModelList,
+  setCachedModelList,
+  now: () => Date.now(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
 
 const request = async (deps, url, { method = 'GET', headers = {}, body, timeoutMs }) => {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      if (controller) controller.abort();
+      reject(new TimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
   try {
-    const res = await deps.fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: controller ? controller.signal : undefined,
-    });
-    const text = await res.text();
-    if (!res.ok) throw new HttpError(res.status, text);
-    return text ? JSON.parse(text) : {};
+    const call = (async () => {
+      const res = await deps.fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller ? controller.signal : undefined,
+      });
+      const text = await res.text();
+      if (!res.ok) throw new HttpError(res.status, text);
+      return text ? JSON.parse(text) : {};
+    })();
+    call.catch(() => {}); // the timeout may win the race
+    return await Promise.race([call, timeout]);
   } catch (e) {
-    if (e && e.name === 'AbortError') throw new Error('timed out');
+    if (e && e.name === 'AbortError') throw new TimeoutError(timeoutMs);
     throw e;
   } finally {
     if (timer) clearTimeout(timer);
   }
 };
 
+const retryable = (e) => Boolean(e && (e.timeout || e.status === 429 || e.status === 503));
+/** A2: on timeout, 429 or 503, one retry after 2 s; then the caller moves to the next provider. */
+const withRetry = async (deps, fn) => {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!retryable(e)) throw e;
+    await deps.sleep(RETRY_DELAY_MS);
+    return fn();
+  }
+};
+
 const authHeaders = (p, key) =>
   p.api === 'gemini' ? { 'x-goog-api-key': key } : { Authorization: `Bearer ${key}` };
 
-export const listModels = async (providerId, key, deps = defaultDeps(), timeoutMs = DEFAULT_TIMEOUT_MS) => {
+export const listModels = async (providerId, key, deps = defaultDeps(), timeoutMs = LIST_TIMEOUT_MS) => {
   const p = PROVIDERS[providerId];
   const headers = authHeaders(p, key);
-  if (p.api === 'gemini') {
-    const data = await request(deps, `${p.baseUrl}/models?pageSize=1000`, { headers, timeoutMs });
-    return (data.models || [])
-      .filter(
-        (m) => !m.supportedGenerationMethods || m.supportedGenerationMethods.includes('generateContent')
-      )
-      .map((m) => String(m.name).replace(/^models\//, ''));
+  try {
+    if (p.api === 'gemini') {
+      const data = await request(deps, `${p.baseUrl}/models?pageSize=1000`, { headers, timeoutMs });
+      return (data.models || [])
+        .filter(
+          (m) => !m.supportedGenerationMethods || m.supportedGenerationMethods.includes('generateContent')
+        )
+        .map((m) => String(m.name).replace(/^models\//, ''));
+    }
+    const data = await request(deps, `${p.baseUrl}/models`, { headers, timeoutMs });
+    return (data.data || []).map((m) => m.id);
+  } catch (e) {
+    throw withStep(e, providerId, 'listing models');
   }
-  const data = await request(deps, `${p.baseUrl}/models`, { headers, timeoutMs });
-  return (data.data || []).map((m) => m.id);
 };
 
-const resolveModel = async (providerId, key, settings, deps, timeoutMs, fresh = false) => {
+/** A2.3: the model list is cached for 24 h, so a Test or a question makes one network call. */
+const modelList = async (providerId, key, deps, { fresh = false } = {}) => {
+  if (!fresh && deps.getCachedModelList) {
+    const cached = await deps.getCachedModelList(providerId);
+    if (cached && Array.isArray(cached.ids) && deps.now() - cached.at < MODEL_LIST_MAX_AGE_MS)
+      return cached.ids;
+  }
+  const ids = await withRetry(deps, () => listModels(providerId, key, deps, LIST_TIMEOUT_MS));
+  if (deps.setCachedModelList) await deps.setCachedModelList(providerId, { at: deps.now(), ids });
+  return ids;
+};
+
+const resolveModel = async (
+  providerId,
+  key,
+  settings,
+  deps,
+  { fast = false, fresh = false, repick = false } = {}
+) => {
   const manual = settings.models && settings.models[providerId];
   if (manual) return manual;
-  if (!fresh) {
-    const cached = await deps.getCachedModel(providerId);
+  if (!fresh && !repick) {
+    const cached = await deps.getCachedModel(providerId, fast);
     if (cached) return cached;
   }
-  const model = pickModel(providerId, await listModels(providerId, key, deps, timeoutMs));
+  const model = pickModel(providerId, await modelList(providerId, key, deps, { fresh }), { fast });
   if (!model) throw new Error('no suitable model available for this key');
-  await deps.setCachedModel(providerId, model);
+  await deps.setCachedModel(providerId, model, fast);
   return model;
 };
 
-const generate = async (providerId, key, model, { system, prompt, json, temperature }, deps, timeoutMs) => {
+const mentionsThinking = (e) =>
+  e instanceof HttpError && e.status === 400 && /thinking/i.test(`${e.apiMessage || ''} ${e.message}`);
+
+const generateOnce = async (providerId, key, model, call, deps, { thinking }) => {
+  const { system, prompt, json, temperature, timeoutMs } = call;
   const p = PROVIDERS[providerId];
   const headers = authHeaders(p, key);
   if (p.api === 'gemini') {
+    const generationConfig = {
+      temperature,
+      ...(json ? { responseMimeType: 'application/json' } : {}),
+      // Never thinkingBudget as well: the API rejects both together.
+      ...(thinking && supportsThinkingLevel(model) ? { thinkingConfig: { thinkingLevel: thinking } } : {}),
+    };
     const data = await request(deps, `${p.baseUrl}/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers,
@@ -116,11 +216,14 @@ const generate = async (providerId, key, model, { system, prompt, json, temperat
       body: {
         ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature, ...(json ? { responseMimeType: 'application/json' } : {}) },
+        generationConfig,
       },
     });
     const parts = (data.candidates && data.candidates[0] && data.candidates[0].content?.parts) || [];
-    return parts.map((x) => x.text || '').join('');
+    return parts
+      .filter((x) => !x.thought)
+      .map((x) => x.text || '')
+      .join('');
   }
   const data = await request(deps, `${p.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -134,6 +237,20 @@ const generate = async (providerId, key, model, { system, prompt, json, temperat
     },
   });
   return (data.choices && data.choices[0] && data.choices[0].message?.content) || '';
+};
+
+const generate = async (providerId, key, model, call, deps) => {
+  const once = (thinking) =>
+    withRetry(deps, () => generateOnce(providerId, key, model, call, deps, { thinking })).catch((e) => {
+      throw withStep(e, model, 'generating');
+    });
+  try {
+    return await once(call.thinking);
+  } catch (e) {
+    // A2.1: a model that refuses thinkingConfig gets one more try without it.
+    if (call.thinking && mentionsThinking(e)) return once(null);
+    throw e;
+  }
 };
 
 /** Pull a JSON object out of a model reply (tolerates ```json fences and chatter around it). */
@@ -151,30 +268,37 @@ export const extractJson = (text) => {
   }
 };
 
-const describe = (e) => (e && e.message) || String(e);
-
 /**
  * Ask the first working provider. Returns { text | data, provider, model }.
- * opts: { system, prompt, json=false, temperature=0.1, timeoutMs, validate(data) → throws if unusable }
+ * opts: { job='chat', system, prompt, json=false, temperature=0.1, timeoutMs, validate(data) }
+ * job (A2): 'test' | 'sms' | 'categorize' | 'statement' | 'chat' sets the model, thinking level
+ * and timeout.
  */
 export const askAi = async (opts, overrides = {}) => {
   const deps = { ...defaultDeps(), ...overrides };
   const settings = await deps.loadSettings();
-  const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
-  const call = { temperature: 0.1, json: false, ...opts };
+  const job = jobOf(opts.job);
+  const call = {
+    temperature: 0.1,
+    json: false,
+    ...opts,
+    timeoutMs: opts.timeoutMs || job.timeoutMs,
+    thinking: job.thinking,
+  };
   const attempts = [];
   for (const providerId of settings.order) {
     const key = await deps.getKey(providerId);
     if (!key) continue;
     try {
-      let model = await resolveModel(providerId, key, settings, deps, timeoutMs);
+      let model = await resolveModel(providerId, key, settings, deps, { fast: job.fast });
       let text;
       try {
-        text = await generate(providerId, key, model, call, deps, timeoutMs);
+        text = await generate(providerId, key, model, call, deps);
       } catch (e) {
         if (!(e instanceof HttpError && e.status === 404) || settings.models?.[providerId]) throw e;
-        model = await resolveModel(providerId, key, settings, deps, timeoutMs, true); // model retired
-        text = await generate(providerId, key, model, call, deps, timeoutMs);
+        // model retired: fetch the list again and re-pick once
+        model = await resolveModel(providerId, key, settings, deps, { fast: job.fast, fresh: true });
+        text = await generate(providerId, key, model, call, deps);
       }
       if (!text) throw new Error('empty reply');
       if (!call.json) return { text: text.trim(), provider: providerId, model };
@@ -182,7 +306,7 @@ export const askAi = async (opts, overrides = {}) => {
       if (call.validate) call.validate(data);
       return { data, provider: providerId, model };
     } catch (e) {
-      attempts.push({ provider: providerId, error: describe(e) });
+      attempts.push({ provider: providerId, error: describeAiError(e) });
     }
   }
   if (!attempts.length)
@@ -193,18 +317,26 @@ export const askAi = async (opts, overrides = {}) => {
   );
 };
 
-/** Settings "Test" button: check one key and report the model it would use. */
+/**
+ * Settings "Test" button: check one key and report the model it would use. Uses the cached model
+ * list (≤ 24 h) and re-picks from it, so a working key costs one network call.
+ */
 export const testProvider = async (providerId, key, overrides = {}) => {
   const deps = { ...defaultDeps(), ...overrides };
   const settings = await deps.loadSettings();
-  const model = await resolveModel(providerId, key, settings, deps, DEFAULT_TIMEOUT_MS, true);
+  const job = JOBS.test;
+  const model = await resolveModel(providerId, key, settings, deps, { fast: job.fast, repick: true });
   const text = await generate(
     providerId,
     key,
     model,
-    { prompt: 'Reply with the single word OK.', temperature: 0 },
-    deps,
-    DEFAULT_TIMEOUT_MS
+    {
+      prompt: 'Reply with the single word OK.',
+      temperature: 0,
+      timeoutMs: job.timeoutMs,
+      thinking: job.thinking,
+    },
+    deps
   );
   return { model, reply: String(text).trim().slice(0, 40) };
 };

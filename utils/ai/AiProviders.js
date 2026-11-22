@@ -17,6 +17,8 @@ export const PROVIDERS = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     keyUrl: 'https://aistudio.google.com/apikey',
     prefer: [/^gemini-flash-latest$/, /^gemini-[\d.]+-flash$/, /^gemini-[\d.]+-flash-lite$/, /flash/],
+    // A2: Test, SMS, categories and statements use flash-lite (fast, minimal thinking).
+    preferFast: [/^gemini-flash-lite-latest$/, /flash-lite/],
     avoid: /image|tts|audio|live|embed|vision|thinking|exp|preview|8b/i,
     // A9: when a key lists only "-preview" Flash models (Gemini 2.5 was shut down in Oct 2026),
     // a preview model is better than "no suitable model". These are never acceptable.
@@ -69,14 +71,17 @@ const firstPreferred = (p, ids) => {
   return null;
 };
 
-export const pickModel = (providerId, ids = []) => {
+/** opts.fast (A2): try the provider's preferFast list first, then the usual order. */
+export const pickModel = (providerId, ids = [], { fast = false } = {}) => {
   const p = PROVIDERS[providerId];
   if (!p) return null;
   const all = ids.map((id) => String(id).replace(/^models\//, '')).filter(Boolean);
-  const best = firstPreferred(
-    p,
-    all.filter((id) => !p.avoid.test(id))
-  );
+  const usable = all.filter((id) => !p.avoid.test(id));
+  if (fast && p.preferFast) {
+    const quick = firstPreferred({ prefer: p.preferFast }, usable);
+    if (quick) return quick;
+  }
+  const best = firstPreferred(p, usable);
   if (best || !p.fallbackAvoid) return best;
   return firstPreferred(
     p,

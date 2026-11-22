@@ -119,3 +119,34 @@ test('A9: a failing Test shows the API error under the provider', async () => {
   fireEvent.press(screen.getAllByText('Save key')[0]);
   expect(await screen.findByText('HTTP 400: API key not valid.')).toBeTruthy();
 });
+
+test('A2.6: a failed Gemini question shows the Groq hint; Add key opens the Groq key editor', async () => {
+  secure.ai_key_gemini = 'k';
+  delete secure.ai_key_groq;
+  const Storage = require('../../data/Storage').default;
+  await Storage.setItem('ai_settings', JSON.stringify({ enabled: true }));
+  const { AiError } = require('../../utils/ai/AiClient');
+  const tasks = require('../../utils/ai/AiTasks');
+  jest
+    .spyOn(tasks, 'aiInsights')
+    .mockRejectedValue(
+      new AiError('All AI providers failed: Google Gemini Flash: Timed out after 45 s', [
+        { provider: 'gemini', error: 'Timed out after 45 s' },
+      ])
+    );
+  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  render(<AiAssistantScreen navigation={{ goBack: jest.fn(), navigate: jest.fn() }} />);
+  expect(screen.queryByTestId('ai-groq-hint')).toBeNull();
+  fireEvent.press(await screen.findByRole('button', { name: 'Where did my money go this month?' }));
+  expect(await screen.findByTestId('ai-groq-hint')).toBeTruthy();
+  expect(
+    screen.getByText('Gemini is slow or down right now. Add a free Groq key so questions still work.')
+  ).toBeTruthy();
+  // the send button stays usable while a provider has a key
+  fireEvent.changeText(screen.getByTestId('ai-question'), 'And transport?');
+  expect(screen.getByRole('button', { name: 'Send' }).props.accessibilityState?.disabled).toBeFalsy();
+  fireEvent.press(screen.getByRole('button', { name: 'Add a Groq key' }));
+  expect(await screen.findByText(/Get a free key: https:\/\/console.groq.com\/keys/)).toBeTruthy();
+  await Storage.setItem('ai_settings', JSON.stringify({ enabled: false }));
+  delete secure.ai_key_gemini;
+});

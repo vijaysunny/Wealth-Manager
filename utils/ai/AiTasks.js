@@ -161,6 +161,7 @@ For each SMS return {"results":[{"i":<index>,"isTransaction":true|false,"amount"
 ${batch.map((s, j) => `[${j}] From ${s.sender}: ${redact(s.body)}`).join('\n')}`;
     try {
       const { data } = await ask({
+        job: 'sms',
         system: SMS_SYSTEM,
         prompt,
         json: true,
@@ -201,6 +202,7 @@ ${batch
   .join('\n')}`;
     try {
       const { data } = await ask({
+        job: 'categorize',
         system: 'You categorize personal finance transactions. Reply with JSON only.',
         prompt,
         json: true,
@@ -284,6 +286,7 @@ export const aiParseStatement = async (
   const rows = [];
   for (const chunk of chunkLines(text)) {
     const { data } = await ask({
+      job: 'statement',
       system: 'You extract transactions from Indian bank and card statements. Reply with JSON only.',
       prompt: `Categories: ${categoryList(categories).join(', ')}
 Extract every transaction row. Skip opening/closing balance, totals and headers.
@@ -355,6 +358,7 @@ export const buildSpendingSummary = (txs, { budgets = {}, months = 3, now = new 
 
 export const aiInsights = async (question, summary, { ask = askAi } = {}) => {
   const { text, provider } = await ask({
+    job: 'chat',
     system: `You are a concise personal-finance assistant for an Indian user. Amounts are in INR (₹).
 Use only the numbers in the summary; say so when the data cannot answer. Keep answers under 150 words,
 use short bullet points, and give one practical suggestion when relevant.`,

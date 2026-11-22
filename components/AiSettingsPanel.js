@@ -23,7 +23,11 @@ const FEATURE_LABELS = {
   insights: 'Spending questions (AI assistant)',
 };
 
-export default function AiSettingsPanel({ onChange }) {
+/**
+ * geminiFailed (A2.6): a question just failed on Gemini; with no Groq key, the Gemini row shows
+ * a hint and an Add key button for Groq.
+ */
+export default function AiSettingsPanel({ onChange, geminiFailed = false }) {
   const t = useTokens();
   const [settings, setSettings] = useState(null);
   const [hasKey, setHasKey] = useState({});
@@ -203,6 +207,22 @@ export default function AiSettingsPanel({ onChange }) {
                 />
               )}
             </View>
+            {id === 'gemini' && (geminiFailed || st.ok === false) && PROVIDERS.groq && !hasKey.groq ? (
+              <View testID="ai-groq-hint" style={{ marginTop: space.sm, marginLeft: 48 }}>
+                <Text style={{ color: t.warnText, fontFamily: fonts.body, fontSize: 13, lineHeight: 18 }}>
+                  Gemini is slow or down right now. Add a free Groq key so questions still work.
+                </Text>
+                <View style={{ alignSelf: 'flex-start', marginTop: space.xs }}>
+                  <AppButton
+                    title="Add key"
+                    variant="secondary"
+                    size="sm"
+                    accessibilityLabel="Add a Groq key"
+                    onPress={() => setOpen('groq')}
+                  />
+                </View>
+              </View>
+            ) : null}
             {editing || !anyKey ? (
               <View style={{ marginTop: space.sm, marginLeft: 48 }}>
                 <Text

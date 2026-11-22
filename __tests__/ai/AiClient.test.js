@@ -18,7 +18,7 @@ const geminiText = (text) => ({ candidates: [{ content: { parts: [{ text }] } }]
 const openaiModels = (...ids) => ({ data: ids.map((id) => ({ id })) });
 const openaiText = (text) => ({ choices: [{ message: { content: text } }] });
 
-const setup = ({ keys = {}, routes, settings = {} }) => {
+const setup = ({ keys = {}, routes, settings = {}, lists = {}, now = () => 1e12 }) => {
   const cache = {};
   const fetch = jest.fn(async (url, init) => {
     for (const [pattern, handler] of routes) if (url.includes(pattern)) return handler(url, init);
@@ -32,10 +32,17 @@ const setup = ({ keys = {}, routes, settings = {} }) => {
       loadSettings: async () => ({ order: ['gemini', 'groq', 'xai'], models: {}, ...settings }),
       getKey: async (id) => keys[id] || null,
       getCachedModel: async (id) => cache[id] || null,
-      setCachedModel: async (id, m) => {
-        cache[id] = m;
+      setCachedModel: async (id, m, fast) => {
+        cache[fast ? `${id}_fast` : id] = m;
       },
+      getCachedModelList: async (id) => lists[id] || null,
+      setCachedModelList: async (id, v) => {
+        lists[id] = v;
+      },
+      now,
+      sleep: async () => {},
     },
+    lists,
   };
 };
 
@@ -247,5 +254,213 @@ describe('A9: preview fallback and Test status line', () => {
   test('describeAiError: plain errors and non-JSON bodies', () => {
     expect(describeAiError(new Error('timed out'))).toBe('timed out');
     expect(describeAiError(null)).toBe('Unknown error');
+  });
+});
+
+describe('A2: Gemini thinking level, fast model, list cache, timeouts', () => {
+  const { runProviderTest, JOBS, supportsThinkingLevel } = require('../../utils/ai/AiClient');
+  const g3 = {
+    models: [
+      'gemini-3.1-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
+      'gemini-flash-lite-latest',
+    ].map((n) => ({ name: `models/${n}`, supportedGenerationMethods: ['generateContent'] })),
+  };
+  const bodyOf = (fetch, i) => JSON.parse(fetch.mock.calls[i][1].body);
+  const genCalls = (fetch) => fetch.mock.calls.filter(([u]) => u.includes(':generateContent'));
+
+  test('supportsThinkingLevel: Gemini 3+ and -latest aliases only', () => {
+    expect(supportsThinkingLevel('gemini-3.1-flash-lite')).toBe(true);
+    expect(supportsThinkingLevel('gemini-12-flash')).toBe(true);
+    expect(supportsThinkingLevel('gemini-flash-lite-latest')).toBe(true);
+    expect(supportsThinkingLevel('gemini-2.5-flash')).toBe(false);
+    expect(supportsThinkingLevel(undefined)).toBe(false);
+  });
+
+  test('pickModel fast prefers flash-lite; normal prefers flash', () => {
+    const ids = g3.models.map((m) => m.name);
+    expect(pickModel('gemini', ids, { fast: true })).toBe('gemini-flash-lite-latest');
+    expect(pickModel('gemini', ['gemini-3.1-flash', 'gemini-3.1-flash-lite'], { fast: true })).toBe(
+      'gemini-3.1-flash-lite'
+    );
+    expect(pickModel('gemini', ids)).toBe('gemini-flash-latest');
+    expect(pickModel('gemini', ['gemini-3.1-flash'], { fast: true })).toBe('gemini-3.1-flash');
+    expect(pickModel('groq', ['llama-3.3-70b-versatile'], { fast: true })).toBe('llama-3.3-70b-versatile');
+  });
+
+  test('Test sends thinkingLevel minimal on flash-lite; chat sends low on flash; never thinkingBudget', async () => {
+    const { deps, fetch, cache } = setup({
+      keys: { gemini: 'g' },
+      routes: [
+        ['/models?', () => reply(200, { models: g3.models.slice(0, 2) })],
+        [':generateContent', () => reply(200, geminiText('OK'))],
+      ],
+    });
+    const r = await runProviderTest('gemini', 'g', deps);
+    expect(r).toMatchObject({ ok: true, model: 'gemini-3.1-flash-lite' });
+    const testBody = bodyOf(fetch, 1);
+    expect(testBody.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'minimal' });
+    await askAi({ prompt: 'Where did my money go?', job: 'chat' }, deps);
+    const chat = genCalls(fetch).pop();
+    expect(chat[0]).toContain('gemini-3.1-flash:generateContent');
+    expect(JSON.parse(chat[1].body).generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(cache).toMatchObject({ gemini_fast: 'gemini-3.1-flash-lite', gemini: 'gemini-3.1-flash' });
+    fetch.mock.calls
+      .filter(([, init]) => init && init.body)
+      .forEach(([, init]) => expect(init.body).not.toMatch(/thinkingBudget/));
+    // SMS/categories/statements are fast jobs with minimal thinking
+    expect(JOBS.sms).toMatchObject({ fast: true, thinking: 'minimal', timeoutMs: 20000 });
+    expect(JOBS.chat).toMatchObject({ fast: false, thinking: 'low', timeoutMs: 45000 });
+  });
+
+  test('no thinkingConfig for Gemini 2.x', async () => {
+    const { deps, fetch } = setup({
+      keys: { gemini: 'g' },
+      routes: [
+        ['/models?', () => reply(200, geminiModels)],
+        [':generateContent', () => reply(200, geminiText('hi'))],
+      ],
+    });
+    await askAi({ prompt: 'p', job: 'sms' }, deps);
+    expect(bodyOf(fetch, 1).generationConfig.thinkingConfig).toBeUndefined();
+  });
+
+  test('400 mentioning thinking → retried once without thinkingConfig → success', async () => {
+    const { deps, fetch } = setup({
+      keys: { gemini: 'g' },
+      routes: [
+        ['/models?', () => reply(200, g3)],
+        [
+          ':generateContent',
+          (_, init) =>
+            JSON.parse(init.body).generationConfig.thinkingConfig
+              ? reply(400, { error: { message: 'thinking_level is not supported for this model.' } })
+              : reply(200, geminiText('fine')),
+        ],
+      ],
+    });
+    const out = await askAi({ prompt: 'p', job: 'chat' }, deps);
+    expect(out.text).toBe('fine');
+    expect(genCalls(fetch)).toHaveLength(2);
+  });
+
+  test('a model list cached < 24 h ago → Test makes exactly one fetch; older → lists again', async () => {
+    const lists = { gemini: { at: 1e12 - 60 * 60 * 1000, ids: ['gemini-3.1-flash-lite'] } };
+    const { deps, fetch } = setup({
+      lists,
+      routes: [
+        ['/models?', () => reply(200, g3)],
+        [':generateContent', () => reply(200, geminiText('OK'))],
+      ],
+    });
+    expect((await runProviderTest('gemini', 'k', deps)).line).toBe('Working · gemini-3.1-flash-lite');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    lists.gemini.at = 1e12 - 25 * 60 * 60 * 1000;
+    fetch.mockClear();
+    expect((await runProviderTest('gemini', 'k', deps)).line).toBe('Working · gemini-flash-lite-latest');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(lists.gemini.at).toBe(1e12);
+  });
+
+  describe('timeouts (fake timers)', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+    const hang = (_, init) =>
+      new Promise((_, reject) =>
+        init.signal.addEventListener('abort', () => {
+          const e = new Error('aborted');
+          e.name = 'AbortError';
+          reject(e);
+        })
+      );
+    const realSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    test('first call hangs past 20 s → retried once after 2 s → success', async () => {
+      let n = 0;
+      const { deps, fetch } = setup({
+        lists: { gemini: { at: 1e12, ids: ['gemini-3.1-flash-lite'] } },
+        routes: [[':generateContent', (u, i) => (++n === 1 ? hang(u, i) : reply(200, geminiText('OK')))]],
+      });
+      deps.sleep = realSleep;
+      const p = runProviderTest('gemini', 'k', deps);
+      await jest.advanceTimersByTimeAsync(20000);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(2000);
+      await expect(p).resolves.toMatchObject({ ok: true, line: 'Working · gemini-3.1-flash-lite' });
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('Test timing out twice → "Timed out after 20 s · <model> · generating"', async () => {
+      const { deps } = setup({
+        lists: { gemini: { at: 1e12, ids: ['gemini-3.1-flash-lite'] } },
+        routes: [[':generateContent', hang]],
+      });
+      deps.sleep = realSleep;
+      const p = runProviderTest('gemini', 'k', deps);
+      await jest.advanceTimersByTimeAsync(43000);
+      await expect(p).resolves.toEqual({
+        ok: false,
+        line: 'Timed out after 20 s · gemini-3.1-flash-lite · generating',
+      });
+    });
+
+    test('listing models times out at 10 s → "· listing models"', async () => {
+      const { deps } = setup({ routes: [['/models?', hang]] });
+      deps.sleep = realSleep;
+      const p = runProviderTest('gemini', 'k', deps);
+      await jest.advanceTimersByTimeAsync(23000);
+      const r = await p;
+      expect(r.line).toBe('Timed out after 10 s · gemini · listing models');
+    });
+
+    test('both Gemini tries hang → Groq answers; with no Groq key the error names both tries', async () => {
+      const { deps } = setup({
+        keys: { gemini: 'g', groq: 'q' },
+        lists: {
+          gemini: { at: 1e12, ids: ['gemini-3.1-flash'] },
+          groq: { at: 1e12, ids: ['llama-3.3-70b-versatile'] },
+        },
+        routes: [
+          [':generateContent', hang],
+          ['groq.com/openai/v1/chat', () => reply(200, openaiText('Food, mostly.'))],
+        ],
+      });
+      deps.sleep = realSleep;
+      const p = askAi({ prompt: 'Where did my money go this month?', job: 'chat' }, deps);
+      await jest.advanceTimersByTimeAsync(45000 * 2 + 2000);
+      await expect(p).resolves.toMatchObject({ text: 'Food, mostly.', provider: 'groq' });
+
+      const solo = setup({
+        keys: { gemini: 'g' },
+        lists: { gemini: { at: 1e12, ids: ['gemini-3.1-flash'] } },
+        routes: [[':generateContent', hang]],
+      });
+      solo.deps.sleep = realSleep;
+      const q = askAi({ prompt: 'p', job: 'chat' }, solo.deps).catch((e) => e);
+      await jest.advanceTimersByTimeAsync(45000 * 2 + 2000);
+      const err = await q;
+      expect(err).toBeInstanceOf(AiError);
+      expect(err.message).toMatch(
+        /Google Gemini Flash: Timed out after 45 s · gemini-3.1-flash · generating/
+      );
+      expect(solo.fetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  test('HTTP 503 high demand is retried once, then passed through', async () => {
+    const { deps, fetch } = setup({
+      keys: { gemini: 'g' },
+      lists: { gemini: { at: 1e12, ids: ['gemini-3.1-flash-lite'] } },
+      routes: [
+        [
+          ':generateContent',
+          () => reply(503, { error: { message: 'The model is overloaded: high demand' } }),
+        ],
+      ],
+    });
+    const r = await runProviderTest('gemini', 'g', deps);
+    expect(r.line).toBe('HTTP 503: The model is overloaded: high demand');
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
