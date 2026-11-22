@@ -55,9 +55,11 @@ export default function ToolsScreen({ navigation, route }) {
     [goals, setGoals] = useState([]),
     [rules, setRules] = useState([]),
     [snapshots, setSnapshots] = useState([]);
-  const [from, setFrom] = useState(''),
-    [to, setTo] = useState(''),
-    [amount, setAmount] = useState('');
+  // B5: Card detail → Record payment pre-fills bank → card and the amount left on the bill.
+  const prefill = route.params?.prefill || {};
+  const [from, setFrom] = useState(prefill.fromId ?? ''),
+    [to, setTo] = useState(prefill.toId ?? ''),
+    [amount, setAmount] = useState(prefill.amount ? String(prefill.amount) : '');
   const [pattern, setPattern] = useState(''),
     [category, setCategory] = useState('');
   const [query, setQuery] = useState(''),
@@ -162,7 +164,9 @@ export default function ToolsScreen({ navigation, route }) {
                       ? 'wallet_topup'
                       : source.type === 'Wallet'
                         ? 'wallet_withdraw'
-                        : null;
+                        : destination.type === 'Credit Card'
+                          ? 'cc_payment'
+                          : null;
                   await add({
                     id: `transfer_${Date.now()}`,
                     type: 'transfer',

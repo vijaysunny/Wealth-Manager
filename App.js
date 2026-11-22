@@ -37,6 +37,8 @@ import ReviewAccountsScreen from './screens/ReviewAccountsScreen';
 import ScanSmsScreen from './screens/ScanSmsScreen';
 import BackupScreen from './screens/BackupScreen';
 import CategoriesScreen from './screens/CategoriesScreen';
+import CardDetailScreen from './screens/CardDetailScreen';
+import CardSetupScreen from './screens/CardSetupScreen';
 
 // --- UTILS ---
 import { registerBackgroundSync } from './utils/BackgroundSync';
@@ -63,6 +65,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { saveNetWorthSnapshot } from './utils/FeatureService';
+import { syncCardReminders } from './utils/CardService';
 import { getAll as getAllTransactions } from './data/TransactionRepo';
 import { APP_VERSION } from './utils/appInfo';
 import { loadNavState, makeNavSaver, refreshNavState, throttleAsync } from './utils/NavigationPersistence';
@@ -114,6 +117,7 @@ function AppContent() {
         await syncTrackingWithFlag();
         await syncSms();
         await processRecurringTransactions();
+        await syncCardReminders(); // B4: a payment may have cleared a bill
         await saveNetWorthSnapshot();
       } catch (err) {
         console.warn('Catch-up error:', err);
@@ -187,6 +191,8 @@ function AppContent() {
         <Stack.Screen name="ScanSms" component={ScanSmsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Backup" component={BackupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Categories" component={CategoriesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="CardSetup" component={CardSetupScreen} options={{ headerShown: false }} />
         <Stack.Screen
           name="ReviewAccounts"
           component={ReviewAccountsScreen}

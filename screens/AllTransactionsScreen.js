@@ -26,7 +26,10 @@ export default function AllTransactionsScreen({ navigation, route }) {
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [query, setQuery] = useState('');
-  const [accountId, setAccountId] = useState(null);
+  // Card detail "See all" opens the list filtered to one account (Phase 13 B5).
+  const [accountId, setAccountId] = useState(
+    route?.params?.accountId ? String(route.params.accountId) : null
+  );
   const [hasFile, setHasFile] = useState(false);
 
   const load = useCallback(async () => {
