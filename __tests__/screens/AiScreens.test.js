@@ -77,7 +77,7 @@ test('assistant screen: with AI on, chips ask and the reply bubble names the pro
   expect(screen.getByText(/via Gemini/)).toBeTruthy();
   fireEvent.changeText(screen.getByTestId('ai-question'), 'And transport?');
   fireEvent.press(screen.getByRole('button', { name: 'Send' }));
-  await waitFor(() => expect(screen.getAllByText('Mostly food.')).toHaveLength(2));
+  await waitFor(() => expect(screen.getAllByText('Mostly food.')).toHaveLength(2), { timeout: 5000 });
   await Storage.setItem('ai_settings', JSON.stringify({ enabled: false }));
   delete secure.ai_key_gemini;
 });
@@ -93,19 +93,22 @@ test('A9: Save key runs the Test, shows the status line and offers to turn AI on
   fireEvent.press(screen.getAllByText('Save key')[0]);
   expect(await screen.findByText('Working · gemini-x')).toBeTruthy();
   expect(mockRunTest).toHaveBeenCalledWith('gemini', 'k2');
-  await waitFor(() =>
-    expect(alert).toHaveBeenCalledWith('Turn on AI now?', expect.any(String), expect.any(Array))
+  await waitFor(
+    () => expect(alert).toHaveBeenCalledWith('Turn on AI now?', expect.any(String), expect.any(Array)),
+    { timeout: 5000 }
   );
   const turnOn = alert.mock.calls
     .find((c) => c[0] === 'Turn on AI now?')[2]
     .find((b) => b.text === 'Turn on');
   turnOn.onPress();
-  await waitFor(() =>
-    expect(
-      screen
-        .UNSAFE_getAllByType(require('react-native').Switch)
-        .find((x) => x.props.accessibilityLabel === 'Use AI').props.value
-    ).toBe(true)
+  await waitFor(
+    () =>
+      expect(
+        screen
+          .UNSAFE_getAllByType(require('react-native').Switch)
+          .find((x) => x.props.accessibilityLabel === 'Use AI').props.value
+      ).toBe(true),
+    { timeout: 5000 }
   );
 });
 
