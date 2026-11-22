@@ -68,7 +68,7 @@ test('net-worth card: total, missing balances, three numbers', async () => {
   expect(await screen.findByText('1 balance missing · set it to see the real figure')).toBeTruthy();
   expect(screen.getByTestId('networth').props.children).toBe('₹1,000');
   expect(screen.getByText('Cash & bank')).toBeTruthy();
-  expect(screen.getByText('Available ₹2,75,511.19')).toBeTruthy();
+  expect(screen.getByText('Available ₹2,75,511.19 · add limit')).toBeTruthy();
   expect(screen.getByText('Topped up from Axis ••0973')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Investments' }).props.accessibilityState.expanded).toBe(false);
   expect(screen.getByText('MF, stocks, FD/RD, PF · none added yet')).toBeTruthy();
@@ -90,18 +90,45 @@ test('Set balance clears the missing warning', async () => {
   expect(saved.balanceSetAt).toBeTruthy();
 });
 
-test('Set due stores the day and schedules reminders', async () => {
-  const Notifications = require('expo-notifications');
-  render(<WealthScreen navigation={nav()} />);
-  fireEvent.press(await screen.findByRole('button', { name: 'Set due date for Axis Bank Credit Card' }));
-  fireEvent.changeText(screen.getByTestId('due-input'), '12');
-  fireEvent.press(screen.getAllByRole('button', { name: 'Save' }).pop());
-  await waitFor(async () =>
-    expect(JSON.parse(await Storage.getItem('user_wealth_accounts')).find((a) => a.id === 'ac').dueDay).toBe(
-      12
-    )
+test('B6: a card without a limit shows Set up; tapping a card opens Card detail', async () => {
+  const n = nav();
+  render(<WealthScreen navigation={n} />);
+  fireEvent.press(await screen.findByRole('button', { name: 'Set up Axis Card ••9070' }));
+  expect(n.navigate).toHaveBeenCalledWith('CardSetup', { cardId: 'ac' });
+  fireEvent.press(screen.getByTestId('account-sbi'));
+  expect(n.navigate).toHaveBeenCalledWith('CardDetail', { cardId: 'sbi' });
+  fireEvent.press(screen.getByTestId('account-axis'));
+  expect(n.navigate).toHaveBeenCalledWith('EditAsset', expect.anything());
+});
+
+test('B6: a set-up card shows this cycle, "Pay ₹X by <date>" and what you owe; labels never repeat digits', async () => {
+  const day = new Date();
+  const statementDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() - 2);
+  const list = accounts.map((a) =>
+    a.id === 'ac'
+      ? {
+          ...a,
+          name: 'Axis Bank Credit Card ••9070',
+          creditLimit: 300000,
+          statementDay: statementDay.getDate(),
+          due: { mode: 'afterStatement', days: 4 },
+          statements: [{ date: statementDay.toISOString(), totalDue: 3914, minDue: 200 }],
+        }
+      : a
   );
-  expect(Notifications.scheduleNotificationAsync).toHaveBeenCalled();
+  await Storage.setItem('user_wealth_accounts', JSON.stringify(list));
+  render(<WealthScreen navigation={nav()} />);
+  const sub = await screen.findByTestId('card-sub-ac');
+  const text = [].concat(sub.props.children).flat().join('');
+  expect(text).toMatch(/^This cycle ₹[\d,.]+ · /);
+  expect(screen.getByText(/^Pay ₹3,914 by \d{1,2} [A-Z][a-z]{2}$/)).toBeTruthy();
+  // owed = limit − available (₹2,75,511.19 in the SMS) = ₹24,488.81
+  expect(screen.getByText('₹24,488.81')).toBeTruthy();
+  const labels = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel || '');
+  labels.forEach((l) => {
+    const groups = l.match(/\d{4}/g) || [];
+    expect(new Set(groups).size).toBe(groups.length);
+  });
 });
 
 test('investments open with Add rows', async () => {

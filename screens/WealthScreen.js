@@ -30,17 +30,16 @@ import { computeReconcile, needsReconcile } from '../utils/WalletReconcile';
 import { reconcileWallet } from '../utils/FeatureService';
 import { formatMoney } from '../utils/Format';
 import { priceStatusLabel } from '../utils/PriceStatus';
-import { scheduleCardReminder } from '../utils/CardReminders';
 import {
   accountsOverview,
   balanceMissing,
   groupAccounts,
   investmentsSummary,
-  latestLimits,
   monthCounts,
 } from '../utils/AccountsOverview';
 import { shortAccountName, accountInitials } from '../utils/TransactionList';
 import { depositValue } from '../utils/DepositValue';
+import { cardRowText } from '../utils/CardView';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space, type } from '../components/tokens';
 import { AppButton, Collapsible, Section } from '../components/ui';
@@ -62,11 +61,10 @@ const INVESTMENT_KINDS = [
 export default function WealthScreen({ navigation }) {
   const t = useTokens();
   const [accounts, setAccounts] = useState([]);
-  const [limits, setLimits] = useState({});
   const [counts, setCounts] = useState({});
+  const [txs, setTxs] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState(null); // { account, text }
-  const [dueEdit, setDueEdit] = useState(null); // { account, text }
   const [reconcile, setReconcile] = useState(null); // { account, text, category, requestId }
 
   useFocusEffect(
@@ -162,8 +160,8 @@ export default function WealthScreen({ navigation }) {
     }
 
     const txs = await getAll();
+    setTxs(txs);
     setAccounts(accounts);
-    setLimits(latestLimits(txs));
     setCounts(monthCounts(txs));
     setRefreshing(false);
   };
@@ -277,16 +275,6 @@ export default function WealthScreen({ navigation }) {
     await removeAccount(account.id);
     loadData();
   };
-  const saveDue = async () => {
-    const day = Number(String(dueEdit.text).trim());
-    try {
-      await scheduleCardReminder(dueEdit.account, day);
-      await updateAccount(dueEdit.account.id, { dueDay: day });
-      setDueEdit(null);
-    } catch (e) {
-      Alert.alert('Due date', e.message);
-    }
-  };
 
   const ov = accountsOverview(accounts);
   const g = groupAccounts(accounts);
@@ -304,14 +292,19 @@ export default function WealthScreen({ navigation }) {
   );
 
   // The row and its right-hand action are sibling buttons (never nested).
-  const row = (a, { sub, right, iconName, tone = 'primary', last }) => (
+  const row = (a, { sub, subLabel, right, iconName, tone = 'primary', last }) => (
     <View key={a.id} style={[styles.row, { borderColor: t.divider, borderBottomWidth: last ? 0 : 1 }]}>
       <Pressable
         testID={`account-${a.id}`}
         accessibilityRole="button"
-        accessibilityLabel={`${shortAccountName(a.name, a.last4)}, ${sub || a.type}`}
+        accessibilityLabel={`${shortAccountName(a.name, a.last4)}, ${subLabel || (typeof sub === 'string' && sub) || a.type}`}
         accessibilityHint="Opens the account. Long-press for more."
-        onPress={() => navigation.navigate('EditAsset', { asset: a })}
+        onPress={() =>
+          // A4: a card opens Card detail; renaming/deleting it is under ⋯ there.
+          a.type === 'Credit Card'
+            ? navigation.navigate('CardDetail', { cardId: a.id })
+            : navigation.navigate('EditAsset', { asset: a })
+        }
         onLongPress={() => handleLongPress(a)}
         delayLongPress={500}
         style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
@@ -381,9 +374,9 @@ export default function WealthScreen({ navigation }) {
     </View>
   );
 
-  const amount = (n, color) => (
+  const amount = (n, color, exact = false) => (
     <Text style={{ color: color || t.text, fontFamily: fonts.displaySemi, fontSize: 18 }}>
-      {formatMoney(Math.round(Number(n) || 0))}
+      {formatMoney(exact ? Number(n) || 0 : Math.round(Number(n) || 0))}
     </Text>
   );
 
@@ -489,25 +482,40 @@ export default function WealthScreen({ navigation }) {
         {g.cards.length > 0 && (
           <Section title="Credit cards">
             {card(
-              g.cards.map((a, i) =>
-                row(a, {
+              g.cards.map((a, i) => {
+                const info = cardRowText(a, txs, new Date(), g.loans);
+                return row(a, {
                   iconName: 'card-outline',
                   tone: i % 2 ? 'primary' : 'danger',
-                  sub: Number.isFinite(limits[String(a.id)])
-                    ? `Available ${formatMoney(limits[String(a.id)])}`
-                    : a.dueDay
-                      ? `Due on day ${a.dueDay}`
-                      : 'Credit card',
+                  sub: info.setUp ? (
+                    <Text testID={`card-sub-${a.id}`}>
+                      {info.cycle}
+                      {info.cycle && info.pay ? ' · ' : ''}
+                      {info.pay ? (
+                        <Text
+                          style={{
+                            color: info.pay.danger ? t.dangerText : info.pay.warn ? t.warnText : t.muted,
+                            fontFamily: info.pay.warn ? fonts.semibold : fonts.body,
+                          }}
+                        >
+                          {info.pay.text}
+                        </Text>
+                      ) : null}
+                    </Text>
+                  ) : (
+                    info.sub
+                  ),
+                  subLabel: info.setUp ? [info.cycle, info.pay?.text].filter(Boolean).join(' · ') : info.sub,
                   last: i === g.cards.length - 1,
-                  right: a.dueDay
-                    ? amount(a.balance, Number(a.balance) > 0 ? t.expense : t.text)
+                  right: info.setUp
+                    ? amount(info.owed, info.owed > 0 ? t.text : t.income, true)
                     : warnButton(
-                        'Set due',
-                        () => setDueEdit({ account: a, text: '' }),
-                        `Set due date for ${a.name}`
+                        'Set up',
+                        () => navigation.navigate('CardSetup', { cardId: a.id }),
+                        `Set up ${shortAccountName(a.name, a.last4)}`
                       ),
-                })
-              )
+                });
+              })
             )}
           </Section>
         )}
@@ -681,38 +689,6 @@ export default function WealthScreen({ navigation }) {
                 onPress={() => setBalanceEdit(null)}
               />
               <AppButton title="Save" style={{ flex: 1 }} onPress={saveBalance} />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={!!dueEdit} transparent animationType="fade" onRequestClose={() => setDueEdit(null)}>
-        <View style={styles.backdrop}>
-          <View style={[styles.modal, { backgroundColor: t.card }]}>
-            <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>Card due date</Text>
-            <Text
-              style={{ color: t.muted, fontFamily: fonts.body, marginTop: space.xs, marginBottom: space.md }}
-            >
-              Day of the month the {dueEdit?.account?.name} bill is due (1–31). You get a reminder that
-              morning for the next 12 months.
-            </Text>
-            <TextInput
-              testID="due-input"
-              accessibilityLabel="Due day"
-              style={[styles.input, { borderColor: t.inputBorder, color: t.text }]}
-              value={dueEdit?.text ?? ''}
-              onChangeText={(v) => setDueEdit((prev) => ({ ...prev, text: v }))}
-              keyboardType="number-pad"
-              autoFocus
-            />
-            <View style={styles.modalActions}>
-              <AppButton
-                title="Cancel"
-                variant="secondary"
-                style={{ flex: 1 }}
-                onPress={() => setDueEdit(null)}
-              />
-              <AppButton title="Save" style={{ flex: 1 }} onPress={saveDue} />
             </View>
           </View>
         </View>
