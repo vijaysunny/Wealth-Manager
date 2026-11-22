@@ -2,6 +2,7 @@
  * BudgetView.js (C5.6) - pure helpers for the Budget screen.
  */
 import { isReportable } from './BalanceService';
+import { spendAmount } from './LoanLink';
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -13,7 +14,7 @@ export const monthSpending = (txs = [], date = new Date()) => {
     if (!tx || tx.type !== 'expense' || !isReportable(tx)) continue;
     const d = new Date(tx.fullDate || tx.date);
     if (d.getFullYear() !== date.getFullYear() || d.getMonth() !== date.getMonth()) continue;
-    const amount = Number(tx.amount) || 0;
+    const amount = spendAmount(tx); // C6: Interest only loans leave principal out
     const cat = tx.category || 'Other';
     total += amount;
     byCategory[cat] = (byCategory[cat] || 0) + amount;

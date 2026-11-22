@@ -7,6 +7,7 @@ import AsyncStorage from '../data/Storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { computeNetWorth, isReportable } from '../utils/BalanceService';
+import { spendAmount } from '../utils/LoanLink';
 import { formatMoney } from '../utils/Format';
 
 // FIX: subtract extra padding so chart never overflows the screen
@@ -374,7 +375,7 @@ export default function AnalyticsScreen({ navigation }) {
       return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
     });
     const income = selectedTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const expense = selectedTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const expense = selectedTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + spendAmount(t), 0);
     const savings = income - expense;
     const rate = income > 0 ? Math.round((savings / income) * 100) : 0;
     setSummary({
@@ -389,7 +390,7 @@ export default function AnalyticsScreen({ navigation }) {
     selectedTxs
       .filter((t) => t.type === 'expense')
       .forEach((t) => {
-        catMap[t.category] = (catMap[t.category] || 0) + t.amount;
+        catMap[t.category] = (catMap[t.category] || 0) + spendAmount(t);
       });
     const colors = [
       '#F44336',
@@ -429,7 +430,16 @@ export default function AnalyticsScreen({ navigation }) {
       }
       months.push(MONTHS[m]);
       const key = y + '-' + String(m + 1).padStart(2, '0');
-      const mExp = aggregates.find((row) => row.month === key && row.type === 'expense')?.total || 0;
+      // C6: the SQL total has whole EMIs; take out principal of Interest only loans
+      const loanPrincipal = validTxs
+        .filter((t) => t.type === 'expense' && t.loanLink?.interestOnly)
+        .filter((t) => {
+          const d = new Date(t.fullDate);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === key;
+        })
+        .reduce((s, t) => s + (Number(t.amount) - spendAmount(t)), 0);
+      const mExp =
+        (aggregates.find((row) => row.month === key && row.type === 'expense')?.total || 0) - loanPrincipal;
       const mInc = aggregates.find((row) => row.month === key && row.type === 'income')?.total || 0;
       expenseTrend.push(mExp || 0);
       incomeTrend.push(mInc || 0);

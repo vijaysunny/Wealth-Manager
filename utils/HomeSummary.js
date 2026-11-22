@@ -5,6 +5,7 @@
  * savedPct only exists when there is income, capped to -100…100 (the old tile showed -201%).
  */
 import { isReportable } from './BalanceService';
+import { spendAmount } from './LoanLink';
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -22,7 +23,7 @@ export const monthSummary = (txs = [], date = new Date()) => {
     const amount = Number(tx.amount) || 0;
     if (tx.type === 'transfer') transfers += amount;
     else if (!isReportable(tx)) continue;
-    else if (tx.type === 'expense') spent += amount;
+    else if (tx.type === 'expense') spent += spendAmount(tx);
     else if (tx.type === 'income') income += amount;
   }
   const savedPct =

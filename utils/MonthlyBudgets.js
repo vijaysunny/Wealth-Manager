@@ -1,6 +1,7 @@
 import Storage, { readValue, writeValue } from '../data/Storage';
 import { atomic } from '../data/Database';
 import { isReportable } from './BalanceService';
+import { spendAmount } from './LoanLink';
 import { sendTransactionNotification } from './NotificationService';
 export const monthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 export const computeMonthlyBudget = (date, config, transactions, fallback = { limit: 0, categories: {} }) => {
@@ -21,7 +22,7 @@ export const computeMonthlyBudget = (date, config, transactions, fallback = { li
     if (key === target) return { ...base, limit, carry: base.rollover ? carry : 0, effectiveLimit };
     const spent = transactions
       .filter((tx) => tx.type === 'expense' && isReportable(tx) && monthKey(new Date(tx.fullDate)) === key)
-      .reduce((sum, tx) => sum + Number(tx.amount), 0);
+      .reduce((sum, tx) => sum + spendAmount(tx), 0);
     carry = Math.max(0, effectiveLimit - spent);
     cursor.setMonth(cursor.getMonth() + 1);
   }
@@ -61,7 +62,7 @@ export const checkBudgetAlerts = () => {
     })) {
       const spent = current
         .filter((tx) => category === 'Overall' || tx.category === category)
-        .reduce((sum, tx) => sum + tx.amount, 0);
+        .reduce((sum, tx) => sum + spendAmount(tx), 0);
       if (!(limit > 0)) continue;
       for (const threshold of [80, 100]) {
         const key = `budget_alert_${monthKey(date)}_${category}_${threshold}`;

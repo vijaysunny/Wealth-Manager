@@ -39,3 +39,13 @@ test('labels and month check', () => {
   expect(monthLabel(NOV)).toMatch(/November 2026/);
   expect(inMonth({ date: '2026-11-02' }, NOV)).toBe(true);
 });
+
+test('C6: Home "spent" leaves out principal of Interest only loans', () => {
+  const tx = {
+    type: 'expense',
+    amount: 9414.69,
+    fullDate: new Date(2026, 10, 7, 12).toISOString(),
+    loanLink: { loanId: 'pl', kind: 'emi', principal: 7792.91, interest: 1621.78, interestOnly: true },
+  };
+  expect(monthSummary([tx], new Date(2026, 10, 20)).spent).toBe(1621.78);
+});

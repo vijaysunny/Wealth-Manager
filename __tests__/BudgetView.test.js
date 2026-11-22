@@ -55,3 +55,19 @@ test('previousMonthName', () => {
   expect(previousMonthName(NOV)).toBe('October');
   expect(previousMonthName(new Date(2026, 0, 3))).toBe('December');
 });
+
+test('C6: an Interest only loan payment counts only its interest; full payment counts it all', () => {
+  const d = new Date(2026, 10, 7, 12).toISOString();
+  const emi = (interestOnly) => ({
+    type: 'expense',
+    amount: 9414.69,
+    category: 'Loan/EMI',
+    fullDate: d,
+    loanLink: { loanId: 'pl', kind: 'emi', principal: 7792.91, interest: 1621.78, interestOnly },
+  });
+  expect(monthSpending([emi(true)], new Date(2026, 10, 20))).toEqual({
+    total: 1621.78,
+    byCategory: { 'Loan/EMI': 1621.78 },
+  });
+  expect(monthSpending([emi(false)], new Date(2026, 10, 20)).total).toBe(9414.69);
+});
