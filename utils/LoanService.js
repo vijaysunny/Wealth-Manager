@@ -46,3 +46,24 @@ export const reopenLoan = async (loanId) => {
 };
 
 export const deleteLoan = (loanId) => deleteAccount(loanId);
+
+/** C3 Part-prepay without a transaction: stored on the loan; mode 'reduceEmi' | 'endSooner'. */
+export const addPrepayment = async (loanId, { date, amount, mode }) => {
+  const { loan } = await loadLoan(loanId);
+  if (!loan) throw new Error('This item no longer exists.');
+  const value = Number(amount);
+  if (!(value > 0)) throw new Error('Enter the amount prepaid.');
+  if (!(date instanceof Date) || !Number.isFinite(date.getTime()))
+    throw new Error('Enter the date as DD/MM/YYYY.');
+  const prepayments = [
+    ...(Array.isArray(loan.prepayments) ? loan.prepayments : []),
+    {
+      id: `pp_${Date.now().toString(36)}`,
+      date: date.toISOString(),
+      amount: Math.round(value * 100) / 100,
+      mode: mode === 'reduceEmi' ? 'reduceEmi' : 'endSooner',
+    },
+  ];
+  await updateAccount(loanId, { prepayments, lastUpdated: new Date().toISOString() });
+  return prepayments;
+};

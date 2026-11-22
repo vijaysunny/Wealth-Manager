@@ -312,3 +312,44 @@ export const defaultSplit = (loan, txs = [], kind, amount, asOf = new Date(), ed
     note: `EMI ${no} of ${before.tenureNow} · from the schedule, edit to match your lender`,
   };
 };
+
+const KIND_LABEL = {
+  emi: 'EMI',
+  prepayment: 'Prepayment',
+  charges: 'Fee',
+  foreclosure: 'Foreclosure',
+  disbursal: 'Loan received',
+};
+/** "EMI 6", "Prepayment", "Fee", "Foreclosure", "Loan received". */
+export const kindLabel = (row) =>
+  row.kind === 'emi' && row.emiNo ? `EMI ${row.emiNo}` : KIND_LABEL[row.kind] || 'Payment';
+
+const ymd = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const SOURCE = { sms: 'SMS', manual: 'manual', schedule: 'schedule (no SMS seen)' };
+
+/**
+ * C3 "Export for tax filing (CSV)": this FY's rows, oldest first. Figures only: no tax sections and
+ * no advice. Fees go in the charges column; EMI and foreclosure interest in the interest column.
+ */
+export const loanCsv = (l) => {
+  const end = endOfDay(l.fy.end).getTime();
+  const lines = ['date,type,amount,principal,interest,charges,source'];
+  l.rows
+    .filter((x) => x.date >= l.fy.start && x.date.getTime() <= end)
+    .forEach((x) => {
+      const charges = x.kind === 'charges';
+      lines.push(
+        [
+          ymd(x.date),
+          kindLabel(x),
+          x.amount.toFixed(2),
+          x.principal.toFixed(2),
+          (charges ? 0 : x.interest).toFixed(2),
+          (charges ? x.interest : 0).toFixed(2),
+          SOURCE[x.source] || x.source,
+        ].join(',')
+      );
+    });
+  return `${lines.join('\n')}\n`;
+};

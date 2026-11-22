@@ -30,3 +30,12 @@ export const exportHistory = async (rows, format = 'csv') => {
     await Sharing.shareAsync(uri);
   } else throw new Error('Sharing is unavailable on this device');
 };
+
+/** Writes `text` to a cache file and opens the share sheet (C3 loan CSV). */
+export const shareCsv = async (fileName, text) => {
+  const uri = FileSystem.cacheDirectory + fileName;
+  await FileSystem.writeAsStringAsync(uri, text);
+  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is unavailable on this device');
+  suppressNextLock();
+  await Sharing.shareAsync(uri, { mimeType: 'text/csv' });
+};

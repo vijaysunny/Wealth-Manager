@@ -11,6 +11,8 @@ import {
   defaultSplit,
   monthsToClear,
   hasLedgerData,
+  loanCsv,
+  kindLabel,
 } from '../utils/LoanLedger';
 import { emiFor } from '../utils/LoanCalculator';
 
@@ -335,4 +337,23 @@ test('edges: source from SMS, prepayment that clears the loan, no-cost and flat 
   expect(fyOf().start.getMonth()).toBe(3);
   expect(hasLedgerData(loan)).toBe(false);
   expect(loanOwed(loan)).toBeGreaterThanOrEqual(0);
+});
+
+test('labels and the FY CSV (figures only, fees in the charges column)', () => {
+  const fee = pay('f', iso(2026, 11, 10), 590, { kind: 'charges', principal: 0, interest: 590 });
+  const old = pay('old', iso(2026, 3, 20), 500, { kind: 'charges', principal: 0, interest: 500 });
+  const csv = loanCsv(ledger(loan, [{ ...emi6, smsId: 's' }, fee, old, prepay()], NOW))
+    .trim()
+    .split('\n');
+  expect(csv[0]).toBe('date,type,amount,principal,interest,charges,source');
+  expect(csv[1]).toBe('2026-06-07,EMI 1,9414.69,7414.69,2000.00,0.00,schedule (no SMS seen)');
+  expect(csv).toContain('2026-11-07,EMI 6,9414.69,7792.91,1621.78,0.00,SMS');
+  expect(csv).toContain('2026-11-10,Fee,590.00,0.00,0.00,590.00,manual');
+  expect(csv).toContain('2026-11-15,Prepayment,10000.00,10000.00,0.00,0.00,manual');
+  expect(csv.some((x) => x.startsWith('2026-03-20'))).toBe(false);
+  expect(csv).toHaveLength(9);
+  expect(kindLabel({ kind: 'foreclosure' })).toBe('Foreclosure');
+  expect(kindLabel({ kind: 'disbursal' })).toBe('Loan received');
+  expect(kindLabel({ kind: 'emi' })).toBe('EMI');
+  expect(kindLabel({ kind: 'odd' })).toBe('Payment');
 });

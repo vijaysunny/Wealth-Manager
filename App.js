@@ -39,6 +39,7 @@ import BackupScreen from './screens/BackupScreen';
 import CategoriesScreen from './screens/CategoriesScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardSetupScreen from './screens/CardSetupScreen';
+import LoanDetailScreen from './screens/LoanDetailScreen';
 import LoanEditScreen from './screens/LoanEditScreen';
 
 // --- UTILS ---
@@ -193,6 +194,7 @@ function AppContent() {
         <Stack.Screen name="Backup" component={BackupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Categories" component={CategoriesScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="LoanDetail" component={LoanDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanEdit" component={LoanEditScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardSetup" component={CardSetupScreen} options={{ headerShown: false }} />
         <Stack.Screen
