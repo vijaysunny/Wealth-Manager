@@ -261,7 +261,7 @@ describe('review queue resolution', () => {
     await save([tx]);
     await resolveCaptureAccount(tx.id, { accountId: 'axis' });
     expect((await byId('axis')).balance).toBeCloseTo(8001.81, 2);
-    expect((await getAll())[0]).toMatchObject({ accountId: 'axis', reviewStatus: 'pending' });
+    expect((await getAll())[0]).toMatchObject({ accountId: 'axis', reviewStatus: 'confirmed' }); // picking the account answers the question
     await remove(tx.id);
     expect((await byId('axis')).balance).toBe(10000);
   });

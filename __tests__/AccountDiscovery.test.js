@@ -100,6 +100,19 @@ test('checkItems = pending review items that are not new-account groups', () => 
   expect(checkItems(txs).map((t) => t.reviewReason || t.id)).toEqual(['pick_account', 'x']);
 });
 
+test('checkItems skips captures that only waited for their account', () => {
+  const txs = [
+    { id: 'resolved', reviewStatus: 'pending', reviewReason: 'new_account', accountId: 'a' },
+    { id: 'matched', reviewStatus: 'pending' },
+    { id: 'answered', reviewStatus: 'pending', reviewReason: 'pick_account', accountId: 'a' },
+    { id: 'wallet', reviewStatus: 'pending', reviewReason: 'pick_wallet' },
+    { id: 'made', reviewStatus: 'pending', reviewReason: 'new_wallet' },
+    { id: 'self', reviewStatus: 'confirmed', transferCandidate: true },
+    null,
+  ];
+  expect(checkItems(txs).map((t) => t.id)).toEqual(['wallet', 'made']);
+});
+
 describe('A11 debit cards in discovery', () => {
   const dc = (o) => cap({ last4: null, cardLast4: '4821', ...o });
   test('a debit-card group is never folded into the savings group and carries its card', () => {

@@ -11,6 +11,7 @@ import {
   addAllDiscoveredAccounts,
   resolveCaptureAccount,
 } from '../../utils/FeatureService';
+import { checkItems } from '../../utils/AccountDiscovery';
 import { parseTransactionText } from '../../utils/TransactionParser';
 import { capturedFields } from '../../utils/CaptureMapper';
 import { computeNetWorth } from '../../utils/BalanceService';
@@ -20,6 +21,11 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 );
 jest.mock('../../utils/NotificationService', () => ({ sendTransactionNotification: jest.fn() }));
 
+// The owner's in-app category rules (e.g. 'baja' → Loan/EMI, which also clears the
+// self-transfer flag), seeded the way the owner set them up in the app.
+const { rules: OWNER_RULES } = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', '..', '__fixtures__', 'category_rules.owner.json'), 'utf8')
+);
 const { messages } = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', '..', '__fixtures__', 'sms', 'owner_real_samples.json'), 'utf8')
 );
@@ -55,6 +61,7 @@ beforeEach(async () => {
   seq = 0;
   await Storage.clear();
   await Storage.setItem('user_wealth_accounts', JSON.stringify(START()));
+  await Storage.setItem('category_rules', JSON.stringify(OWNER_RULES));
   await addMany(messages.map(capture).filter(Boolean), { balanceMode: 'captured' });
 });
 
@@ -132,6 +139,16 @@ test('Add all: every capture gets an account; top-ups move both legs; card bill 
   const bill = rows.find((t) => t.id === 'axis-debit-ccbill-amazon-01');
   expect(bill).toMatchObject({ type: 'transfer', transferKind: 'cc_bill', accountId: axis.id });
   expect(rows.filter((t) => t.type === 'expense').map((t) => t.id)).not.toContain(bill.id);
+});
+
+test('after Add all, Check is empty for the owner fixtures; resolved captures are confirmed', async () => {
+  await addAllDiscoveredAccounts();
+  const rows = await getAll();
+  expect(checkItems(rows).map((t) => `${t.id}:${t.reviewReason || ''}`)).toEqual([]);
+  // every capture that only waited for its account is now confirmed
+  rows
+    .filter((t) => t.reviewReason === 'new_account')
+    .forEach((t) => expect(t.reviewStatus).toBe('confirmed'));
 });
 
 test('D2: November totals from the fixtures; transfers are not spending', async () => {

@@ -94,8 +94,11 @@ export const resolveCaptureAccount = (id, choice = {}) =>
       const current = accounts.find((a) => String(a.id) === String(account.id)) || account;
       const r = assignCapture(accounts, tx, current, { newId: newAccountId });
       accounts = r.accounts;
-      resolved.push(r.tx);
-      await writeRow(db, r.tx);
+      // The account was the only open question: confirm the capture so it leaves Check. A
+      // possible self-transfer (IMPS/NEFT to a person) still waits for that answer.
+      const done = r.tx.transferCandidate ? r.tx : { ...r.tx, reviewStatus: 'confirmed' };
+      resolved.push(done);
+      await writeRow(db, done);
     };
     for (const tx of similar) await assign(tx);
     // A2: other new-account captures that now match this account unambiguously (e.g. an Axis

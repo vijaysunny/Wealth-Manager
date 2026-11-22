@@ -70,14 +70,26 @@ export const discoverAccounts = (txs = []) => {
 };
 
 /**
- * Review items that are not new-account groups (self-transfer, pick account, pick wallet …).
+ * Review items that need an answer and are not new-account groups: pick account, debit-card
+ * link, pick wallet, new wallet created, possible self-transfer. Plain pending captures that
+ * already have their account are not listed.
  * Debit-card questions are asked once per card: one item with `groupCount` captures (A11).
  */
+const ACCOUNT_QUESTIONS = ['pick_account', 'link_debit_card'];
+const WALLET_QUESTIONS = ['pick_wallet', 'new_wallet'];
+/** A pending capture that still needs an answer from the owner (not just an account). */
+export const isActionable = (tx) =>
+  !!tx &&
+  tx.reviewStatus === 'pending' &&
+  ((tx.accountUnresolved && ACCOUNT_QUESTIONS.includes(tx.reviewReason)) ||
+    WALLET_QUESTIONS.includes(tx.reviewReason) ||
+    !!tx.transferCandidate);
+
 export const checkItems = (txs = []) => {
   const out = [];
   const cards = new Map();
   for (const tx of txs) {
-    if (!tx || tx.reviewStatus !== 'pending' || isPendingNewAccount(tx)) continue;
+    if (!isActionable(tx) || isPendingNewAccount(tx)) continue;
     if (tx.reviewReason === 'link_debit_card' && tx.accountUnresolved) {
       const key = captureSignature(tx);
       if (cards.has(key)) {
