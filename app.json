@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#F5F6F8",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -89,7 +90,8 @@
           "cameraPermission": "Photograph bills and receipts to attach them to transactions.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/withNoForceDark"
     ],
     "extra": {
       "eas": {

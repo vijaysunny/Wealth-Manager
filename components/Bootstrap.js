@@ -5,7 +5,8 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import AppButton from './ui/AppButton';
-import { View, Text } from './Theme';
+import { Text, View } from 'react-native';
+import { tokens, type } from './tokens';
 import { getDatabase } from '../data/Database';
 import { migrateTags } from '../data/TagMigration';
 
@@ -29,8 +30,12 @@ export default function Bootstrap({ children, open = openAndMigrate }) {
   }, [start]);
   if (!ready)
     return (
-      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
-        <Text>{error || 'Preparing your saved data…'}</Text>
+      // A3: outside ThemeProvider, so it pins the light palette with its own background.
+      <View
+        testID="bootstrap-root"
+        style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 16, backgroundColor: tokens.light.bg }}
+      >
+        <Text style={[type.body, { color: tokens.light.text }]}>{error || 'Preparing your saved data…'}</Text>
         {error ? <AppButton title="Retry migration" onPress={start} /> : null}
       </View>
     );
