@@ -104,3 +104,28 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 | 14 | Home → Scan bill | Camera opens; saved expense has the photo under Bills & files | PENDING | |
 | 15 | SIP debit (Groww) with a Groww fund added (Platform = Groww) | Saved as a transfer Axis → fund, not spending | PENDING | |
 | 16 | Real debit-card SMS (A11) | Spend at a shop with card ••8285 lands on Axis ••0973 with the payee and balance; Axis lists card ••8285 | PENDING | fixture `axis-debitcard-ngef-01` |
+
+---
+
+# Phase 13 device checks (plan D4)
+
+**Status: not started.** Run on the owner's phone with Android dark mode **on**. Scenarios are copied from `docs/PHASE13_PLAN.md` § D4.
+
+| Field | Value |
+|---|---|
+| Date | |
+| Device / Android version | |
+| App build (commit / EAS build id) | |
+
+| # | Scenario | Expected | Result | Notes / evidence |
+|---|---|---|---|---|
+| 1 | Fresh install with the phone in dark mode | Welcome, loading and lock screens are readable | PENDING | |
+| 1a | Switch to another app and back, with the lock on and off | Same screen, typing intact (A6) | PENDING | |
+| 2 | Look through Transactions chips and rows, Accounts, Review, pickers | No account or card number appears twice | PENDING | |
+| 3 | Settings → AI → Test; ask a question | "Working · <model>" in under 10 s; the question gets an answer | PENDING | |
+| 4 | Set up Axis card ••9070 with the real limit and statement day | "You owe" matches the Axis app (±₹1) | PENDING | |
+| 5 | After the next statement | Bill shows the right total, minimum and due date; paying from Axis marks it paid; reminder fires 3 days before if unpaid | PENDING | B7 not built: add the bill by hand until D0 samples arrive |
+| 6 | Add a real card EMI under Liabilities | Months left and EMI match the bank app; the Liabilities total doesn't count it twice | PENDING | |
+| 7 | Link Bajaj Finance from Review → Check | Next month's ACH debit links by itself; outstanding matches the Bajaj app | PENDING | |
+| 8 | Add any other loan | Net worth changes by its outstanding amount | PENDING | |
+| 9 | Link a real EMI with the lender's split; link a prepayment | "Principal still owed" matches the lender (±₹1); the new end date matches | PENDING | |
