@@ -285,7 +285,13 @@ export const defaultSplit = (loan, txs = [], kind, amount, asOf = new Date(), ed
     };
   }
   let no;
-  if (editing && editing.loanLink && editing.loanLink.kind === 'emi' && editing.loanLink.emiNo)
+  if (
+    editing &&
+    editing.loanLink &&
+    editing.loanLink.kind === 'emi' &&
+    editing.loanLink.emiNo &&
+    String(editing.loanLink.loanId) === String(loan.id) // moved to another loan: number it afresh
+  )
     no = Number(editing.loanLink.emiNo);
   else {
     const linked = new Set(

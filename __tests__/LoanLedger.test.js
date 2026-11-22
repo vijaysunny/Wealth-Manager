@@ -288,6 +288,14 @@ test('default split per kind', () => {
   expect(defaultSplit(loan, txs, 'disbursal', 200000, NOW)).toMatchObject({ principal: 0, interest: 0 });
   // editing an existing EMI link keeps its number, not the next one
   expect(defaultSplit(loan, txs, 'emi', 9414.69, NOW, emi6).emiNo).toBe(6);
+  // moved to another loan: numbered on that loan, not EMI 6 of the old one
+  const other = { ...loan, id: 'other' };
+  const emi12 = { ...emi6, loanLink: { ...emi6.loanLink, emiNo: 12 } };
+  expect(defaultSplit(loan, txs, 'emi', 9414.69, NOW, emi12).emiNo).toBe(12);
+  expect(defaultSplit(other, [], 'emi', 9414.69, NOW, emi12).emiNo).toBe(
+    defaultSplit(other, [], 'emi', 9414.69, NOW).emiNo
+  );
+  expect(defaultSplit(other, [], 'emi', 9414.69, NOW).emiNo).not.toBe(12);
   // a finished loan: everything is principal (nothing scheduled)
   expect(defaultSplit({ ...loan, status: 'closed' }, [], 'emi', 100, NOW)).toMatchObject({
     principal: 100,
