@@ -68,6 +68,10 @@ test('A1: digits already in the name are not repeated', () => {
   expect(shortAccountName('UPI Lite')).toBe('UPI Lite');
   // stored last4 wins over digits in the name
   expect(shortAccountName('Axis Bank ••1111', '0973')).toBe('Axis ••0973');
+  // a plain 4-digit number that isn't the account's last4 is part of the name
+  expect(shortAccountName('Home Loan 2025')).toBe('Home Loan 2025');
+  expect(shortAccountName('FD 1000', null)).toBe('FD 1000');
+  expect(shortAccountName('Home Loan 2025', '4321')).toBe('Home Loan 2025 ••4321');
 });
 
 test('A1 property: the output never contains the same 4 digits twice', () => {
@@ -90,11 +94,14 @@ test('A1 property: the output never contains the same 4 digits twice', () => {
         const name = suffix ? `${base}${suffix[0] === '' ? ' ' : suffix[0]}${nameDigits}` : base;
         const last4 = stored === null ? null : pad(stored);
         const out = shortAccountName(name, last4);
-        const groups = out.match(/\d{4}/g) || [];
+        const want = last4 || (suffix && suffix[0].trim() !== '' ? nameDigits : null);
+        if (want) expect(out.endsWith(`••${want}`)).toBe(true);
+        // a bare " 1234" that isn't the stored last4 is part of the name, kept once
+        const plainNumber = suffix && suffix[0].trim() === '' && nameDigits !== last4;
+        const groups = (plainNumber ? out.replace(` ${nameDigits}`, '') : out).match(/\d{4}/g) || [];
         expect(new Set(groups).size).toBe(groups.length);
         expect(groups.length).toBeLessThanOrEqual(1);
-        const want = last4 || nameDigits;
-        if (want) expect(out.endsWith(`••${want}`)).toBe(true);
+        if (plainNumber) expect(out).toContain(` ${nameDigits}`);
       }
     )
   );

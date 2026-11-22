@@ -45,12 +45,15 @@ export const touchesAccount = (tx, account) => {
 /** "Axis Bank" + 0973 → "Axis ••0973"; "Axis Bank Credit Card" → "Axis Card". */
 // A1: names created from SMS already end in "••0973" (or "XX0973", "*0973", " 0973"), and the
 // account also stores last4. Strip any trailing digit marker, shorten, then add ••last4 once.
-const TRAILING_DIGITS = /(?:\s*(?:•+|\.{2,}|x{2,}|\*+)\s*|\s+)(\d{4})\s*$/i;
+// A bare " 0973" only counts when it is the account's own last4: "Home Loan 2025" stays as it is.
+const TRAILING_DIGITS = /(\s*(?:•+|\.{2,}|x{2,}|\*+)\s*|\s+)(\d{4})\s*$/i;
 export const shortAccountName = (name = '', last4 = null) => {
   let base = String(name || '').trim();
   let found = null;
   for (let m = base.match(TRAILING_DIGITS); m; m = base.match(TRAILING_DIGITS)) {
-    found = found || m[1];
+    const marked = m[1].trim() !== '';
+    if (!marked && (!last4 || String(last4) !== m[2])) break;
+    found = found || m[2];
     base = base.slice(0, m.index).trim();
   }
   base = base
