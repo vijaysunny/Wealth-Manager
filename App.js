@@ -37,6 +37,7 @@ import ReviewAccountsScreen from './screens/ReviewAccountsScreen';
 import ScanSmsScreen from './screens/ScanSmsScreen';
 import BackupScreen from './screens/BackupScreen';
 import CategoriesScreen from './screens/CategoriesScreen';
+import BankEmiScreen from './screens/BankEmiScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardSetupScreen from './screens/CardSetupScreen';
 import LoanDetailScreen from './screens/LoanDetailScreen';
@@ -69,6 +70,7 @@ import {
 import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { saveNetWorthSnapshot } from './utils/FeatureService';
 import { syncCardReminders } from './utils/CardService';
+import { syncLoans } from './utils/LoanService';
 import { getAll as getAllTransactions } from './data/TransactionRepo';
 import { APP_VERSION } from './utils/appInfo';
 import { loadNavState, makeNavSaver, refreshNavState, throttleAsync } from './utils/NavigationPersistence';
@@ -121,6 +123,7 @@ function AppContent() {
         await syncSms();
         await processRecurringTransactions();
         await syncCardReminders(); // B4: a payment may have cleared a bill
+        await syncLoans(); // C4: link new EMI debits; remind when one is missing
         await saveNetWorthSnapshot();
       } catch (err) {
         console.warn('Catch-up error:', err);
@@ -196,6 +199,7 @@ function AppContent() {
         <Stack.Screen name="Categories" component={CategoriesScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanDetail" component={LoanDetailScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="BankEmi" component={BankEmiScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanLink" component={LoanLinkScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanEdit" component={LoanEditScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardSetup" component={CardSetupScreen} options={{ headerShown: false }} />

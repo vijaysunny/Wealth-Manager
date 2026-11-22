@@ -63,6 +63,15 @@ describe('available limit is not a balance', () => {
 });
 
 describe('extractChannel', () => {
+  test("C4: auto-debit mandates (ACH-DR from the owner's Axis SMS; ECS/SI synthetic)", () => {
+    expect(extractChannel('Debit INR 538.00\nAxis Bank A/c XX0973\nACH-DR-BAJAJ FINANCE LTD-V').channel).toBe(
+      'ACH'
+    );
+    expect(extractChannel('synthetic-ecs: ECS debit of Rs 900 to LENDER').channel).toBe('ECS');
+    expect(extractChannel('synthetic-si: SI-LENDER debited Rs 900').channel).toBe('SI');
+    expect(extractChannel('Rs 900 sent to Sinha').channel).toBeNull();
+  });
+
   test('slash narration', () => {
     expect(extractChannel('UPI/P2M/630969451444/GROWW INVEST TECH P\nNot you?')).toEqual({
       channel: 'UPI',

@@ -392,7 +392,7 @@ export const extractRefNo = (text = '') => {
 };
 
 /**
- * Payment rail and counterparty: { channel: 'IMPS'|'UPI'|'NEFT'|'RTGS'|'BBPS'|'NACH'|null,
+ * Payment rail and counterparty: { channel: 'IMPS'|'UPI'|'NEFT'|'RTGS'|'BBPS'|'NACH'|'ACH'|'ECS'|'SI'|null,
  * mode: 'P2A'|'P2M'|'P2P'|null, counterparty: string|null }.
  */
 export const extractChannel = (text = '') => {
@@ -404,6 +404,11 @@ export const extractChannel = (text = '') => {
       mode: slash[2]?.toUpperCase() || null,
       counterparty: cleanSlashPayee(slash[4]),
     };
+  // C4: auto-debit mandates. "ACH-DR-<lender>" is from the owner's Axis SMS (Bajaj Finance).
+  if (/\bACH[- ]?DR\b/i.test(s)) return { channel: 'ACH', mode: null, counterparty: null };
+  // UNVERIFIED-SAMPLE: ECS and standing-instruction ("SI-") debits; no real SMS seen yet (D0).
+  if (/\bECS\b/.test(s)) return { channel: 'ECS', mode: null, counterparty: null };
+  if (/\bSI-[A-Z]/.test(s)) return { channel: 'SI', mode: null, counterparty: null };
   const named =
     s.match(/\bvia\s+(UPI|IMPS|NEFT|RTGS|BBPS|NACH)\b/i) || s.match(/\b(IMPS|NEFT|RTGS|BBPS|NACH|UPI)\b/i);
   return { channel: named ? named[1].toUpperCase() : null, mode: null, counterparty: null };

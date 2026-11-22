@@ -8,8 +8,15 @@ import {
   canLink,
   candidatesFor,
   spendAmount,
+  emiSuggestions,
+  loanFromDebits,
+  autoLinks,
+  missedEmi,
+  missedKey,
+  isMandateDebit,
 } from '../utils/LoanLink';
 import { applyToAccounts, reverseOnAccounts } from '../utils/BalanceService';
+import { calculateOutstandingBalance } from '../utils/LoanCalculator';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -183,4 +190,218 @@ test('edges: a one-sided transfer out keeps its flow; EMI without a number; no l
   const noEmi = { ...loan, emiAmount: 0 };
   expect(candidatesFor(noEmi, [{ ...debit, id: 'x' }], accounts, new Date(2026, 10, 22))).toEqual([]);
   expect(canLink({ ...debit, accountId: undefined })).toBe(true);
+});
+
+// ── C4: bank EMIs ──
+const ach = (id, m, d, amount, extra = {}) => ({
+  id,
+  type: 'expense',
+  amount,
+  merchant: 'Bajaj Finance',
+  title: 'Bajaj Finance',
+  category: 'Loan/EMI',
+  channel: 'ACH',
+  accountId: 'axis',
+  smsId: `s-${id}`,
+  fullDate: iso(m, d),
+  ...extra,
+});
+
+test('detect: monthly ACH from one payee; different amounts are separate loans; one-offs ignored', () => {
+  const txs = [
+    ach('b1', 11, 7, 538),
+    ach('b2', 7, 7, 160),
+    ach('one', 10, 3, 999, { merchant: 'Lone Lender', title: 'Lone Lender' }),
+    ach('upi', 11, 7, 538, { channel: 'UPI', merchant: 'Shop', title: 'Shop' }),
+    ach('card', 11, 7, 538, { accountId: 'ac', merchant: 'Card co', title: 'Card co' }),
+  ];
+  const s = emiSuggestions(txs, accounts);
+  expect(s).toHaveLength(1);
+  expect(s[0]).toMatchObject({ payee: 'Bajaj Finance', key: 'bajaj finance', mixed: true });
+  expect(s[0].debits.map((x) => x.id)).toEqual(['b1', 'b2']);
+  expect(s[0].loans.map((l) => [l.amount, l.debitDay, l.accountId, l.debits.length])).toEqual([
+    [538, 7, 'axis', 1],
+    [160, 7, 'axis', 1],
+  ]);
+  // "Not a loan" dismisses one amount; the other stays
+  const left = emiSuggestions(txs, accounts, ['bajaj finance|538']);
+  expect(left[0].loans.map((l) => l.amount)).toEqual([160]);
+  expect(emiSuggestions(txs, accounts, ['bajaj finance|538', 'bajaj finance|160'])).toEqual([]);
+  // not monthly: two debits 10 days apart, or on different days of the month
+  expect(emiSuggestions([ach('x1', 11, 7, 538), ach('x2', 11, 17, 538)], accounts)).toEqual([]);
+  expect(emiSuggestions([ach('y1', 9, 7, 538), ach('y2', 11, 20, 538)], accounts)).toEqual([]);
+  // month-end days wrap (30 Sep ≈ 1 Nov); "EMI" in the name counts as a mandate
+  expect(
+    emiSuggestions(
+      [
+        ach('z1', 9, 30, 500, { channel: null, merchant: 'HDFC EMI', title: 'HDFC EMI' }),
+        ach('z2', 11, 1, 500, { channel: null, merchant: 'HDFC EMI', title: 'HDFC EMI' }),
+      ],
+      accounts
+    )
+  ).toHaveLength(1);
+  expect(emiSuggestions()).toEqual([]);
+});
+
+test('a new loan from the debits: no-cost Bajaj ₹538 with 8 left owes ₹4,304', () => {
+  const v = loanFromDebits(
+    {
+      payee: 'Bajaj Finance',
+      emi: 538,
+      left: 8,
+      rate: 0,
+      debitDay: 7,
+      accountId: 'axis',
+      debits: [ach('b1', 11, 7, 538)],
+    },
+    new Date(2026, 10, 22)
+  );
+  expect(v).toMatchObject({
+    kind: 'personal',
+    name: 'Bajaj Finance',
+    months: 9,
+    rate: 0,
+    emi: 538,
+    payFromId: 'axis',
+    amount: 4842,
+  });
+  expect(v.firstEmi).toEqual(new Date(2026, 10, 7));
+  const r = loanFromDebits(
+    {
+      payee: 'X',
+      emi: 9414.69,
+      left: 18,
+      rate: 12,
+      debitDay: 7,
+      accountId: 'axis',
+      debits: [ach('p', 10, 7, 9414.69), ach('q', 11, 7, 9414.69)],
+    },
+    new Date(2026, 10, 22)
+  );
+  expect(r.months).toBe(20);
+  expect(r.firstEmi).toEqual(new Date(2026, 9, 7));
+  // what is owed after the 2 debits seen = the present value of the 18 EMIs left (₹1,54,384.71 in 16-loan-detail.png)
+  const built = {
+    originalAmount: r.amount,
+    emiAmount: r.emi,
+    interestRate: 12,
+    tenure: r.months,
+    firstEmiDate: r.firstEmi.toISOString(),
+  };
+  expect(Math.abs(calculateOutstandingBalance(built, new Date(2026, 10, 22)) - 154384.71)).toBeLessThan(1);
+  // no debits seen: the first EMI is the next debit day
+  expect(
+    loanFromDebits(
+      { payee: 'Y', emi: 100, left: 3, rate: 0, debitDay: 30, debits: [] },
+      new Date(2026, 1, 10)
+    ).firstEmi
+  ).toEqual(new Date(2026, 1, 28));
+});
+
+test('auto-link rule: later debits from the same payee and amount (±1 %) link as the next EMI', () => {
+  const bajaj = {
+    id: 'bj',
+    type: 'Loan',
+    name: 'Bajaj Finance',
+    originalAmount: 6456,
+    emiAmount: 538,
+    tenure: 12,
+    interestRate: 0,
+    loanType: 'No Cost EMI',
+    firstEmiDate: iso(8, 7),
+    match: { payee: 'bajaj finance', amount: 538 },
+  };
+  const linked = applyLink(
+    ach('nov', 11, 7, 538),
+    { loanId: 'bj', kind: 'emi', emiNo: 4, principal: 538, interest: 0, source: 'sms' },
+    bajaj
+  );
+  const txs = [
+    linked,
+    ach('dec', 12, 7, 538),
+    ach('jan', 1, 7, 539, { fullDate: new Date(2027, 0, 7, 12).toISOString() }),
+    ach('other', 12, 7, 160),
+    ach('old', 10, 7, 538),
+  ];
+  const out = autoLinks(
+    [bajaj, { ...bajaj, id: 'nomatch', match: undefined }, { ...bajaj, id: 'shut', status: 'closed' }],
+    txs
+  );
+  expect(out.map((o) => [o.txId, o.link.emiNo, o.link.principal])).toEqual([
+    ['dec', 5, 538],
+    ['jan', 6, 538],
+  ]);
+  expect(out[0].link).toMatchObject({ loanId: 'bj', kind: 'emi', source: 'sms' });
+  expect(autoLinks()).toEqual([]);
+});
+
+test('missed EMI: nothing linked by debit day + 2 → once a month; not for card EMIs or finished loans', () => {
+  const bajaj = {
+    id: 'bj',
+    type: 'Loan',
+    name: 'Bajaj Finance',
+    debitDay: 7,
+    emiAmount: 538,
+    tenure: 12,
+    originalAmount: 6456,
+    interestRate: 0,
+    firstEmiDate: iso(8, 7),
+    match: { payee: 'bajaj finance', amount: 538 },
+  };
+  const paid = applyLink(
+    ach('n', 11, 7, 538),
+    { loanId: 'bj', kind: 'emi', emiNo: 4, principal: 538, interest: 0 },
+    bajaj
+  );
+  expect(missedEmi(bajaj, [], new Date(2026, 10, 9, 12))).toBe(false); // still within 2 days
+  expect(missedEmi(bajaj, [], new Date(2026, 10, 10, 12))).toBe(true);
+  expect(missedEmi(bajaj, [paid], new Date(2026, 10, 10, 12))).toBe(false);
+  expect(missedEmi({ ...bajaj, match: undefined }, [], new Date(2026, 10, 10, 12))).toBe(false);
+  expect(missedEmi({ ...bajaj, includedInCard: true }, [], new Date(2026, 10, 10, 12))).toBe(false);
+  expect(missedEmi({ ...bajaj, status: 'closed' }, [], new Date(2026, 10, 10, 12))).toBe(false);
+  expect(missedEmi(bajaj, [], new Date(2026, 6, 10, 12))).toBe(false); // before the first EMI
+  expect(missedEmi(bajaj, [], new Date(2027, 8, 10, 12))).toBe(false); // all 12 done
+  expect(missedEmi({ ...bajaj, debitDay: undefined }, [], new Date(2026, 10, 10, 12))).toBe(true); // day from the first EMI
+  expect(missedKey(bajaj, new Date(2026, 10, 10))).toBe('loan_missed_bj_2026-11');
+});
+
+test('C4 edges: mandate check, nameless debits, default arguments, manual source, missing day', () => {
+  expect(isMandateDebit(null)).toBe(false);
+  expect(
+    isMandateDebit(ach('a', 11, 7, 1, { channel: undefined, merchant: undefined, title: 'Car EMI' }))
+  ).toBe(true);
+  expect(isMandateDebit(ach('b', 11, 7, 1, { loanLink: { loanId: 'x' } }))).toBe(false);
+  // linked debits still count towards "monthly", but only unlinked ones are offered
+  const linkedOld = applyLink(
+    ach('o', 10, 7, 538),
+    { loanId: 'bj', kind: 'emi', principal: 538, interest: 0 },
+    {}
+  );
+  const s = emiSuggestions([linkedOld, ach('n', 11, 7, 538, { merchant: undefined })], accounts);
+  expect(s[0].debits.map((x) => x.id)).toEqual(['n']);
+  expect(s[0].payee).toBe('Bajaj Finance');
+  expect(
+    emiSuggestions(
+      [ach('p', 10, 7, 5, { merchant: '', title: '' }), ach('q', 11, 7, 5, { merchant: '', title: '' })],
+      accounts
+    )
+  ).toEqual([]);
+  // manual debits auto-link with source manual
+  const bj = {
+    id: 'bj',
+    originalAmount: 1000,
+    emiAmount: 100,
+    tenure: 10,
+    interestRate: 0,
+    firstEmiDate: iso(10, 7),
+    match: { payee: 'bajaj finance', amount: 100 },
+  };
+  expect(autoLinks([bj], [ach('m', 11, 7, 100, { smsId: undefined })])[0].link.source).toBe('manual');
+  // a loan with no dates has no debit day → never "missed"
+  expect(missedEmi({ id: 'z', match: { payee: 'x', amount: 1 } }, [], new Date(2026, 10, 20))).toBe(false);
+  expect(missedEmi(null)).toBe(false);
+  expect(missedKey({ id: 'k' })).toMatch(/^loan_missed_k_\d{4}-\d{2}$/);
+  expect(
+    loanFromDebits({ payee: 'D', emi: 10, left: 1, rate: 0, debitDay: 5 }).months
+  ).toBeGreaterThanOrEqual(1);
 });

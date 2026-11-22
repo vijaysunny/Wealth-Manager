@@ -513,7 +513,8 @@
         "bank": "Axis Bank",
         "last4": "0973",
         "merchant": "Bajaj Finance",
-        "category": "Loan/EMI"
+        "category": "Loan/EMI",
+        "channel": "ACH"
       }
     },
     {
@@ -526,7 +527,8 @@
         "bank": "Axis Bank",
         "last4": "0973",
         "merchant": "Bajaj Finance",
-        "category": "Loan/EMI"
+        "category": "Loan/EMI",
+        "channel": "ACH"
       }
     },
     {

@@ -27,6 +27,8 @@ import AppButton from '../components/ui/AppButton';
 import Card from '../components/ui/Card';
 import Segmented from '../components/ui/Segmented';
 import { accountInitials } from '../utils/TransactionList';
+import { emiSuggestions } from '../utils/LoanLink';
+import { loadDismissed } from '../utils/LoanService';
 
 const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
 
@@ -50,9 +52,11 @@ export default function ReviewAccountsScreen({ navigation, route }) {
   const [busy, setBusy] = useState(false);
   const [linking, setLinking] = useState(null); // group being linked to an existing account
 
+  const [dismissed, setDismissed] = useState([]); // C4: "Not a loan" payee|amount keys
   const load = useCallback(async () => {
     setAccounts(JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]'));
     setRows(await getAll());
+    setDismissed(await loadDismissed());
   }, []);
   useFocusEffect(
     useCallback(() => {
@@ -62,6 +66,10 @@ export default function ReviewAccountsScreen({ navigation, route }) {
 
   const groups = useMemo(() => discoverAccounts(rows), [rows]);
   const checks = useMemo(() => checkItems(rows), [rows]);
+  const loanHints = useMemo(
+    () => emiSuggestions(rows, Object.fromEntries(accounts.map((a) => [String(a.id), a])), dismissed),
+    [rows, accounts, dismissed]
+  );
 
   const run = async (action) => {
     setBusy(true);
@@ -262,7 +270,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
         onChange={setTab}
         options={[
           { value: 'new', label: `New accounts · ${groups.length}` },
-          { value: 'check', label: `Check · ${checks.length}` },
+          { value: 'check', label: `Check · ${checks.length + loanHints.length}` },
         ]}
       />
       {tab === 'new' ? (
@@ -283,10 +291,34 @@ export default function ReviewAccountsScreen({ navigation, route }) {
           keyExtractor={(tx) => String(tx.id)}
           renderItem={renderCheck}
           contentContainerStyle={styles.list}
+          ListHeaderComponent={
+            <View>
+              {loanHints.map((h) => (
+                <Card key={h.key} testID={`loan-hint-${h.key}`}>
+                  <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 15 }}>
+                    {h.payee} · {h.debits.length} auto-debits
+                  </Text>
+                  <Text style={{ color: t.muted, marginTop: 2 }}>
+                    {h.loans.map((l) => `${formatMoney(l.amount)} on day ${l.debitDay}`).join(' · ')}
+                  </Text>
+                  <Text style={{ color: t.warnText, marginTop: 4 }}>Looks like a loan EMI.</Text>
+                  <AppButton
+                    title="Link to a loan"
+                    size="sm"
+                    variant="secondary"
+                    style={{ marginTop: space.sm, alignSelf: 'flex-start' }}
+                    onPress={() => navigation.navigate('BankEmi', { payee: h.key })}
+                  />
+                </Card>
+              ))}
+            </View>
+          }
           ListEmptyComponent={
-            <Text style={{ color: t.muted, textAlign: 'center', marginTop: space.xxl }}>
-              Nothing to check.
-            </Text>
+            loanHints.length ? null : (
+              <Text style={{ color: t.muted, textAlign: 'center', marginTop: space.xxl }}>
+                Nothing to check.
+              </Text>
+            )
           }
         />
       )}

@@ -3,9 +3,11 @@
  * are in LoanForm (pure); this file only reads and writes storage.
  */
 import { putAccount, deleteAccount } from '../data/Collections';
-import { updateAccount } from '../data/Storage';
+import Storage, { updateAccount } from '../data/Storage';
 import { getAll, update } from '../data/TransactionRepo';
-import { applyLink, linkError, removeLink } from './LoanLink';
+import { applyLink, autoLinks, linkError, missedEmi, missedKey, removeLink } from './LoanLink';
+import { defaultSplit } from './LoanLedger';
+import { sendTransactionNotification } from './NotificationService';
 import { loadAccounts } from './CardService';
 import { buildLoan, loanFormCheck } from './LoanForm';
 
@@ -118,4 +120,64 @@ export const setBudgetMode = async (loanId, mode) => {
     if (!!t.loanLink.interestOnly !== (budgetMode === 'interestOnly'))
       await update(t.id, { loanLink: { ...t.loanLink, interestOnly: budgetMode === 'interestOnly' } });
   }
+};
+
+// ── C4: bank EMIs ──
+export const DISMISSED_KEY = 'loan_emi_dismissed';
+export const loadDismissed = async () => JSON.parse((await Storage.getItem(DISMISSED_KEY)) || '[]');
+/** "Not a loan": stop suggesting this payee and amount. */
+export const dismissEmiSuggestion = async (key) => {
+  const list = await loadDismissed();
+  if (!list.includes(key)) await Storage.setItem(DISMISSED_KEY, JSON.stringify([...list, key]));
+};
+
+/**
+ * Links the debits found (oldest first, each as the next EMI with the schedule split) and
+ * remembers the payee and amount so later debits link by themselves (LoanLink.autoLinks).
+ */
+export const linkDebitsToLoan = async (loanId, { payee, amount, accountId, debits = [] }) => {
+  const sorted = [...debits].sort((a, b) => new Date(a.fullDate) - new Date(b.fullDate));
+  for (const d of sorted) {
+    const { loan, txs } = await loadLoanWithTxs(loanId);
+    if (!loan) throw new Error('This item no longer exists.');
+    const s = defaultSplit(loan, txs, 'emi', d.amount, new Date(d.fullDate));
+    await saveLink(d.id, {
+      loanId,
+      kind: 'emi',
+      emiNo: s.emiNo,
+      principal: s.principal,
+      interest: s.interest,
+      source: d.smsId ? 'sms' : 'manual',
+    });
+  }
+  await updateAccount(loanId, { match: { payee, amount: Number(amount), accountId: accountId ?? null } });
+};
+
+/**
+ * Catch-up step (App): link new debits of SMS-tracked loans, then remind once a month per loan
+ * when the debit did not arrive by debit day + 2. Returns { linked, reminded }.
+ */
+export const syncLoans = async (now = new Date()) => {
+  const accounts = await loadAccounts();
+  const loans = accounts.filter((a) => a.type === 'Loan');
+  if (!loans.some((l) => l.match)) return { linked: 0, reminded: 0 };
+  let linked = 0;
+  for (const { txId, link } of autoLinks(loans, await getAll())) {
+    await saveLink(txId, link, { now });
+    linked += 1;
+  }
+  let reminded = 0;
+  const txs = await getAll();
+  for (const loan of loans) {
+    if (!missedEmi(loan, txs, now)) continue;
+    const key = missedKey(loan, now);
+    if (await Storage.getItem(key)) continue;
+    await Storage.setItem(key, '1');
+    await sendTransactionNotification(
+      `${loan.name} EMI not seen this month`,
+      'Check the debit, or link it if it came in.'
+    );
+    reminded += 1;
+  }
+  return { linked, reminded };
 };
