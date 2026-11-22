@@ -5,7 +5,7 @@ import { render, screen, act, fireEvent } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AppLock, { LOCK_AFTER_MS, shouldLockOnReturn, enableAppLock } from '../components/AppLock';
-import { suppressNextLock, isLockSuppressed } from '../utils/LockSuppress';
+import { suppressNextLock, isLockSuppressed, FORGIVE_MS } from '../utils/LockSuppress';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -127,6 +127,33 @@ test('after suppressNextLock() a long picker round-trip does not lock', async ()
   await away(5 * 60 * 1000);
   expect(screen.queryByTestId('app-lock-overlay')).toBeNull();
   expect(isLockSuppressed()).toBe(false); // cleared on return
+});
+
+test('a suppression not used within a minute expires: Home later and 3 h away still locks', async () => {
+  await mount(true);
+  await act(async () => {});
+  const t0 = Date.now();
+  suppressNextLock(t0); // share sheet opened and dismissed without leaving the app
+  const spy = jest.spyOn(Date, 'now').mockReturnValue(t0 + 2 * 60 * 1000);
+  LocalAuthentication.authenticateAsync.mockResolvedValue({ success: false });
+  await act(async () => emit('background'));
+  spy.mockReturnValue(t0 + 3 * 60 * 60 * 1000);
+  await act(async () => emit('active'));
+  spy.mockRestore();
+  expect(screen.getByText('WealthManager locked')).toBeTruthy();
+});
+
+test('a forgiven picker trip still locks after FORGIVE_MS; the next trip is not forgiven', async () => {
+  await mount(true);
+  await act(async () => {});
+  LocalAuthentication.authenticateAsync.mockResolvedValue({ success: false });
+  suppressNextLock();
+  await away(FORGIVE_MS + 1000);
+  expect(screen.getByText('WealthManager locked')).toBeTruthy();
+  expect(shouldLockOnReturn({ enabled: true, backgroundAt: 0, now: FORGIVE_MS, forgiven: true })).toBe(false);
+  expect(shouldLockOnReturn({ enabled: true, backgroundAt: 0, now: FORGIVE_MS + 1, forgiven: true })).toBe(
+    true
+  );
 });
 
 test('turning the lock on in Settings reaches a mounted AppLock without re-reading', async () => {

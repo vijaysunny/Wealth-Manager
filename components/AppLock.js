@@ -17,6 +17,7 @@ import { tokens } from './tokens';
 import {
   suppressNextLock,
   isLockSuppressed,
+  FORGIVE_MS,
   clearLockSuppress,
   whilePrompting,
   isPrompting,
@@ -33,9 +34,12 @@ export const onLockSettingChange = (fn) => {
 };
 
 /** Pure: should the app lock when it becomes active again? */
-export const shouldLockOnReturn = ({ enabled, backgroundAt, now }) =>
+export const shouldLockOnReturn = ({ enabled, backgroundAt, now, forgiven = false }) =>
   Boolean(
-    enabled && backgroundAt !== null && backgroundAt !== undefined && now - backgroundAt > LOCK_AFTER_MS
+    enabled &&
+    backgroundAt !== null &&
+    backgroundAt !== undefined &&
+    now - backgroundAt > (forgiven ? FORGIVE_MS : LOCK_AFTER_MS)
   );
 
 const authenticate = (promptMessage) =>
@@ -61,6 +65,7 @@ export default function AppLock({ children }) {
   const prompting = useRef(false);
   const enabledRef = useRef(null);
   const backgroundAt = useRef(null);
+  const forgiven = useRef(false);
 
   const unlock = useCallback(async () => {
     if (prompting.current) return;
@@ -100,20 +105,26 @@ export default function AppLock({ children }) {
       const now = Date.now();
       if (state !== 'active') {
         setCovered(true);
-        if (
-          state === 'background' &&
-          backgroundAt.current === null &&
-          !isLockSuppressed(now) &&
-          !isPrompting()
-        )
+        if (state === 'background' && backgroundAt.current === null && !isPrompting()) {
+          // A picker/share sheet we opened: forgive this one trip (up to FORGIVE_MS), then it's used up.
+          forgiven.current = isLockSuppressed(now);
+          clearLockSuppress();
           backgroundAt.current = now;
+        }
         return;
       }
       setCovered(false);
-      if (shouldLockOnReturn({ enabled: enabledRef.current, backgroundAt: backgroundAt.current, now }))
+      if (
+        shouldLockOnReturn({
+          enabled: enabledRef.current,
+          backgroundAt: backgroundAt.current,
+          now,
+          forgiven: forgiven.current,
+        })
+      )
         setLocked(true);
       backgroundAt.current = null;
-      clearLockSuppress();
+      forgiven.current = false;
     });
     return () => {
       alive = false;

@@ -1,7 +1,11 @@
 // Phase 13 A6: our own system screens (pickers, camera, share sheet, biometric prompt, Android
 // settings) send the app to the background. Call suppressNextLock() before opening one so the
-// app lock doesn't trigger when the owner comes back from it. Cleared on the next return.
-const SUPPRESS_MS = 10 * 60 * 1000;
+// app lock doesn't trigger when the owner comes back from it.
+// The suppression only covers a trip to the background that starts within SUPPRESS_MS (the time
+// it takes to open the system screen); AppLock consumes it there and forgives that trip for at
+// most FORGIVE_MS. A share sheet dismissed in-app followed later by Home locks as usual.
+export const SUPPRESS_MS = 60 * 1000;
+export const FORGIVE_MS = 10 * 60 * 1000;
 let suppressUntil = 0;
 export const suppressNextLock = (now = Date.now()) => {
   suppressUntil = now + SUPPRESS_MS;
