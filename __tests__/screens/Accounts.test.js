@@ -123,7 +123,8 @@ test('B6: a set-up card shows this cycle, "Pay ₹X by <date>" and what you owe;
   expect(text).toMatch(/^This cycle ₹[\d,.]+ · /);
   expect(screen.getByText(/^Pay ₹3,914 by \d{1,2} [A-Z][a-z]{2}$/)).toBeTruthy();
   // owed = limit − available (₹2,75,511.19 in the SMS) = ₹24,488.81
-  expect(screen.getByText('₹24,488.81')).toBeTruthy();
+  expect((await screen.findAllByText('₹24,488.81')).length).toBeGreaterThanOrEqual(2); // row + Liabilities tile
+  expect(screen.getByTestId('liabilities-total').props.children.join('')).toBe('₹24,488.81 owed');
   const labels = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel || '');
   labels.forEach((l) => {
     const groups = l.match(/\d{4}/g) || [];
@@ -162,4 +163,60 @@ test('D4/B3: pulling to refresh grows an FD started 90 days ago', async () => {
   // ≈ one quarter at 7%: 1,00,000 → about 1,01,700
   expect(saved.balance).toBeGreaterThan(101500);
   expect(saved.balance).toBeLessThan(101900);
+});
+
+test('C1: Liabilities shows both groups; a card EMI says "in card balance" and is not in the total', async () => {
+  const at = (offset) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + offset);
+    return d.toISOString();
+  };
+  const list = [
+    ...accounts,
+    {
+      id: 'bajaj',
+      name: 'Bajaj Finance',
+      type: 'Loan',
+      loanKind: 'personal',
+      loanType: 'No Cost EMI',
+      originalAmount: 6456,
+      emiAmount: 538,
+      tenure: 12,
+      firstEmiDate: at(-3),
+      balance: 0,
+    },
+    {
+      id: 'emi',
+      name: 'Phone EMI',
+      type: 'Loan',
+      loanKind: 'cardEmi',
+      includedInCard: true,
+      onCardId: 'ac',
+      loanType: 'Reducing',
+      originalAmount: 25000,
+      interestRate: 15,
+      emiAmount: 2256.46,
+      tenure: 12,
+      firstEmiDate: at(-2),
+    },
+    { id: 'old', name: 'Old gold loan', type: 'Loan', status: 'closed', balance: 0 },
+  ];
+  await Storage.setItem('user_wealth_accounts', JSON.stringify(list));
+  const n = nav();
+  render(<WealthScreen navigation={n} />);
+  expect(await screen.findByText('Credit cards')).toBeTruthy();
+  expect(screen.getByText('Loans & EMIs')).toBeTruthy();
+  expect(screen.getByText(/₹538\/mo · 8 left · next /)).toBeTruthy();
+  expect(screen.getByText('Phone EMI · Axis Card')).toBeTruthy();
+  expect(screen.getByText(/₹2,256\/mo · 9 left · in card balance/)).toBeTruthy();
+  // header total = Bajaj ₹4,304 (the Axis card from SMS isn't set up: not counted; SBI was added by hand, owes 0)
+  expect(screen.getByTestId('liabilities-total').props.children.join('')).toBe('₹4,304 owed');
+  expect(screen.getByTestId('cards-not-counted').props.children.join('')).toBe(
+    'Axis Card ••9070 not set up · its debt is not counted yet'
+  );
+  expect(screen.queryByText('Old gold loan')).toBeNull();
+  fireEvent.press(screen.getByText('Show closed (1)'));
+  expect(screen.getByText('Old gold loan')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Add loan or EMI' }));
+  expect(n.navigate).toHaveBeenCalled();
 });

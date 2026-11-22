@@ -122,3 +122,21 @@ export const calculateOutstandingBalance = (loan, asOf = new Date()) => {
   }
   return Math.max(0, round2(outstanding));
 };
+
+/** C1/C5: a loan that is part of a card's balance (card EMI) never counts as a liability itself. */
+export const isCardEmi = (loan) => !!loan && (loan.includedInCard === true || loan.loanKind === 'cardEmi');
+
+/** EMIs left and the next EMI date for the Liabilities row. */
+export const loanProgress = (loan, asOf = new Date()) => {
+  const tenure = Math.round(num(loan.tenure));
+  const paid = paidCount(loan, asOf);
+  const left = tenure > 0 ? Math.max(0, tenure - paid) : null;
+  const next = left === 0 ? null : emiDate(loan, paid + 1);
+  return {
+    paid,
+    tenure: tenure > 0 ? tenure : null,
+    left,
+    next,
+    ratio: tenure > 0 ? Math.min(1, paid / tenure) : 0,
+  };
+};

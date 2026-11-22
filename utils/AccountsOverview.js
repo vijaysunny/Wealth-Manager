@@ -1,8 +1,10 @@
 /**
  * AccountsOverview.js (C5.5) - pure. Groups accounts for the Accounts screen and the
- * three-number net-worth card (Cash & bank, Investments, Owed).
+ * three-number net-worth card (Cash & bank, Investments, Liabilities).
  */
 import { computeNetWorth, isWallet } from './BalanceService';
+import { cardDebt, isCardSetUp } from './CardMath';
+import { calculateOutstandingBalance, isCardEmi } from './LoanCalculator';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -30,15 +32,47 @@ export const groupAccounts = (accounts = []) => ({
   loans: accounts.filter(isLoan),
 });
 
-export const accountsOverview = (accounts = []) => {
+/**
+ * Phase 13 C1/C5. opts { txs, asOf }: with transactions, cards use CardMath and loans their
+ * schedule. liabilities = cards' positive owed (counted ones) + active loans, never card EMIs.
+ * An overpaid card's credit is shown in Cash & bank (cardCredit). `owed` = liabilities (alias,
+ * kept for one release).
+ */
+export const accountsOverview = (accounts = [], { txs = null, asOf = new Date() } = {}) => {
   const g = groupAccounts(accounts);
-  const nw = computeNetWorth(accounts);
+  const nw = computeNetWorth(accounts, [], { txs, asOf });
+  const cards = g.cards.map((account) => {
+    const d = txs
+      ? cardDebt(account, txs, asOf)
+      : { owed: num(account.balance), counted: true, source: 'history' };
+    return { account, owed: d.owed, counted: d.counted, source: d.source, setUp: isCardSetUp(account) };
+  });
+  const loans = g.loans.map((account) => ({
+    account,
+    outstanding: round2(txs ? num(calculateOutstandingBalance(account, asOf)) : num(account.balance)),
+    inCard: isCardEmi(account),
+    closed: account.status === 'closed',
+  }));
+  const cardOwed = round2(cards.reduce((s, c) => s + (c.counted && c.owed > 0 ? c.owed : 0), 0));
+  const cardCredit = round2(cards.reduce((s, c) => s + (c.counted && c.owed < 0 ? -c.owed : 0), 0));
+  const loanOwed = round2(loans.reduce((s, l) => s + (l.inCard || l.closed ? 0 : l.outstanding), 0));
+  const liabilities = round2(cardOwed + loanOwed);
   return {
     netWorth: nw.netWorth,
-    cashBank: sum([...g.banks, ...g.wallets]),
+    cashBank: round2(sum([...g.banks, ...g.wallets]) + cardCredit),
+    cardCredit,
     investments: sum(g.investments),
-    owed: sum([...g.cards, ...g.loans]),
+    liabilities,
+    owed: liabilities,
     missing: accounts.filter(balanceMissing).length,
+    notCounted: cards.filter((c) => !c.counted).map((c) => c.account),
+    groups: {
+      liabilities: {
+        cards,
+        loans: loans.filter((l) => !l.closed),
+        closed: loans.filter((l) => l.closed),
+      },
+    },
   };
 };
 

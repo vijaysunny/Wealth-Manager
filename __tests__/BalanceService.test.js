@@ -117,6 +117,28 @@ describe('net worth (C10) and report filter (C11)', () => {
   test('credit cards and loans are liabilities; negatives stay negative', () => {
     expect(computeNetWorth(accts())).toEqual({ assets: 10500, liabilities: 902000, netWorth: -891500 });
   });
+  test('C5: with transactions a card uses what CardMath says; card EMIs and closed loans are not liabilities', () => {
+    const at = (d) => new Date(2026, 10, d, 12).toISOString();
+    const list = [
+      { id: 'b', type: 'Bank Account', balance: 1000 },
+      { id: 'c', type: 'Credit Card', balance: -4857.94, createdFrom: 'review', creditLimit: 300000 },
+      { id: 'e', type: 'Loan', loanKind: 'cardEmi', includedInCard: true, balance: 19094.92 },
+      { id: 'x', type: 'Loan', status: 'closed', balance: 5000 },
+      { id: 'l', type: 'Loan', balance: 2000 },
+    ];
+    const txs = [
+      { id: 's', type: 'expense', amount: 30, accountId: 'c', fullDate: at(17), availableLimit: 274919.19 },
+    ];
+    expect(computeNetWorth(list, [], { txs, asOf: new Date(2026, 10, 22) })).toEqual({
+      assets: 1000,
+      liabilities: 27080.81,
+      netWorth: -26080.81,
+    });
+    // without transactions: stored balances; an overpaid card is an asset; EMIs/closed still skipped
+    expect(computeNetWorth(list)).toEqual({ assets: 5857.94, liabilities: 2000, netWorth: 3857.94 });
+    // an unconfirmed SMS-history card is not counted
+    expect(computeNetWorth([list[1]], [], { txs: [], asOf: new Date() }).netWorth).toBe(0);
+  });
   test('extra assets list is included', () => {
     expect(computeNetWorth(accts(), [{ type: 'Real Estate', balance: 1000000 }]).netWorth).toBe(108500);
   });

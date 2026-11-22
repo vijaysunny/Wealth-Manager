@@ -15,6 +15,8 @@
  */
 
 import AsyncStorage from '../data/Storage';
+import { cardDebt } from './CardMath';
+import { calculateOutstandingBalance, isCardEmi } from './LoanCalculator';
 
 const ACCOUNTS_KEY = 'user_wealth_accounts';
 const SPENDABLE_TYPES = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
@@ -45,11 +47,28 @@ export const isLiability = (account) => LIABILITY_TYPES.includes(account && acco
  * Credit cards and loans are liabilities. `assets` is an optional extra list of
  * asset records (this app keeps everything in the accounts list, so it is
  * normally omitted). Values keep their sign.
+ * Phase 13 C5: pass { txs, asOf } to value cards with CardMath (an overpaid card is an asset, an
+ * unconfirmed SMS-history estimate is not counted) and loans by their schedule. Card EMIs and
+ * closed loans are never liabilities.
  */
-export const computeNetWorth = (accounts = [], assets = []) => {
+export const computeNetWorth = (accounts = [], assets = [], { txs = null, asOf = new Date() } = {}) => {
   let totalAssets = 0;
   let totalLiabilities = 0;
   [...accounts, ...assets].forEach((a) => {
+    if (a && a.type === 'Credit Card') {
+      // C5: with transactions, a card counts what CardMath says you owe; overpaid is an asset.
+      const d = txs ? cardDebt(a, txs, asOf) : { owed: num(a.balance), counted: true };
+      if (!d.counted) return;
+      if (d.owed >= 0) totalLiabilities += d.owed;
+      else totalAssets += -d.owed;
+      return;
+    }
+    if (a && a.type === 'Loan') {
+      // Card EMIs are already inside the card's balance; closed loans owe nothing.
+      if (isCardEmi(a) || a.status === 'closed') return;
+      totalLiabilities += txs ? num(calculateOutstandingBalance(a, asOf)) : num(a.balance);
+      return;
+    }
     const bal = num(a.balance);
     if (isLiability(a)) totalLiabilities += bal;
     else totalAssets += bal;

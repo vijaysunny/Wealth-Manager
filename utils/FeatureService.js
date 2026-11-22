@@ -204,7 +204,9 @@ export const saveNetWorthSnapshot = () =>
     const accounts = JSON.parse(await readValue(db, 'user_wealth_accounts'));
     const history = JSON.parse((await readValue(db, 'networth_history')) || '[]');
     const date = new Date().toLocaleDateString('en-CA');
-    const snapshot = { date, ...computeNetWorth(accounts) };
+    // C5: cards are valued from their SMS (available limit) and bills, loans by their schedule
+    const txs = (await db.getAllAsync('SELECT data FROM transactions')).map(decodeRow);
+    const snapshot = { date, ...computeNetWorth(accounts, [], { txs }) };
     await writeValue(
       db,
       'networth_history',

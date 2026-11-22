@@ -34,14 +34,116 @@ const owner = [
 ];
 
 test('three numbers and the missing count', () => {
-  expect(accountsOverview(owner)).toEqual({
+  expect(accountsOverview(owner)).toMatchObject({
     netWorth: 22300,
     cashBank: 1500,
     investments: 25000,
+    liabilities: 4200,
     owed: 4200,
     missing: 2,
   });
-  expect(accountsOverview()).toEqual({ netWorth: 0, cashBank: 0, investments: 0, owed: 0, missing: 0 });
+  expect(accountsOverview()).toMatchObject({
+    netWorth: 0,
+    cashBank: 0,
+    investments: 0,
+    liabilities: 0,
+    owed: 0,
+    missing: 0,
+  });
+});
+
+describe('C1/C5: liabilities', () => {
+  const NOW = new Date(2026, 10, 22, 12);
+  const at = (m, d) => new Date(2026, m - 1, d, 12).toISOString();
+  const axisCard = {
+    id: 'ac',
+    name: 'Axis Bank Credit Card ••9070',
+    type: 'Credit Card',
+    balance: -4857.94,
+    createdFrom: 'review',
+    creditLimit: 300000,
+  };
+  const sbiCard = {
+    id: 'sbi',
+    name: 'SBI Credit Card ••1987',
+    type: 'Credit Card',
+    balance: -50,
+    createdFrom: 'review',
+  };
+  const bajaj = {
+    id: 'bajaj',
+    name: 'Bajaj Finance',
+    type: 'Loan',
+    loanType: 'No Cost EMI',
+    originalAmount: 6456,
+    emiAmount: 538,
+    tenure: 12,
+    firstEmiDate: at(8, 7),
+    balance: 999999,
+  };
+  const phoneEmi = {
+    id: 'emi',
+    name: 'Phone EMI',
+    type: 'Loan',
+    loanKind: 'cardEmi',
+    includedInCard: true,
+    onCardId: 'ac',
+    originalAmount: 25000,
+    interestRate: 15,
+    tenure: 12,
+    emiAmount: 2256.46,
+    firstEmiDate: at(9, 15),
+  };
+  const closed = { id: 'old', name: 'Old loan', type: 'Loan', status: 'closed', balance: 5000 };
+  const bank = {
+    id: 'axis',
+    name: 'Axis Bank ••0973',
+    type: 'Bank Account',
+    balance: 33330,
+    balanceSetAt: 'x',
+  };
+  const txs = [
+    {
+      id: 's',
+      type: 'expense',
+      amount: 30,
+      accountId: 'ac',
+      fullDate: at(11, 17),
+      availableLimit: 274919.19,
+    },
+  ];
+  const list = [bank, axisCard, sbiCard, bajaj, phoneEmi, closed];
+
+  test('total = card owed + loan outstanding; excludes card EMIs and closed loans; SBI not set up is not counted', () => {
+    const ov = accountsOverview(list, { txs, asOf: NOW });
+    expect(ov.liabilities).toBe(29384.81); // 25,080.81 + 4,304 (design 05-accounts.png)
+    expect(ov.owed).toBe(29384.81);
+    expect(ov.netWorth).toBe(3945.19);
+    expect(ov.notCounted.map((a) => a.id)).toEqual(['sbi']);
+    const { cards, loans, closed: shut } = ov.groups.liabilities;
+    expect(cards.map((c) => [c.account.id, c.owed, c.counted, c.setUp])).toEqual([
+      ['ac', 25080.81, true, true],
+      ['sbi', -50, false, false],
+    ]);
+    expect(loans.map((l) => [l.account.id, l.outstanding, l.inCard])).toEqual([
+      ['bajaj', 4304, false],
+      ['emi', 19094.92, true],
+    ]);
+    expect(shut.map((l) => l.account.id)).toEqual(['old']);
+  });
+
+  test('an overpaid card (confirmed) counts as an asset in Cash & bank, not as a smaller debt', () => {
+    const confirmed = { ...sbiCard, balanceSetAt: '2026-11-20' };
+    const ov = accountsOverview([bank, confirmed], { txs: [], asOf: NOW });
+    expect(ov.cardCredit).toBe(50);
+    expect(ov.cashBank).toBe(33380);
+    expect(ov.liabilities).toBe(0);
+    expect(ov.netWorth).toBe(33380);
+    // a card added by hand (not from SMS) counts its balance
+    expect(
+      accountsOverview([{ id: 'm', type: 'Credit Card', balance: 700 }], { txs: [], asOf: NOW }).liabilities
+    ).toBe(700);
+  });
 });
 
 test('balanceMissing: only auto-created spendable accounts with no known balance', () => {

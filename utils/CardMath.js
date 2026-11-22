@@ -138,6 +138,16 @@ export const cardOwed = (rawCard, txs = [], asOf = new Date()) => {
   return { owed: round2(num(card.balance)), source: 'history', asOf: toDate(asOf).toISOString() };
 };
 
+/**
+ * C5: a card's debt for net worth. A history estimate of a card created from SMS that nobody
+ * has set up or confirmed is not counted (it is usually wrong; the warning asks to set it up).
+ */
+export const cardDebt = (card, txs = [], asOf = new Date()) => {
+  const o = cardOwed(card, txs, asOf);
+  const counted = o.source !== 'history' || !card.createdFrom || !!card.balanceSetAt;
+  return { owed: o.owed, source: o.source, counted };
+};
+
 // ── Cycle and bill ──────────────────────────────────────────────────────────
 
 /** The statement date in month (y, m) for a statement day; short months use their last day. */

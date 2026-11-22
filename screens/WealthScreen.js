@@ -24,7 +24,7 @@ import AsyncStorage, { updateAccount as persistAccount } from '../data/Storage';
 import { deleteAccount as removeAccount } from '../data/Collections';
 import { getAll } from '../data/TransactionRepo';
 import { fetchMutualFundNAV, fetchStockPrice } from '../utils/InvestmentApi';
-import { calculateOutstandingBalance } from '../utils/LoanCalculator';
+import { calculateOutstandingBalance, loanProgress } from '../utils/LoanCalculator';
 import { isWallet } from '../utils/BalanceService';
 import { computeReconcile, needsReconcile } from '../utils/WalletReconcile';
 import { reconcileWallet } from '../utils/FeatureService';
@@ -39,7 +39,7 @@ import {
 } from '../utils/AccountsOverview';
 import { shortAccountName, accountInitials } from '../utils/TransactionList';
 import { depositValue } from '../utils/DepositValue';
-import { cardRowText } from '../utils/CardView';
+import { cardRowText, shortDate } from '../utils/CardView';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space, type } from '../components/tokens';
 import { AppButton, Collapsible, Section } from '../components/ui';
@@ -63,6 +63,7 @@ export default function WealthScreen({ navigation }) {
   const [accounts, setAccounts] = useState([]);
   const [counts, setCounts] = useState({});
   const [txs, setTxs] = useState([]);
+  const [showClosed, setShowClosed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState(null); // { account, text }
   const [reconcile, setReconcile] = useState(null); // { account, text, category, requestId }
@@ -276,7 +277,8 @@ export default function WealthScreen({ navigation }) {
     loadData();
   };
 
-  const ov = accountsOverview(accounts);
+  const ov = accountsOverview(accounts, { txs });
+  const liab = ov.groups.liabilities;
   const g = groupAccounts(accounts);
   const byId = Object.fromEntries(accounts.map((a) => [String(a.id), a]));
 
@@ -384,6 +386,105 @@ export default function WealthScreen({ navigation }) {
     <View style={[styles.card, { backgroundColor: t.card, borderColor: t.border }]}>{children}</View>
   );
 
+  // B6/C1: a credit card row inside Liabilities.
+  const cardRow = (a, i, last) => {
+    const info = cardRowText(a, txs, new Date(), g.loans);
+    return row(a, {
+      iconName: 'card-outline',
+      tone: i % 2 ? 'primary' : 'danger',
+      sub: info.setUp ? (
+        <Text testID={`card-sub-${a.id}`}>
+          {info.cycle}
+          {info.cycle && info.pay ? ' · ' : ''}
+          {info.pay ? (
+            <Text
+              style={{
+                color: info.pay.danger ? t.dangerText : info.pay.warn ? t.warnText : t.muted,
+                fontFamily: info.pay.warn ? fonts.semibold : fonts.body,
+              }}
+            >
+              {info.pay.text}
+            </Text>
+          ) : null}
+        </Text>
+      ) : (
+        info.sub
+      ),
+      subLabel: info.setUp ? [info.cycle, info.pay?.text].filter(Boolean).join(' · ') : info.sub,
+      last,
+      right: info.setUp
+        ? amount(info.owed, info.owed > 0 ? t.text : t.income, true)
+        : warnButton(
+            'Set up',
+            () => navigation.navigate('CardSetup', { cardId: a.id }),
+            `Set up ${shortAccountName(a.name, a.last4)}`
+          ),
+    });
+  };
+
+  // C1: a loan or EMI row: badge, name, progress, "₹EMI/mo · N left · next <date>", outstanding.
+  const loanRow = ({ account: a, outstanding, inCard, closed }) => {
+    const p = loanProgress(a);
+    const cardAcc = inCard && a.onCardId != null ? byId[String(a.onCardId)] : null;
+    const title = cardAcc ? `${a.name} · ${shortAccountName(cardAcc.name).replace(/ ••\d{4}$/, '')}` : a.name;
+    const sub = closed
+      ? 'Closed'
+      : [
+          a.emiAmount ? `${formatMoney(Math.round(Number(a.emiAmount)))}/mo` : null,
+          p.left !== null ? `${p.left} left` : null,
+          p.next && !inCard ? `next ${shortDate(p.next)}` : null,
+          inCard ? 'in card balance' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+    return (
+      <Pressable
+        key={a.id}
+        testID={`loan-${a.id}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}, ${sub}`}
+        onPress={() => navigation.navigate('EditAsset', { asset: a })}
+        style={[styles.row, { borderColor: t.divider }]}
+      >
+        <View style={[styles.badge, { backgroundColor: inCard ? t.dangerBg : t.divider }]}>
+          {inCard ? (
+            <Ionicons name="receipt-outline" size={22} color={t.dangerText} />
+          ) : (
+            <Text style={{ color: t.text2, fontFamily: fonts.bold, fontSize: 15 }}>{initials(a.name)}</Text>
+          )}
+        </View>
+        <View style={{ flex: 1, paddingRight: space.sm }}>
+          <Text numberOfLines={1} style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 17 }}>
+            {title}
+          </Text>
+          {p.tenure ? (
+            <View style={{ height: 5, borderRadius: 3, backgroundColor: t.divider, marginVertical: 6 }}>
+              <View
+                style={{
+                  width: `${Math.round(p.ratio * 100)}%`,
+                  height: 5,
+                  borderRadius: 3,
+                  backgroundColor: inCard || closed ? t.muted : t.primary,
+                }}
+              />
+            </View>
+          ) : null}
+          <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 14 }}>{sub}</Text>
+        </View>
+        <Text
+          testID={`loan-amount-${a.id}`}
+          style={{
+            color: inCard || closed ? t.muted : t.text,
+            fontFamily: fonts.displaySemi,
+            fontSize: 18,
+          }}
+        >
+          {formatMoney(closed ? 0 : outstanding)}
+        </Text>
+      </Pressable>
+    );
+  };
+
   const empty = accounts.length === 0;
 
   return (
@@ -422,12 +523,21 @@ export default function WealthScreen({ navigation }) {
               {ov.missing === 1 ? 'it' : 'them'} to see the real figure
             </Text>
           ) : null}
+          {ov.notCounted.length > 0 ? (
+            <Text
+              testID="cards-not-counted"
+              style={{ color: '#F5D48A', fontFamily: fonts.body, fontSize: 14, marginTop: space.xs }}
+            >
+              {ov.notCounted.map((c) => shortAccountName(c.name, c.last4)).join(', ')} not set up ·{' '}
+              {ov.notCounted.length === 1 ? 'its' : 'their'} debt is not counted yet
+            </Text>
+          ) : null}
           <View style={styles.threeUp}>
             {[
               ['Cash & bank', ov.cashBank, '#5CC998'],
               ['Investments', ov.investments, '#8AA8FF'],
-              ['Owed', ov.owed, '#F08A80'],
-            ].map(([label, value, color]) => (
+              ['Liabilities', ov.liabilities, '#F08A80', true],
+            ].map(([label, value, color, exact]) => (
               <View key={label} style={[styles.mini, { backgroundColor: t.inkCard }]}>
                 <Text numberOfLines={1} style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 13 }}>
                   {label}
@@ -437,11 +547,16 @@ export default function WealthScreen({ navigation }) {
                   numberOfLines={1}
                   style={{ color, fontFamily: fonts.display, fontSize: 18, marginTop: 4 }}
                 >
-                  {formatMoney(Math.round(value))}
+                  {formatMoney(exact ? value : Math.round(value))}
                 </Text>
               </View>
             ))}
           </View>
+          {ov.cardCredit > 0 ? (
+            <Text style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 13, marginTop: space.sm }}>
+              Cash & bank includes {formatMoney(ov.cardCredit)} (card credit)
+            </Text>
+          ) : null}
         </View>
 
         {empty ? (
@@ -479,47 +594,6 @@ export default function WealthScreen({ navigation }) {
           </Section>
         )}
 
-        {g.cards.length > 0 && (
-          <Section title="Credit cards">
-            {card(
-              g.cards.map((a, i) => {
-                const info = cardRowText(a, txs, new Date(), g.loans);
-                return row(a, {
-                  iconName: 'card-outline',
-                  tone: i % 2 ? 'primary' : 'danger',
-                  sub: info.setUp ? (
-                    <Text testID={`card-sub-${a.id}`}>
-                      {info.cycle}
-                      {info.cycle && info.pay ? ' · ' : ''}
-                      {info.pay ? (
-                        <Text
-                          style={{
-                            color: info.pay.danger ? t.dangerText : info.pay.warn ? t.warnText : t.muted,
-                            fontFamily: info.pay.warn ? fonts.semibold : fonts.body,
-                          }}
-                        >
-                          {info.pay.text}
-                        </Text>
-                      ) : null}
-                    </Text>
-                  ) : (
-                    info.sub
-                  ),
-                  subLabel: info.setUp ? [info.cycle, info.pay?.text].filter(Boolean).join(' · ') : info.sub,
-                  last: i === g.cards.length - 1,
-                  right: info.setUp
-                    ? amount(info.owed, info.owed > 0 ? t.text : t.income, true)
-                    : warnButton(
-                        'Set up',
-                        () => navigation.navigate('CardSetup', { cardId: a.id }),
-                        `Set up ${shortAccountName(a.name, a.last4)}`
-                      ),
-                });
-              })
-            )}
-          </Section>
-        )}
-
         {g.wallets.length > 0 && (
           <Section title="Wallets">
             {card(
@@ -543,23 +617,55 @@ export default function WealthScreen({ navigation }) {
           </Section>
         )}
 
-        {g.loans.length > 0 && (
-          <Section title="Loans">
+        {liab.cards.length + liab.loans.length + liab.closed.length > 0 || !empty ? (
+          <Section
+            title="Liabilities"
+            action={
+              <Text
+                testID="liabilities-total"
+                style={{ color: t.expense, fontFamily: fonts.bold, fontSize: 16 }}
+              >
+                {formatMoney(ov.liabilities)} owed
+              </Text>
+            }
+          >
             {card(
-              g.loans.map((a, i) =>
-                row(a, {
-                  iconName: 'document-text-outline',
-                  tone: 'danger',
-                  sub:
-                    [a.loanType, a.interestRate ? `${a.interestRate}%` : null].filter(Boolean).join(' · ') ||
-                    'Loan',
-                  last: i === g.loans.length - 1,
-                  right: amount(a.balance, t.expense),
-                })
-              )
+              <>
+                {liab.cards.length > 0 ? (
+                  <>
+                    <Text style={[styles.groupTitle, { color: t.text2 }]}>Credit cards</Text>
+                    {liab.cards.map((c, i) => cardRow(c.account, i, i === liab.cards.length - 1))}
+                  </>
+                ) : null}
+                {liab.cards.length > 0 ? <View style={{ height: 1, backgroundColor: t.divider }} /> : null}
+                <Text style={[styles.groupTitle, { color: t.text2 }]}>Loans & EMIs</Text>
+                {liab.loans.map((l) => loanRow(l))}
+                {liab.closed.length > 0 ? (
+                  <Text
+                    accessibilityRole="button"
+                    onPress={() => setShowClosed((v) => !v)}
+                    style={{
+                      color: t.primary,
+                      fontFamily: fonts.semibold,
+                      fontSize: 15,
+                      paddingVertical: space.md,
+                    }}
+                  >
+                    {showClosed ? 'Hide closed' : `Show closed (${liab.closed.length})`}
+                  </Text>
+                ) : null}
+                {showClosed ? liab.closed.map((l) => loanRow(l)) : null}
+                <AppButton
+                  title="Add loan or EMI"
+                  icon="add"
+                  variant="dashed"
+                  style={{ marginVertical: space.md }}
+                  onPress={() => navigation.navigate('AddInvestment', { kind: 'loan' })}
+                />
+              </>
             )}
           </Section>
-        )}
+        ) : null}
 
         <View style={{ marginTop: space.lg }}>
           <Collapsible
@@ -709,6 +815,7 @@ const styles = StyleSheet.create({
   threeUp: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
   mini: { flex: 1, borderRadius: radius.md, padding: space.md },
   card: { borderWidth: 1, borderRadius: radius.lg, paddingHorizontal: space.lg },
+  groupTitle: { fontFamily: fonts.semibold, fontSize: 15, paddingTop: space.md },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

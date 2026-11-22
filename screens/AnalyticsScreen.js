@@ -464,7 +464,7 @@ export default function AnalyticsScreen({ navigation }) {
     });
 
     // --- NET WORTH ---
-    const nw = computeNetWorth(accounts);
+    const nw = computeNetWorth(accounts, [], { txs: transactions }); // C5: cards via CardMath
     setAssets(nw.assets);
     setLiabilities(nw.liabilities);
     let assetMap = {
