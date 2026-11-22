@@ -1,4 +1,7 @@
+import React from 'react';
 import fc from 'fast-check';
+import { render, screen } from '@testing-library/react-native';
+import TransactionRow, { payeeOf } from '../components/ui/TransactionRow';
 import {
   groupByDay,
   dayTitle,
@@ -109,4 +112,32 @@ test('A1.3: badge initials use the bank short code', () => {
   expect(accountInitials('Bajaj Finance')).toBe('BA');
   expect(accountInitials('')).toBe('?');
   expect(accountInitials()).toBe('?');
+});
+
+describe('A5: row title is the payee, not the category', () => {
+  test('merchant beats a title that repeats the category', () => {
+    expect(payeeOf({ title: 'Subscriptions', merchant: 'Google', category: 'Subscriptions' })).toBe('Google');
+    expect(payeeOf({ title: 'Subscriptions', counterparty: 'Kavya', category: 'Subscriptions' })).toBe(
+      'Kavya'
+    );
+    expect(payeeOf({ title: 'Chai', category: 'Food' })).toBe('Chai');
+    expect(payeeOf({ title: 'Food', category: 'Food' })).toBe('Food');
+    expect(payeeOf({ type: 'transfer' })).toBe('Transfer');
+    expect(payeeOf({})).toBe('Transaction');
+  });
+  test('the row renders "Google"', () => {
+    render(
+      React.createElement(TransactionRow, {
+        tx: {
+          id: 1,
+          type: 'expense',
+          amount: 1998.19,
+          title: 'Subscriptions',
+          merchant: 'Google',
+          category: 'Subscriptions',
+        },
+      })
+    );
+    expect(screen.getByText('Google')).toBeTruthy();
+  });
 });
