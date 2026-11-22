@@ -9,11 +9,13 @@ import { Text, View } from 'react-native';
 import { tokens, type } from './tokens';
 import { getDatabase } from '../data/Database';
 import { migrateTags } from '../data/TagMigration';
+import { migrateCards } from '../data/CardMigration';
 
-// Database open plus the one-time data migrations (B2 tags). Each is safe to run twice.
+// Database open plus the one-time data migrations (B2 tags, Phase 13 B2 cards). Each is safe to run twice.
 const openAndMigrate = async () => {
   await getDatabase();
   await migrateTags();
+  await migrateCards(); // Phase 13 B2: card dueDay → due
 };
 
 export default function Bootstrap({ children, open = openAndMigrate }) {

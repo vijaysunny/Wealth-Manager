@@ -10,6 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 // real kind in subType; older saved assets may still carry the kind in type.
 const QTY_KINDS = ['Mutual Fund', 'Stocks / Equity', 'Gold / Silver'];
 const isQuantityAsset = (a) => QTY_KINDS.includes(a.subType) || QTY_KINDS.includes(a.type);
+// A4: for cards and loans the balance is the debt (positive = you owe).
+const isDebt = (a) => a.type === 'Credit Card' || a.type === 'Loan';
 
 export default function EditAssetScreen({ navigation, route }) {
   const { asset } = route.params;
@@ -32,12 +34,21 @@ export default function EditAssetScreen({ navigation, route }) {
       return;
     }
 
-    const number = Number(String(value).replace(/,/g, ''));
-    if (!Number.isFinite(number) || number < 0) {
+    const number = Number(
+      String(value)
+        .replace(/,/g, '')
+        .replace(/\u2212/g, '-')
+        .trim()
+    );
+    // A card can be overpaid (the bank owes you), so only cards accept a negative amount.
+    if (!Number.isFinite(number) || (number < 0 && asset.type !== 'Credit Card')) {
       Alert.alert('Error', 'Enter a valid non-negative value');
       return;
     }
-    const changes = { name: name.trim(), [isQuantityAsset(asset) ? 'quantity' : 'balance']: number };
+    const field = isQuantityAsset(asset) ? 'quantity' : 'balance';
+    const changes = { name: name.trim(), [field]: number };
+    if (field === 'balance' && number !== Number(asset.balance))
+      changes.balanceSetAt = new Date().toISOString();
     await updateAccount(asset.id, changes);
     navigation.goBack();
   };
@@ -64,7 +75,9 @@ export default function EditAssetScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.title}>Edit Asset</Text>
+        <Text style={styles.title}>
+          {asset.type === 'Credit Card' ? 'Edit card' : asset.type === 'Loan' ? 'Edit loan' : 'Edit Asset'}
+        </Text>
         <TouchableOpacity onPress={handleDelete}>
           <Ionicons name="trash" size={24} color="red" />
         </TouchableOpacity>
@@ -74,7 +87,13 @@ export default function EditAssetScreen({ navigation, route }) {
         <Text style={styles.label}>ASSET NAME</Text>
         <TextInput style={styles.input} value={name} onChangeText={setName} />
 
-        <Text style={styles.label}>{isInvestment ? 'UNITS / QUANTITY HELD' : 'CURRENT BALANCE (₹)'}</Text>
+        <Text style={styles.label}>
+          {isInvestment
+            ? 'UNITS / QUANTITY HELD'
+            : isDebt(asset)
+              ? 'AMOUNT YOU OWE (₹)'
+              : 'CURRENT BALANCE (₹)'}
+        </Text>
         <TextInput
           style={[styles.input, { fontSize: 24, fontWeight: 'bold' }]}
           value={value}
@@ -82,6 +101,9 @@ export default function EditAssetScreen({ navigation, route }) {
           keyboardType="numeric"
         />
 
+        {asset.type === 'Credit Card' && (
+          <Text style={styles.hint}>Negative = the bank owes you (overpaid)</Text>
+        )}
         {isInvestment && (
           <Text style={styles.hint}>
             * Updating quantity will auto-calculate the new value based on live market rates.
