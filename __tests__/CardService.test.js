@@ -162,3 +162,15 @@ test('a manual bill is added, replaced by the same date, and validated; Remind m
 test('syncCardReminders does nothing without cards that want reminders', async () => {
   expect(await syncCardReminders()).toBe(0);
 });
+
+test('the old 12 monthly due-day reminders are cancelled once (the bill reminder replaces them)', async () => {
+  await Storage.setItem('card_reminder_ac', JSON.stringify(['old1', 'old2']));
+  Notifications.cancelScheduledNotificationAsync.mockClear();
+  await syncCardReminders();
+  expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('old1');
+  expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('old2');
+  expect(await Storage.getItem('card_reminder_ac')).toBeNull();
+  Notifications.cancelScheduledNotificationAsync.mockClear();
+  await syncCardReminders();
+  expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith('old1');
+});

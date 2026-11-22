@@ -12,7 +12,6 @@ import { filterHistory, xirr, amortize } from '../utils/FinanceTools';
 import { exportHistory } from '../utils/HistoryExport';
 import { parseAmount, parseNonNegative, formatMoney } from '../utils/Format';
 import { mutateList } from '../data/Collections';
-import { scheduleCardReminder } from '../utils/CardReminders';
 // C4: the Money tools hub is gone. Each section is its own screen (route MoneyTool, param tab),
 // opened from where it belongs; review lives in Review accounts.
 export const TOOL_TITLES = {
@@ -77,8 +76,7 @@ export default function ToolsScreen({ navigation, route }) {
     [emi, setEmi] = useState(''),
     [prepayment, setPrepayment] = useState('0'),
     [result, setResult] = useState('');
-  const [card, setCard] = useState(''),
-    [due, setDue] = useState('');
+  const [card, setCard] = useState('');
   const load = useCallback(async () => {
     const values = Object.fromEntries(
       await Storage.multiGet(['user_wealth_accounts', 'user_goals', 'category_rules', 'networth_history'])
@@ -419,24 +417,23 @@ export default function ToolsScreen({ navigation, route }) {
               }
             />
             <Text>{result}</Text>
-            <Text style={{ fontWeight: 'bold', marginTop: 16 }}>Credit card due-date reminders</Text>
+            <Text style={{ fontWeight: 'bold', marginTop: 16 }}>Credit card bill reminders</Text>
+            <Text>
+              Each card reminds you 3 days before its bill is due, and only while something is left to pay.
+              Turn it on with “Remind me” on the card.
+            </Text>
             <Choices
               items={accounts.filter((a) => a.type === 'Credit Card')}
               value={card}
               onChange={setCard}
             />
-            <Field label="Monthly due day (1–31)" value={due} onChangeText={setDue} number />
             <AppButton
-              title="Schedule reminders for 12 months"
+              title="Open card"
               onPress={() =>
                 run(async () => {
                   const account = accounts.find((a) => String(a.id) === String(card));
                   if (!account) throw new Error('Choose a credit card');
-                  await scheduleCardReminder(account, Number(due));
-                  Alert.alert(
-                    'Scheduled',
-                    'Review your bill each month; reminder dates clamp to the last day in shorter months.'
-                  );
+                  navigation.navigate('CardDetail', { cardId: account.id });
                 })
               }
             />

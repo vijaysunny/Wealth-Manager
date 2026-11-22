@@ -6,7 +6,7 @@
 import Storage, { updateAccount } from '../data/Storage';
 import { getAll } from '../data/TransactionRepo';
 import { cardOwed, currentBill, latestAvailableOf, normalizeCard } from './CardMath';
-import { scheduleBillReminder } from './CardReminders';
+import { cancelOldCardReminders, scheduleBillReminder } from './CardReminders';
 import { cardForStatement } from './CardStatementSms';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -132,6 +132,9 @@ export const remindCardBill = async (cardId) => {
 /** Catch-up: re-schedule every card's bill reminder (a payment may have cleared the bill). */
 export const syncCardReminders = async (now = new Date()) => {
   const accounts = await loadAccounts();
+  await cancelOldCardReminders(accounts.filter((a) => a.type === 'Credit Card').map((a) => a.id)).catch(
+    () => 0
+  );
   const cards = accounts.filter((a) => a.type === 'Credit Card' && a.remindDue);
   if (!cards.length) return 0;
   const txs = await getAll();
