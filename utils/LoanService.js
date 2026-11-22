@@ -39,13 +39,29 @@ export const saveLoan = async (values, loanId = null, { now = new Date() } = {})
 
 /** C3 "Mark as closed": nothing more is owed. */
 export const closeLoan = async (loanId, now = new Date()) => {
-  const ok = await updateAccount(loanId, { status: 'closed', closedAt: now.toISOString(), balance: 0 });
-  if (!ok) throw new Error('This item no longer exists.');
+  const { loan } = await loadLoan(loanId);
+  if (!loan) throw new Error('This item no longer exists.');
+  if (loan.status === 'closed') return;
+  // keep what was owed so "Reopen" (or unlinking a foreclosure) puts it back
+  await updateAccount(loanId, {
+    status: 'closed',
+    closedAt: now.toISOString(),
+    balanceBeforeClose: loan.balance ?? null,
+    balance: 0,
+  });
 };
 
 export const reopenLoan = async (loanId) => {
-  const ok = await updateAccount(loanId, { status: 'active', closedAt: null });
-  if (!ok) throw new Error('This item no longer exists.');
+  const { loan } = await loadLoan(loanId);
+  if (!loan) throw new Error('This item no longer exists.');
+  await updateAccount(loanId, {
+    status: 'active',
+    closedAt: null,
+    ...(loan.balanceBeforeClose !== undefined && loan.balanceBeforeClose !== null
+      ? { balance: loan.balanceBeforeClose }
+      : {}),
+    balanceBeforeClose: null,
+  });
 };
 
 export const deleteLoan = (loanId) => deleteAccount(loanId);
@@ -108,6 +124,11 @@ export const unlinkPayment = async (txId) => {
   if (!tx) throw new Error('This item no longer exists.');
   const next = removeLink(tx);
   await update(tx.id, changesFor(tx, next));
+  // the foreclosure closed the loan: unlinking it reopens the loan
+  if (tx.loanLink?.kind === 'foreclosure') {
+    const { loan } = await loadLoan(tx.loanLink.loanId);
+    if (loan && loan.status === 'closed') await reopenLoan(loan.id);
+  }
   return next;
 };
 
