@@ -5,7 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import Storage from '../../data/Storage';
-import { addMany, getAll } from '../../data/TransactionRepo';
+import { addMany, getAll, monthlyAggregates } from '../../data/TransactionRepo';
 import {
   discoveredAccounts,
   addAllDiscoveredAccounts,
@@ -103,6 +103,21 @@ test('Add all: every capture gets an account; top-ups move both legs; card bill 
   const bill = rows.find((t) => t.id === 'axis-debit-ccbill-amazon-01');
   expect(bill).toMatchObject({ type: 'transfer', transferKind: 'cc_bill', accountId: axis.id });
   expect(rows.filter((t) => t.type === 'expense').map((t) => t.id)).not.toContain(bill.id);
+});
+
+test('D2: November totals from the fixtures; transfers are not spending', async () => {
+  await addAllDiscoveredAccounts();
+  const rows = await monthlyAggregates('2026-10-01T00:00:00Z', '2026-12-31T00:00:00Z');
+  const total = (type) => rows.filter((r) => r.type === type).reduce((s, r) => s + r.total, 0);
+  // Written out by hand from the fixture list (not computed by app code):
+  // 26 expenses: 121 + 1998.19 + 178 + 5050 + 42000 + 96 + 25 + 143 + 86 + 600 + 353 + 67.90
+  //   + 281 + 30 + 322 + 50 + 1020.58 + 607.55 + 106.97 + 309 + 75 + 350 + 16 + 250 + 538 + 160
+  // (the Groww SIP stays an expense: no investment account on Groww exists)
+  expect(total('expense')).toBeCloseTo(54834.19, 2);
+  // 4 credits: 136193 + 40000 + 30000 + 50000
+  expect(total('income')).toBeCloseTo(256193, 2);
+  // top-ups 500 + 500, card bill 12511.38 and card payments 9145.91 + 5770 + 23618.82 are transfers
+  expect(rows.some((r) => r.type === 'transfer')).toBe(false);
 });
 
 test('card bill paired after Add account: one transfer, net worth unchanged by the pair', async () => {

@@ -138,6 +138,36 @@
         "branches": 70,
         "functions": 70,
         "lines": 80
+      },
+      "./utils/Tags.js": {
+        "statements": 90,
+        "branches": 90,
+        "functions": 90,
+        "lines": 90
+      },
+      "./utils/Attachments.js": {
+        "statements": 90,
+        "branches": 90,
+        "functions": 90,
+        "lines": 90
+      },
+      "./utils/AccountDiscovery.js": {
+        "statements": 90,
+        "branches": 90,
+        "functions": 90,
+        "lines": 90
+      },
+      "./utils/DepositValue.js": {
+        "statements": 90,
+        "branches": 90,
+        "functions": 90,
+        "lines": 90
+      },
+      "./utils/InvestmentLink.js": {
+        "statements": 90,
+        "branches": 90,
+        "functions": 90,
+        "lines": 90
       }
     }
   },

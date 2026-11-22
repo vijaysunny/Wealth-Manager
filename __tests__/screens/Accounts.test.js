@@ -1,6 +1,6 @@
 /** C5.5 Accounts: net-worth card numbers, missing balances, Set balance, Set due, investments. */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import Storage from '../../data/Storage';
 import { addMany } from '../../data/TransactionRepo';
 import WealthScreen from '../../screens/WealthScreen';
@@ -110,4 +110,29 @@ test('investments open with Add rows', async () => {
   fireEvent.press(await screen.findByRole('button', { name: 'Investments' }));
   fireEvent.press(screen.getByRole('button', { name: 'Add FD / RD' }));
   expect(n.navigate).toHaveBeenCalledWith('AddInvestment', { kind: 'fd' });
+});
+
+test('D4/B3: pulling to refresh grows an FD started 90 days ago', async () => {
+  const { RefreshControl } = require('react-native');
+  const start = new Date(Date.now() - 90 * 86400000).toISOString();
+  const fd = {
+    id: 'fd',
+    name: 'SBI FD',
+    type: 'Fixed Deposit',
+    subType: 'Fixed Deposit',
+    principal: 100000,
+    interestRate: 7,
+    startDate: start,
+    balance: 100000,
+  };
+  await Storage.setItem('user_wealth_accounts', JSON.stringify([...accounts, fd]));
+  render(<WealthScreen navigation={nav()} />);
+  await screen.findByText('Cash & bank');
+  await act(async () => {
+    await screen.UNSAFE_getByType(RefreshControl).props.onRefresh();
+  });
+  const saved = JSON.parse(await Storage.getItem('user_wealth_accounts')).find((a) => a.id === 'fd');
+  // ≈ one quarter at 7%: 1,00,000 → about 1,01,700
+  expect(saved.balance).toBeGreaterThan(101500);
+  expect(saved.balance).toBeLessThan(101900);
 });

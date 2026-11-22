@@ -41,3 +41,11 @@ test('schedule replaces the previous reminder', async () => {
   Notifications.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
   await expect(scheduleMaturityReminder(fd, now)).rejects.toThrow('Notification permission is required');
 });
+
+test('no previous reminder and no date: nothing scheduled', async () => {
+  Notifications.scheduleNotificationAsync.mockClear();
+  expect(await scheduleMaturityReminder({ id: 'x', subType: 'Fixed Deposit' }, now)).toBeNull();
+  expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  expect(maturityReminderDate({ subType: 'Fixed Deposit', maturityDate: 'junk' }, now)).toBeNull();
+  expect(maturityReminderDate(fd)).not.toBeUndefined(); // default clock
+});

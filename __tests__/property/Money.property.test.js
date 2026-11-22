@@ -159,3 +159,32 @@ test('the SMS parser never throws and never returns a negative or non-finite amo
     { ...OPTS, numRuns: 500 }
   );
 });
+
+test('D1: net worth = assets − liabilities, investments included', () => {
+  const TYPES = [
+    'Bank Account',
+    'Cash',
+    'Wallet',
+    'Mutual Fund',
+    'Investment',
+    'Fixed Deposit',
+    'Provident Fund',
+    'Credit Card',
+    'Loan',
+  ];
+  const LIAB = ['Credit Card', 'Loan'];
+  fc.assert(
+    fc.property(
+      fc.array(fc.record({ type: fc.constantFrom(...TYPES), balance: paise }), { maxLength: 15 }),
+      (accs) => {
+        const assets = accs
+          .filter((a) => !LIAB.includes(a.type))
+          .reduce((s, a) => s + Math.round(a.balance * 100), 0);
+        const liab = accs
+          .filter((a) => LIAB.includes(a.type))
+          .reduce((s, a) => s + Math.round(a.balance * 100), 0);
+        expect(computeNetWorth(accs).netWorth).toBeCloseTo((assets - liab) / 100, 2);
+      }
+    )
+  );
+});

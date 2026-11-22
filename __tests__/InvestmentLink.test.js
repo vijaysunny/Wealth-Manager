@@ -69,3 +69,18 @@ test('linkSipDebits: one match → transfer bank → investment; else unchanged'
   expect(linkSipDebits([bank, groww], [{ ...sip, extractedBalance: 900 }])[0].balanceAccountId).toBe('b');
   expect(linked.balanceAccountId).toBeUndefined();
 });
+
+test('edge cases', () => {
+  expect(platformOf(undefined)).toBeNull();
+  expect(isSipDebit(null)).toBe(false);
+  expect(investmentsOn(undefined, 'groww')).toEqual([]);
+  expect(linkSipDebits()).toEqual([]);
+  const sip = { type: 'expense', merchant: 'Groww', accountId: 'missing' };
+  expect(linkSipDebits([groww], [sip])[0]).toBe(sip);
+  expect(linkSipDebits([bank, groww], [{ ...sip, accountId: null }])[0].type).toBe('expense');
+  const kept = linkSipDebits(
+    [bank, groww],
+    [{ ...sip, accountId: 'b', extractedBalance: 5, balanceAccountId: 'x' }]
+  )[0];
+  expect(kept.balanceAccountId).toBe('x');
+});

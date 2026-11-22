@@ -174,3 +174,20 @@ test('backup round trip: files go in as base64 and come back under the new folde
   expect(await restoreAttachmentFiles({ app: 'x' }, dest)).toEqual({ app: 'x' });
   expect(await readAttachmentFiles(undefined, src)).toEqual({ files: {}, missing: 0 });
 });
+
+test('edge cases: long name with a long "extension", unknown size, image mime guesses', async () => {
+  const n = safeFileName(`${'a'.repeat(90)}.verylongextension`);
+  expect(n).toHaveLength(80);
+  expect(n.endsWith('.verylongextension')).toBe(false);
+  const fs = fakeFs({ 'file:///c/x': 'z' });
+  fs.getInfoAsync.mockResolvedValueOnce({ exists: false });
+  const tx = await addAttachment({ id: 9 }, { uri: 'file:///c/x', name: 'scan.PNG' }, fs, { id: 'i' });
+  expect(tx.attachments[0]).toMatchObject({ size: null, mime: 'image/png' });
+  const fromUri = await addAttachment({ id: 9 }, { uri: 'file:///c/x', size: 1 }, fs, { id: 'j' });
+  expect(fromUri.attachments[0].name).toBe('x');
+  expect(attachmentsSize([{ attachments: null }])).toBe(0);
+  expect(await removeAttachment({ id: 1, attachments: [{ id: 'k' }] }, 'k', fs)).toEqual({
+    id: 1,
+    attachments: [],
+  });
+});
