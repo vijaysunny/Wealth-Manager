@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
 import { historyCsv } from './FinanceTools';
+import { suppressNextLock } from './LockSuppress';
 export const exportHistory = async (rows, format = 'csv') => {
   const uri = FileSystem.cacheDirectory + `wealthmanager_history.${format}`;
   if (format === 'xlsx') {
@@ -24,6 +25,8 @@ export const exportHistory = async (rows, format = 'csv') => {
       encoding: FileSystem.EncodingType.Base64,
     });
   } else await FileSystem.writeAsStringAsync(uri, historyCsv(rows));
-  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-  else throw new Error('Sharing is unavailable on this device');
+  if (await Sharing.isAvailableAsync()) {
+    suppressNextLock();
+    await Sharing.shareAsync(uri);
+  } else throw new Error('Sharing is unavailable on this device');
 };

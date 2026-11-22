@@ -22,6 +22,7 @@ import { signOutGmail } from '../utils/GmailTracker';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import { AppButton, Banner, Card, ScreenHeader, Section } from '../components/ui';
+import { suppressNextLock } from '../utils/LockSuppress';
 
 export default function BackupScreen({ navigation }) {
   const t = useTokens();
@@ -54,6 +55,7 @@ export default function BackupScreen({ navigation }) {
     // The file must leave the app sandbox: uninstalling deletes everything inside it.
     if (!(await Sharing.isAvailableAsync()))
       throw new Error('Sharing is not available, so the backup would stay inside the app.');
+    suppressNextLock();
     await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Save WealthManager backup' });
     await Storage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
   };
@@ -103,6 +105,7 @@ export default function BackupScreen({ navigation }) {
 
   const restore = () =>
     run('restore', async () => {
+      suppressNextLock();
       const picked = await DocumentPicker.getDocumentAsync({ type: 'application/json' });
       if (picked.canceled) return;
       let content;

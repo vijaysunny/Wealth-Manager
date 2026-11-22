@@ -21,6 +21,7 @@ import { monthSummary, headerDate, monthLabel } from '../utils/HomeSummary';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import { Banner, Card, IconButton, TransactionRow } from '../components/ui';
+import { suppressNextLock } from '../utils/LockSuppress';
 
 // Scan bill (B1): camera, then a new expense with the photo attached. Old SMS scan is in Settings.
 const QUICK = [
@@ -104,7 +105,7 @@ export default function HomeScreen({ navigation }) {
             key={w.key}
             tone="danger"
             body={w.text}
-            action={{ label: 'Open settings', onPress: () => Linking.openSettings() }}
+            action={{ label: 'Open settings', onPress: () => (suppressNextLock(), Linking.openSettings()) }}
           />
         ))}
 

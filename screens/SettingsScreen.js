@@ -38,6 +38,7 @@ import { useAppTheme } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import { AppButton, AppSwitch, Banner, ListRow, Section } from '../components/ui';
 import { loadCategories } from './CategoriesScreen';
+import { suppressNextLock } from '../utils/LockSuppress';
 
 const Group = ({ children, t }) => (
   <View
@@ -225,7 +226,7 @@ export default function SettingsScreen({ navigation }) {
             tone="danger"
             title="SMS tracking is blocked"
             body="Android blocks SMS access for apps installed from an APK. Open App info, tap ⋮, then Allow restricted settings. Then allow SMS under Permissions."
-            action={{ label: 'Open App info', onPress: () => Linking.openSettings() }}
+            action={{ label: 'Open App info', onPress: () => (suppressNextLock(), Linking.openSettings()) }}
           />
         )}
         {smsBannerKind === 'needed' && (

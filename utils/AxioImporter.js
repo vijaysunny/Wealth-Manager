@@ -5,9 +5,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '../data/Storage';
 import { Alert } from 'react-native';
+import { suppressNextLock } from './LockSuppress';
 export const importAxioData = async () => {
   try {
     console.log('--- STARTING IMPORT ---');
+    suppressNextLock();
     const result = await DocumentPicker.getDocumentAsync({
       type: '*/*',
       copyToCacheDirectory: true,

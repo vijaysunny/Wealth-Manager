@@ -94,8 +94,15 @@ export default function EditTransactionScreen({ route, navigation }) {
     let cats = type === 'income' ? INCOME_CATS : saved || EXPENSE_CATS;
     if (category && !cats.includes(category)) cats = [category, ...cats];
     setCategories(cats);
-    setUsedTags(recentTags(await getAll(), 12));
-  }, [type, category]);
+    const allTxs = await getAll();
+    // A6: a restored screen may point at a transaction deleted since.
+    if (transaction.id && !allTxs.some((x) => String(x.id) === String(transaction.id))) {
+      Alert.alert('Transaction', 'This item no longer exists.');
+      navigation.goBack();
+      return;
+    }
+    setUsedTags(recentTags(allTxs, 12));
+  }, [type, category, transaction.id, navigation]);
   useEffect(() => {
     load().catch((e) => Alert.alert('Load error', e.message));
   }, [load]);

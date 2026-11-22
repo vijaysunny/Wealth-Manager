@@ -7,13 +7,13 @@
  * - Graceful permission handling for Android 16
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import TabBar from './components/ui/TabBar';
-import { AppState } from 'react-native';
+import { AppState, InteractionManager } from 'react-native';
 
 // --- SCREENS ---
 import HomeScreen from './screens/HomeScreen';
@@ -63,6 +63,27 @@ import {
 } from '@expo-google-fonts/inter';
 import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { saveNetWorthSnapshot } from './utils/FeatureService';
+import { getAll as getAllTransactions } from './data/TransactionRepo';
+import { APP_VERSION } from './utils/appInfo';
+import { loadNavState, makeNavSaver, refreshNavState, throttleAsync } from './utils/NavigationPersistence';
+
+const CATCH_UP_EVERY_MS = 5 * 60 * 1000;
+
+// A6.5: restore the screen the owner left if Android killed the app in the background.
+const restoreNavigation = async () => {
+  const saved = await loadNavState(Storage, APP_VERSION);
+  if (!saved) return undefined;
+  try {
+    const txs = await getAllTransactions();
+    const accounts = JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]');
+    return refreshNavState(saved, {
+      tx: new Map(txs.map((t) => [String(t.id), t])),
+      account: new Map(accounts.map((a) => [String(a.id), a])),
+    });
+  } catch {
+    return undefined;
+  }
+};
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -86,7 +107,8 @@ function AppContent() {
     // Foreground catch-up: the real-time listener misses messages while the app is killed,
     // so every time the app starts or returns to the foreground we re-apply the saved
     // Auto-Tracking flag and scan from last_bg_sync_time.
-    const catchUp = async () => {
+    // A6.7: at most once per 5 minutes, and after the first frame so returning stays smooth.
+    const catchUp = throttleAsync(async () => {
       try {
         if ((await Storage.getItem('onboarding_complete')) !== 'true') return;
         await syncTrackingWithFlag();
@@ -96,7 +118,7 @@ function AppContent() {
       } catch (err) {
         console.warn('Catch-up error:', err);
       }
-    };
+    }, CATCH_UP_EVERY_MS);
 
     async function setupApp() {
       // Schedule daily summary notification
@@ -112,7 +134,7 @@ function AppContent() {
     setupApp().catch((error) => console.warn('Startup tasks failed:', error?.message || error));
 
     const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') catchUp();
+      if (state === 'active') InteractionManager.runAfterInteractions(() => catchUp());
     });
 
     return () => {
@@ -121,8 +143,22 @@ function AppContent() {
     };
   }, []);
 
+  const [navReady, setNavReady] = useState(false);
+  const [initialNav, setInitialNav] = useState(undefined);
+  const saveNav = useMemo(() => makeNavSaver(Storage, APP_VERSION), []);
+  useEffect(() => {
+    restoreNavigation()
+      .then(setInitialNav)
+      .finally(() => setNavReady(true));
+  }, []);
+  if (!navReady) return null;
+
   return (
-    <NavigationContainer theme={dark ? DarkTheme : DefaultTheme}>
+    <NavigationContainer
+      theme={dark ? DarkTheme : DefaultTheme}
+      initialState={initialNav}
+      onStateChange={saveNav}
+    >
       <StatusBar style="auto" />
       <Stack.Navigator initialRouteName="Main">
         <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />

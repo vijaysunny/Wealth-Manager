@@ -13,6 +13,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import { parseStatementRows, parsePdfText } from './TransactionParser';
+import { suppressNextLock } from './LockSuppress';
 
 // Parsing logic (categories, dates, amounts, column detection, row/PDF-line parsing)
 // lives in the shared, unit-tested TransactionParser module.
@@ -109,6 +110,7 @@ export { parsePdfText };
 // ── File picker ───────────────────────────────────────────────────────────
 
 export const pickAndParseStatement = async (onPdfPicked) => {
+  suppressNextLock();
   const result = await DocumentPicker.getDocumentAsync({
     type: [
       'application/pdf',
