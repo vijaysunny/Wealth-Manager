@@ -3,6 +3,8 @@
  * accounts → "Add all" → every capture has an account and the balances are right.
  */
 import fs from 'fs';
+import React from 'react';
+import { render, screen } from '@testing-library/react-native';
 import path from 'path';
 import Storage from '../../data/Storage';
 import { addMany, getAll, monthlyAggregates } from '../../data/TransactionRepo';
@@ -20,6 +22,10 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 jest.mock('../../utils/NotificationService', () => ({ sendTransactionNotification: jest.fn() }));
+jest.mock('@react-navigation/native', () => {
+  const R = require('react');
+  return { useFocusEffect: (cb) => R.useEffect(cb, []) };
+});
 
 // The owner's in-app category rules (e.g. 'baja' → Loan/EMI, which also clears the
 // self-transfer flag), seeded the way the owner set them up in the app.
@@ -273,5 +279,23 @@ describe('A11: debit-card spends (synthetic samples)', () => {
     // the next spend with that card goes straight to savings
     await addMany([dcCapture(DC[0].replace('450.00', '99.00'), 9)], { balanceMode: 'captured' });
     expect((await getAll()).find((t) => t.id === 'dc9').accountId).toBe(axis.id);
+  });
+});
+
+test('A1 screen: Transactions account chips show each last-4 exactly once after Add all', async () => {
+  const AllTransactionsScreen = require('../../screens/AllTransactionsScreen').default;
+  await addAllDiscoveredAccounts();
+  const nav = { navigate: jest.fn(), goBack: jest.fn(), addListener: () => () => {} };
+  render(React.createElement(AllTransactionsScreen, { navigation: nav, route: { params: {} } }));
+  for (const label of ['Axis ••0973', 'Axis Card ••9070', 'SBI Card ••1987', 'Equitas Small Finance ••1246'])
+    expect((await screen.findAllByRole('button', { name: label })).length).toBeGreaterThan(0);
+  const chipLabels = screen
+    .getAllByRole('button')
+    .map((b) => b.props.accessibilityLabel || '')
+    .filter((l) => /\d{4}/.test(l));
+  expect(chipLabels.length).toBeGreaterThanOrEqual(4);
+  chipLabels.forEach((l) => {
+    const groups = l.match(/\d{4}/g);
+    expect(new Set(groups).size).toBe(groups.length);
   });
 });

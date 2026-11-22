@@ -39,20 +39,13 @@ import {
   latestLimits,
   monthCounts,
 } from '../utils/AccountsOverview';
-import { shortAccountName } from '../utils/TransactionList';
+import { shortAccountName, accountInitials } from '../utils/TransactionList';
 import { depositValue } from '../utils/DepositValue';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space, type } from '../components/tokens';
 import { AppButton, Collapsible, Section } from '../components/ui';
 
-const initials = (name = '') =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase() || '?';
+const initials = accountInitials;
 
 const INVESTMENT_KINDS = [
   { key: 'mf', title: 'Mutual funds', note: 'NAV updates daily', icon: 'trending-up-outline' },

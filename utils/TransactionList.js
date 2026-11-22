@@ -43,10 +43,41 @@ export const touchesAccount = (tx, account) => {
 };
 
 /** "Axis Bank" + 0973 → "Axis ••0973"; "Axis Bank Credit Card" → "Axis Card". */
+// A1: names created from SMS already end in "••0973" (or "XX0973", "*0973", " 0973"), and the
+// account also stores last4. Strip any trailing digit marker, shorten, then add ••last4 once.
+const TRAILING_DIGITS = /(?:\s*(?:•+|\.{2,}|x{2,}|\*+)\s*|\s+)(\d{4})\s*$/i;
 export const shortAccountName = (name = '', last4 = null) => {
-  const base = String(name || '')
+  let base = String(name || '').trim();
+  let found = null;
+  for (let m = base.match(TRAILING_DIGITS); m; m = base.match(TRAILING_DIGITS)) {
+    found = found || m[1];
+    base = base.slice(0, m.index).trim();
+  }
+  base = base
     .replace(/\s+Credit Card\b/i, ' Card')
     .replace(/\s+Bank\b/i, '')
     .trim();
-  return last4 ? `${base} ••${last4}` : base;
+  const digits = last4 ? String(last4) : found;
+  return digits ? `${base} ••${digits}`.trim() : base;
+};
+
+// A1.3: badge initials. Known banks use their short code; otherwise the first two letters.
+const BANK_CODES = [
+  [/^axis\b/i, 'AX'],
+  [/^sbi\b|^state bank\b/i, 'SBI'],
+  [/^hdfc\b/i, 'HD'],
+  [/^icici\b/i, 'IC'],
+  [/^kotak\b/i, 'KO'],
+];
+export const accountInitials = (name = '') => {
+  const clean = String(name || '').trim();
+  const known = BANK_CODES.find(([re]) => re.test(clean));
+  if (known) return known[1];
+  const first = clean.split(/\s+/)[0] || '';
+  return (
+    first
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 2)
+      .toUpperCase() || '?'
+  );
 };

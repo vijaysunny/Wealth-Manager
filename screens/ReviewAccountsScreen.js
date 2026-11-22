@@ -26,15 +26,11 @@ import ScreenHeader from '../components/ui/ScreenHeader';
 import AppButton from '../components/ui/AppButton';
 import Card from '../components/ui/Card';
 import Segmented from '../components/ui/Segmented';
+import { accountInitials } from '../utils/TransactionList';
 
 const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
 
-const initials = (name = '') =>
-  name
-    .replace(/[^A-Za-z ]/g, ' ')
-    .trim()
-    .slice(0, 2)
-    .toUpperCase();
+const initials = accountInitials;
 
 export const groupSubtitle = (g) => {
   const n = `${g.count} transaction${g.count === 1 ? '' : 's'}`;

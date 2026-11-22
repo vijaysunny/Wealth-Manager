@@ -1,4 +1,11 @@
-import { groupByDay, dayTitle, touchesAccount, shortAccountName } from '../utils/TransactionList';
+import fc from 'fast-check';
+import {
+  groupByDay,
+  dayTitle,
+  touchesAccount,
+  shortAccountName,
+  accountInitials,
+} from '../utils/TransactionList';
 
 // babel-jest hoists this above the imports
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -44,4 +51,62 @@ test('shortAccountName', () => {
   expect(shortAccountName('Axis Bank Credit Card', '9070')).toBe('Axis Card ••9070');
   expect(shortAccountName('UPI Lite')).toBe('UPI Lite');
   expect(shortAccountName()).toBe('');
+});
+
+test('A1: digits already in the name are not repeated', () => {
+  expect(shortAccountName('Axis Bank ••0973', '0973')).toBe('Axis ••0973');
+  expect(shortAccountName('Axis Bank Credit Card ••9070', '9070')).toBe('Axis Card ••9070');
+  expect(shortAccountName('SBI Credit Card ••1987', null)).toBe('SBI Card ••1987');
+  expect(shortAccountName('Axis Bank XX0973', '0973')).toBe('Axis ••0973');
+  expect(shortAccountName('Axis Bank xx0973')).toBe('Axis ••0973');
+  expect(shortAccountName('HDFC Bank *1234', '1234')).toBe('HDFC ••1234');
+  expect(shortAccountName('Equitas Small Finance Bank 1246', '1246')).toBe('Equitas Small Finance ••1246');
+  expect(shortAccountName('Axis Bank ••0973 ••0973', '0973')).toBe('Axis ••0973');
+  expect(shortAccountName('UPI Lite')).toBe('UPI Lite');
+  // stored last4 wins over digits in the name
+  expect(shortAccountName('Axis Bank ••1111', '0973')).toBe('Axis ••0973');
+});
+
+test('A1 property: the output never contains the same 4 digits twice', () => {
+  const marker = fc.constantFrom('••', ' ••', ' XX', ' xx', ' *', ' ', '');
+  fc.assert(
+    fc.property(
+      fc.constantFrom(
+        'Axis Bank',
+        'SBI Credit Card',
+        'Axis Bank Credit Card',
+        'HDFC',
+        'UPI Lite',
+        'Kotak Bank'
+      ),
+      fc.option(fc.tuple(marker, fc.integer({ min: 0, max: 9999 })), { nil: null }),
+      fc.option(fc.integer({ min: 0, max: 9999 }), { nil: null }),
+      (base, suffix, stored) => {
+        const pad = (n) => String(n).padStart(4, '0');
+        const nameDigits = suffix ? pad(suffix[1]) : null;
+        const name = suffix ? `${base}${suffix[0] === '' ? ' ' : suffix[0]}${nameDigits}` : base;
+        const last4 = stored === null ? null : pad(stored);
+        const out = shortAccountName(name, last4);
+        const groups = out.match(/\d{4}/g) || [];
+        expect(new Set(groups).size).toBe(groups.length);
+        expect(groups.length).toBeLessThanOrEqual(1);
+        const want = last4 || nameDigits;
+        if (want) expect(out.endsWith(`••${want}`)).toBe(true);
+      }
+    )
+  );
+});
+
+test('A1.3: badge initials use the bank short code', () => {
+  expect(accountInitials('Axis Bank ••0973')).toBe('AX');
+  expect(accountInitials('Axis Bank Credit Card')).toBe('AX');
+  expect(accountInitials('SBI Credit Card ••1987')).toBe('SBI');
+  expect(accountInitials('State Bank of India')).toBe('SBI');
+  expect(accountInitials('HDFC Bank')).toBe('HD');
+  expect(accountInitials('ICICI Bank')).toBe('IC');
+  expect(accountInitials('Kotak Mahindra')).toBe('KO');
+  expect(accountInitials('Equitas Small Finance Bank')).toBe('EQ');
+  expect(accountInitials('Bajaj Finance')).toBe('BA');
+  expect(accountInitials('')).toBe('?');
+  expect(accountInitials()).toBe('?');
 });
