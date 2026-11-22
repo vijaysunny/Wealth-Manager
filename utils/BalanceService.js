@@ -16,7 +16,8 @@
 
 import AsyncStorage from '../data/Storage';
 import { cardDebt } from './CardMath';
-import { calculateOutstandingBalance, isCardEmi } from './LoanCalculator';
+import { isCardEmi } from './LoanCalculator';
+import { loanOwed } from './LoanLedger';
 
 const ACCOUNTS_KEY = 'user_wealth_accounts';
 const SPENDABLE_TYPES = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
@@ -66,7 +67,7 @@ export const computeNetWorth = (accounts = [], assets = [], { txs = null, asOf =
     if (a && a.type === 'Loan') {
       // Card EMIs are already inside the card's balance; closed loans owe nothing.
       if (isCardEmi(a) || a.status === 'closed') return;
-      totalLiabilities += txs ? num(calculateOutstandingBalance(a, asOf)) : num(a.balance);
+      totalLiabilities += txs ? num(loanOwed(a, txs, asOf)) : num(a.balance);
       return;
     }
     const bal = num(a.balance);

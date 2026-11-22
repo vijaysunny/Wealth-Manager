@@ -196,3 +196,27 @@ test('investments summary', () => {
   expect(investmentsSummary([1, 2])).toBe('MF, stocks, FD/RD, PF · 2 holdings');
   expect(investmentsSummary()).toBe('MF, stocks, FD/RD, PF · none added yet');
 });
+
+test('C6: a linked EMI lowers the loan by its principal (the ledger), not by the whole payment', () => {
+  const asOf = new Date(2026, 10, 22, 12);
+  const pl = {
+    id: 'pl',
+    name: 'Personal loan',
+    type: 'Loan',
+    originalAmount: 200000,
+    interestRate: 12,
+    tenure: 24,
+    emiAmount: 9414.69,
+    firstEmiDate: new Date(2026, 5, 7).toISOString(),
+  };
+  const prepay = {
+    id: 'pp',
+    type: 'expense',
+    amount: 10000,
+    accountId: 'axis',
+    fullDate: new Date(2026, 10, 15, 12).toISOString(),
+    loanLink: { loanId: 'pl', kind: 'prepayment', principal: 10000, interest: 0 },
+  };
+  expect(accountsOverview([pl], { txs: [], asOf }).liabilities).toBe(154384.71);
+  expect(accountsOverview([pl], { txs: [prepay], asOf }).liabilities).toBe(144384.71);
+});

@@ -4,7 +4,8 @@
  */
 import { computeNetWorth, isWallet } from './BalanceService';
 import { cardDebt, isCardSetUp } from './CardMath';
-import { calculateOutstandingBalance, isCardEmi } from './LoanCalculator';
+import { isCardEmi } from './LoanCalculator';
+import { loanOwed } from './LoanLedger';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -49,14 +50,14 @@ export const accountsOverview = (accounts = [], { txs = null, asOf = new Date() 
   });
   const loans = g.loans.map((account) => ({
     account,
-    outstanding: round2(txs ? num(calculateOutstandingBalance(account, asOf)) : num(account.balance)),
+    outstanding: round2(txs ? num(loanOwed(account, txs, asOf)) : num(account.balance)),
     inCard: isCardEmi(account),
     closed: account.status === 'closed',
   }));
   const cardOwed = round2(cards.reduce((s, c) => s + (c.counted && c.owed > 0 ? c.owed : 0), 0));
   const cardCredit = round2(cards.reduce((s, c) => s + (c.counted && c.owed < 0 ? -c.owed : 0), 0));
-  const loanOwed = round2(loans.reduce((s, l) => s + (l.inCard || l.closed ? 0 : l.outstanding), 0));
-  const liabilities = round2(cardOwed + loanOwed);
+  const loanTotal = round2(loans.reduce((s, l) => s + (l.inCard || l.closed ? 0 : l.outstanding), 0));
+  const liabilities = round2(cardOwed + loanTotal);
   return {
     netWorth: nw.netWorth,
     cashBank: round2(sum([...g.banks, ...g.wallets]) + cardCredit),
