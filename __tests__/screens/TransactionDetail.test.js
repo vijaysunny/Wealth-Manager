@@ -241,3 +241,41 @@ test('B3: no SIP banner for ordinary payees', async () => {
   await open();
   expect(screen.queryByText('Looks like a SIP')).toBeNull();
 });
+
+test('C2: a card purchase of ₹1,000+ offers "Track as EMI" prefilled; a bank expense does not', async () => {
+  await Storage.setItem(
+    'user_wealth_accounts',
+    JSON.stringify([
+      { id: 'axis', name: 'Axis Bank', type: 'Bank Account', last4: '0973', balance: 1000 },
+      { id: 'ac', name: 'Axis Card', type: 'Credit Card', last4: '9070', statementDay: 15, balance: 0 },
+    ])
+  );
+  const n = nav();
+  const tx = {
+    ...base,
+    id: 'p1',
+    amount: 25000,
+    merchant: 'Croma',
+    title: 'Croma',
+    account: 'Axis Card',
+    accountId: 'ac',
+    fullDate: new Date(2026, 8, 2, 10).toISOString(),
+  };
+  render(<EditTransactionScreen navigation={n} route={{ params: { transaction: tx } }} />);
+  fireEvent.press(await screen.findByRole('button', { name: 'Track as EMI' }));
+  expect(n.navigate).toHaveBeenCalledWith('LoanEdit', {
+    prefill: {
+      kind: 'cardEmi',
+      name: 'Croma EMI',
+      amount: '25000',
+      payFromId: 'ac',
+      firstEmi: '15/09/2026',
+      sourceTxId: 'p1',
+    },
+  });
+});
+
+test('C2: no "Track as EMI" on a bank expense', async () => {
+  await open();
+  expect(screen.queryByRole('button', { name: 'Track as EMI' })).toBeNull();
+});

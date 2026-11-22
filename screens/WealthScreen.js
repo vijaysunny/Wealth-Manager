@@ -443,7 +443,7 @@ export default function WealthScreen({ navigation }) {
         testID={`loan-${a.id}`}
         accessibilityRole="button"
         accessibilityLabel={`${title}, ${sub}`}
-        onPress={() => navigation.navigate('EditAsset', { asset: a })}
+        onPress={() => navigation.navigate('LoanEdit', { loanId: a.id })}
         style={[styles.row, { borderColor: t.divider }]}
       >
         <View style={[styles.badge, { backgroundColor: inCard ? t.dangerBg : t.divider }]}>
@@ -660,7 +660,7 @@ export default function WealthScreen({ navigation }) {
                   icon="add"
                   variant="dashed"
                   style={{ marginVertical: space.md }}
-                  onPress={() => navigation.navigate('AddInvestment', { kind: 'loan' })}
+                  onPress={() => navigation.navigate('LoanEdit')}
                 />
               </>
             )}

@@ -31,6 +31,7 @@ import { shortAccountName } from '../utils/TransactionList';
 import { isSipDebit, linkToInvestment } from '../utils/InvestmentLink';
 import { isInvestment } from '../utils/AccountsOverview';
 import { payeeOf } from '../components/ui/TransactionRow';
+import { trackAsEmiPrefill } from '../utils/LoanForm';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import {
@@ -108,6 +109,11 @@ export default function EditTransactionScreen({ route, navigation }) {
   }, [load]);
 
   const account = accounts.find((a) => a.name === accountName);
+  const emiPrefill = trackAsEmiPrefill(
+    transaction,
+    accounts.find((a) => transaction.accountId != null && String(a.id) === String(transaction.accountId)) ||
+      null
+  );
   const userTags = visibleTags(tags);
   const suggestions = useMemo(() => usedTags.filter((g) => !tags.includes(g)).slice(0, 8), [usedTags, tags]);
 
@@ -625,6 +631,17 @@ export default function EditTransactionScreen({ route, navigation }) {
                 onPress={() => setSheet('investment')}
               />
             </View>
+          ) : null}
+
+          {/* C2: a card purchase of ₹1,000 or more can be tracked as an EMI (the purchase is not changed) */}
+          {emiPrefill ? (
+            <AppButton
+              title="Track as EMI"
+              variant="secondary"
+              icon="calendar-outline"
+              style={{ marginBottom: space.md }}
+              onPress={() => navigation.navigate('LoanEdit', { prefill: emiPrefill })}
+            />
           ) : null}
 
           {source ? (

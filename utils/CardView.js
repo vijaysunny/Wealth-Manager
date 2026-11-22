@@ -14,11 +14,12 @@ import {
 } from './CardMath';
 
 const toDate = (d) => (d instanceof Date ? d : new Date(d));
-/** "15 Nov" */
-export const shortDate = (d) => toDate(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** "15 Nov" (built by hand: ICU writes "Sept" for en-GB) */
+export const shortDate = (d) => `${toDate(d).getDate()} ${MONTHS[toDate(d).getMonth()]}`;
 /** "Sat, 5 Dec" */
-export const weekdayDate = (d) =>
-  `${toDate(d).toLocaleDateString('en-GB', { weekday: 'short' })}, ${shortDate(d)}`;
+export const weekdayDate = (d) => `${DAYS[toDate(d).getDay()]}, ${shortDate(d)}`;
 
 /** Where "You owe" came from (B5 summary). */
 export const owedSourceLine = (card, owed) => {

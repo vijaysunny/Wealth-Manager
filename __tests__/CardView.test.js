@@ -38,6 +38,8 @@ const sms = {
 test('dates', () => {
   expect(shortDate(new Date(2026, 10, 15))).toBe('15 Nov');
   expect(weekdayDate(new Date(2026, 11, 5))).toBe('Sat, 5 Dec');
+  expect(shortDate(new Date(2026, 8, 15))).toBe('15 Sep');
+  expect(weekdayDate(new Date(2026, 8, 15))).toBe('Tue, 15 Sep');
 });
 
 test('source line for each method; overpaid line only for a negative history estimate', () => {
