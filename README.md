@@ -1,6 +1,6 @@
-# WealthManager — source phases 7–11
+# WealthManager — source phases 7–12
 
-Phase 11 (wallets / UPI Lite and hardening) is summarised in docs/phase11-notes.md. Its device checks are still pending: see docs/device-test-results.md.
+Phase 12 (bug fixes, redesign, files on transactions, tags, investments) follows docs/PHASE12_PLAN.md; see "Phase 12" below. Phase 11 (wallets / UPI Lite and hardening) is summarised in docs/phase11-notes.md. Device checks for both phases are still pending: see docs/device-test-results.md.
 
 Use WealthManager_phase10.zip for the cumulative latest project. Earlier archives are independent cumulative checkpoints, not patches. No node_modules, generated Android/iOS directories, credentials, database files or scratch tooling are included.
 
@@ -10,7 +10,7 @@ Use WealthManager_phase10.zip for the cumulative latest project. Earlier archive
 2. Extract the project, use Node 24.12 or later, and run `npm ci`.
 3. Run `npm test -- --runInBand` and `npm run lint`. Also available: `npm run test:tz` (IST and UTC), `npm run test:coverage` (fails below the thresholds in package.json) and `npm run format:check`.
 4. Build a native development app with `npm run android`, or use the existing EAS preview profile to create an APK (`eas build --platform android --profile preview`). An Android SDK/JDK or an authenticated EAS account is required. Expo Go cannot run the old native SMS modules.
-5. Choose manual entry or SMS tracking during onboarding. Open Settings → Money tools for transfers, review, search/export, goal contributions and wealth calculators. Security and appearance settings include dark mode, biometrics and encrypted backups.
+5. Choose manual entry or SMS tracking during onboarding. Tabs are Home · Accounts · Budget · Goals · Settings. New transfer and category rules are in Settings, bulk edit in the Transactions export menu, goal contributions under a goal's "Add money", and calculators on Accounts. Settings → Backup & restore holds plain and encrypted backups.
 
 Gmail is switched off by default (`EXPO_PUBLIC_ENABLE_GMAIL=false`); the owner relies on SMS and statements. It also remains unconfigured because no OAuth client was supplied. See docs/phase7-notes.md before entering an EXPO_PUBLIC_GOOGLE_CLIENT_ID. A Web client secret must never be bundled in the app; Google's Android custom-scheme restrictions must be resolved for the configured client before this PKCE implementation can be used.
 
@@ -18,10 +18,17 @@ Gmail is switched off by default (`EXPO_PUBLIC_ENABLE_GMAIL=false`); the owner r
 
 - Add a wallet in Wealth → Add account → Wallet (UPI Lite, Paytm Wallet, Amazon Pay, FASTag or Other), with its app and the bank that funds it. A top-up SMS also creates a UPI Lite wallet linked to the paying bank if none exists.
 - Top-ups and withdrawals are transfers: the bank goes down, the wallet goes up, net worth is unchanged and they never count as spending. History marks them with a swap icon and the route.
-- Captures that don't match exactly one account wait in Tools → Review (pick an account, create the suggested one, or pick a wallet). Bank and card accounts are never created automatically, and unresolved captures don't move balances.
+- Captures that don't match exactly one account wait in Review accounts (Home shows a card) (pick an account, create the suggested one, or pick a wallet). Bank and card accounts are never created automatically, and unresolved captures don't move balances.
 - **Known limitation:** most UPI Lite payments send no SMS, so spending inside the wallet is visible only through **Reconcile** (type the balance your UPI app shows; the gap becomes one "Unrecorded wallet spends" expense after you confirm), a statement import, or the "Below zero - reconcile" flag. An optional weekly reminder is in Settings.
 - Statement and PDF imports treat "UPI LITE" rows as transfers and ask before creating a wallet. Re-importing the same file adds nothing.
 - Only the Axis UPI Lite top-up wording comes from a real SMS; other wallet wordings are unverified (see docs/phase11-notes.md).
+
+## Phase 12
+
+- **Redesign.** Design tokens in `components/tokens.js` (light and dark, contrast checked in tests), shared components in `components/ui/`, Inter and Space Grotesk fonts. Dark mode is opt-in from Settings. Screens outside the redesign (Expense, Income, Import, Analytics, Recurring, Savings and others) still use the old colours through `shade()`.
+- **Files on transactions.** Transaction detail → Bills & files: Camera, Gallery or Any file; up to 10 files of 25 MB each, kept under the app's `attachments/<txId>/` folder and opened through Share. Home → Scan bill opens the camera and attaches the photo to a new expense. Deleting a transaction deletes its files. Backups include files by default (base64); above 50 MB the app asks and offers a backup without files.
+- **Tags.** Lowercase slugs (`#Tax 2026` → `tax-2026`). Capture markers (`auto-sms`, `auto-sync`, `ai`, `imported`, `recurring`, `auto`) are hidden on rows but searchable. Search `#tag` in Transactions; several tags must all match. Old `Auto-SMS` / `Auto-Sync` tags are converted once at startup.
+- **Investments.** Net worth counts only accounts added on Accounts; nothing is created from SMS. Mutual funds use the NAV and stocks/gold the live price on refresh. PF, FD and RD add interest (FD quarterly by default, monthly or simple; RD instalments compound quarterly); FD/RD stop at maturity and remind 7 days before. A bank debit to Groww, Zerodha, Kuvera and similar platforms becomes a transfer into the investment when exactly one investment has that platform; otherwise Transaction detail offers "Link to an investment". A mutual fund's units are not changed by a SIP, so update the units after an allotment or its value drops back on the next NAV refresh.
 
 ## Data and recovery
 
@@ -57,7 +64,7 @@ PDF parsing embeds PDF.js and its worker locally (Apache-2.0 license in assets/p
 
 ## Verification and remaining device checks
 
-Phase 11 adds fixture tests with the owner's real SMS, wallet/transfer pipeline tests on SQLite, property tests (fast-check), screen smoke tests (React Native Testing Library) and coverage thresholds; CI runs them in IST and UTC. Earlier automated checks cover parser/dedup, recurrence, balances, real SQLite SQL through a test adapter, migration backup/counts, concurrent writes, rollback, transfer accounting, budget rollover, encryption/tampering, category/review/bulk actions, goals, merge restore, and mocked OAuth code/refresh/401/revocation paths. See docs/jest-phase10.txt and docs/eslint-after-phase10.txt. Android native-project generation and Android JavaScript bundle export were checked; this does not establish that an APK builds or launches. The export disables Hermes bytecode because the sandboxed Windows compiler could not write its temporary output.
+Phase 12 adds tests for tags (property tests included), attachments with a fake file system, FD/RD maths, SIP linking, backup round trips with files, the redesigned screens and accessibility labels; the new pure modules must keep 90% coverage. Phase 11 adds fixture tests with the owner's real SMS, wallet/transfer pipeline tests on SQLite, property tests (fast-check), screen smoke tests (React Native Testing Library) and coverage thresholds; CI runs them in IST and UTC. Earlier automated checks cover parser/dedup, recurrence, balances, real SQLite SQL through a test adapter, migration backup/counts, concurrent writes, rollback, transfer accounting, budget rollover, encryption/tampering, category/review/bulk actions, goals, merge restore, and mocked OAuth code/refresh/401/revocation paths. See docs/jest-phase10.txt and docs/eslint-after-phase10.txt. Android native-project generation and Android JavaScript bundle export were checked; this does not establish that an APK builds or launches. The export disables Hermes bytecode because the sandboxed Windows compiler could not write its temporary output.
 
 Before using real data, verify on Android:
 

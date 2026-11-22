@@ -73,3 +73,34 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 ## Failures found
 
 (none recorded yet)
+
+---
+
+# Phase 12 device checks (plan D6)
+
+**Status: not started.** Run on the owner's phone with Android dark mode **on**. Scenarios are copied from `docs/PHASE12_PLAN.md` § D6. Rows P1–P9 from the plan's Part A check-in are the same as rows 1–9 here.
+
+| Field | Value |
+|---|---|
+| Date | |
+| Device / Android version | |
+| App build (commit / EAS build id) | |
+
+| # | Scenario | Expected | Result | Notes / evidence |
+|---|---|---|---|---|
+| 1 | Fresh install of the APK, phone in dark mode | Every screen's text readable | PENDING | |
+| 2 | Settings → Read bank SMS | "Restricted settings" steps shown; after allowing, the switch stays on | PENDING | |
+| 3 | A real Axis debit SMS arrives | Appears within seconds on the right account; notification shown | PENDING | |
+| 4 | Scan old SMS → Review → Add all | Axis ••0973, Axis Card ••9070, SBI Card ••1987 listed on Accounts | PENDING | |
+| 5 | UPI Lite top-up | UPI Lite +500 **and** Axis −500 | PENDING | |
+| 6 | Axis card bill paid from the bank | Not counted in "Spent" | PENDING | |
+| 7 | Transaction detail: attach camera photo, gallery image, PDF; then delete the tx | Each opens in a viewer; files gone after delete (app storage size drops) | PENDING | |
+| 8 | Tag `#tax-2026` on two transactions; search `#tax-2026` | Both shown | PENDING | |
+| 9 | Gemini: save key, ask "Where did my money go this month?" | Test runs automatically → "Working · model"; a reply comes back | PENDING | |
+| 10 | Add FD ₹10,000 at 7%, today | Next day the value is slightly higher; maturity reminder scheduled | PENDING | |
+| 11 | Encrypted backup with files → uninstall → install → restore | Transactions, tags and files all back | PENDING | |
+| 12 | Collapsible sections; tap targets | Open/close smoothly; nothing overlaps; every button ≥ 44 px | PENDING | |
+| 13 | Each screen vs `docs/design/` | Section order, spacing, colours and default-collapsed state match | PENDING | |
+| 14 | Home → Scan bill | Camera opens; saved expense has the photo under Bills & files | PENDING | |
+| 15 | SIP debit (Groww) with a Groww fund added (Platform = Groww) | Saved as a transfer Axis → fund, not spending | PENDING | |
+| 16 | Real debit-card SMS (A11) | Asks once to link the card to Axis ••0973, then all go there | BLOCKED | needs a real debit-card SMS sample |
