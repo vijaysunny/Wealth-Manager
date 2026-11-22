@@ -198,7 +198,7 @@ export default function SavingsScreen({ navigation }) {
                   },
                 ]}
               >
-                Goal: {savingsGoalPct}% {stats.rate >= savingsGoalPct ? '✓' : '✗'}
+                Goal: {savingsGoalPct}% · {stats.rate >= savingsGoalPct ? 'met' : 'not met'}
               </Text>
             </View>
           </View>
@@ -365,7 +365,7 @@ export default function SavingsScreen({ navigation }) {
             },
           ]}
         >
-          <Text style={styles.sectionTitle}>💡 Savings Tips</Text>
+          <Text style={styles.sectionTitle}>Savings tips</Text>
           {stats.rate < savingsGoalPct ? (
             <>
               <Text style={styles.tip}>
@@ -378,7 +378,7 @@ export default function SavingsScreen({ navigation }) {
             </>
           ) : (
             <>
-              <Text style={styles.tip}>• Great! You exceeded your savings goal this month 🎉</Text>
+              <Text style={styles.tip}>• Great! You exceeded your savings goal this month.</Text>
               <Text style={styles.tip}>• Consider investing the surplus in mutual funds or FD</Text>
               <Text style={styles.tip}>• Keep the momentum — set a higher savings goal!</Text>
             </>

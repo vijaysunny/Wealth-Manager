@@ -202,7 +202,7 @@ export default function RecurringScreen({ navigation }) {
         {/* Income Recurring */}
         {entries.filter((e) => e.type === 'income').length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📥 Income</Text>
+            <Text style={styles.sectionTitle}>Income</Text>
             {entries
               .filter((e) => e.type === 'income')
               .map((e) => (
@@ -220,7 +220,7 @@ export default function RecurringScreen({ navigation }) {
         {/* Expense Recurring */}
         {entries.filter((e) => e.type === 'expense').length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📤 Expenses</Text>
+            <Text style={styles.sectionTitle}>Expenses</Text>
             {entries
               .filter((e) => e.type === 'expense')
               .map((e) => (
@@ -333,7 +333,7 @@ export default function RecurringScreen({ navigation }) {
                       },
                     ]}
                   >
-                    {t === 'income' ? '📥 Income' : '📤 Expense'}
+                    {t === 'income' ? 'Income' : 'Expense'}
                   </Text>
                 </TouchableOpacity>
               ))}
