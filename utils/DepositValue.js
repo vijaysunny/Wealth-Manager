@@ -9,6 +9,8 @@ const PERIOD_MONTHS = { quarterly: 3, monthly: 1 };
 const toDate = (d) => (d instanceof Date ? new Date(d.getTime()) : new Date(d));
 const valid = (d) => d instanceof Date && Number.isFinite(d.getTime());
 const round2 = (n) => Math.round(n * 100) / 100;
+// Interest accrues per whole day, so a value read twice on the same day is the same.
+const wholeDays = (ms) => Math.floor(ms / DAY);
 
 /** Same day of month `n` months later (31 Jan + 1 → 28/29 Feb). */
 export const addMonths = (date, n) => {
@@ -38,13 +40,13 @@ export const fdValue = (
   if (valid(maturity) && maturity < end) end = maturity;
   if (end <= start) return round2(p);
 
-  if (compounding === 'simple') return round2(p * (1 + (r * (end - start)) / (365 * DAY)));
+  if (compounding === 'simple') return round2(p * (1 + (r * wholeDays(end - start)) / 365));
   const months = PERIOD_MONTHS[compounding] || 3;
   const perYear = 12 / months;
   let periods = 0;
   while (addMonths(start, (periods + 1) * months) <= end) periods += 1;
   const compounded = p * Math.pow(1 + r / perYear, periods);
-  const restDays = (end - addMonths(start, periods * months)) / DAY;
+  const restDays = wholeDays(end - addMonths(start, periods * months));
   return round2(compounded * (1 + (r * restDays) / 365));
 };
 
