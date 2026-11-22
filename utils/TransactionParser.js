@@ -435,8 +435,10 @@ export const extractAccountLast4 = (text = '') => {
   return m ? m[1].slice(-4) : null;
 };
 /** Digits after "Card" ("Card no. XX4821", "Debit Card XX9911", "card ending 1234"), or null. */
+// Axis puts the debit card only in the block instruction: "SMS BLOCKCARD XX8285 to +91..."
+const BLOCKCARD_RE = /\bblock\s*card\s+[X*]*(\d{4,18})\b/i;
 export const extractCardLast4 = (text = '') => {
-  const m = String(text).match(CARD_DIGITS_RE);
+  const m = String(text).match(CARD_DIGITS_RE) || String(text).match(BLOCKCARD_RE);
   return m ? m[1].slice(-4) : null;
 };
 
@@ -473,6 +475,8 @@ const normRef = (v) => {
   return r.length >= 6 ? r : null;
 };
 
+const DEBITED_ON_PAYEE_RE =
+  /\bdebited from a\/?c(?:count)?\.?(?:\s*no\.?)?\s*[X*]*\d{3,18}\s+on\s+([a-z][a-z0-9 .&_-]{1,40}?)\s+\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b/i;
 const MERCHANT_RE =
   /\b(?:paid to|sent to|received from|towards|at|to)\s+([a-z][a-z0-9 .&_-]{1,60}?)(?=\s+(?:on|via|using|ref|upi|avl|available|bal|from|for)\b|[.;\n]|$)/i;
 // "credited to your SBI Credit Card" names the account, not a merchant
@@ -507,6 +511,8 @@ export const extractMerchant = (text = '') => {
   const vpa = s.match(/\b([a-z0-9._-]+@[a-z0-9.-]+)\b/i)?.[1] || null;
   const slash = s.match(CHANNEL_SLASH_RE);
   let merchant = slash ? cleanSlashPayee(slash[4]) : extractAchPayee(s);
+  // Axis debit card: "debited from A/c no. XX620973 on NGEF KASTUR 11-11-2026 17:30:31"
+  if (!merchant) merchant = s.match(DEBITED_ON_PAYEE_RE)?.[1]?.trim() || null;
   if (!merchant) {
     const candidate = s.match(MERCHANT_RE)?.[1]?.trim();
     if (candidate && !NOT_MERCHANT_RE.test(candidate)) merchant = candidate;
@@ -555,7 +561,7 @@ export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknow
   const own = ownAccountText(body);
   const accountType = detectAccountType(own, { sender });
   // A11: on a bank (debit card) SMS the card digits are not the account's digits
-  const cardLast4 = /\bcard\b/i.test(body) ? extractCardLast4(body) : null;
+  const cardLast4 = /\bcard\b|\bblock\s*card\b/i.test(body) ? extractCardLast4(body) : null;
   const last4 = accountType === 'Bank Account' && cardLast4 ? extractAccountLast4(own) : extractLast4(body);
   const { channel, mode, counterparty } = extractChannel(body);
   let type = detectDirection(body);

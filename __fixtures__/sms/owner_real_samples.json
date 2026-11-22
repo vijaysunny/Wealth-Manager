@@ -528,6 +528,24 @@
         "merchant": "Bajaj Finance",
         "category": "Loan/EMI"
       }
+    },
+    {
+      "id": "axis-debitcard-ngef-01",
+      "sender": "",
+      "body": "INR 6700.00 debited from A/c no. XX620973 on NGEF KASTUR 11-11-2026 17:30:31 IST. Avl bal: INR 77666.63. Not you? SMS BLOCKCARD XX8285 to +919951860002 - Axis Bank",
+      "expected": {
+        "type": "expense",
+        "amount": 6700,
+        "bank": "Axis Bank",
+        "accountType": "Bank Account",
+        "last4": "0973",
+        "cardLast4": "8285",
+        "merchant": "NGEF KASTUR",
+        "balance": 77666.63,
+        "refNo": null,
+        "needsAccountReview": false,
+        "transferCandidate": false
+      }
     }
   ],
   "_owner_accounts": "Owner-confirmed own accounts: Axis savings (XX0973), Axis credit card (XX9070), SBI credit card (1987), Equitas Small Finance Bank savings (1246). Balances from these SMS must be applied."

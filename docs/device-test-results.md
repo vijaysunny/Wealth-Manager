@@ -66,7 +66,7 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 | P4 | Scan old SMS → Home card → Review accounts → Add all (A2) | Axis ••0973, Axis Card ••9070, SBI Card ••1987 (and Equitas ••1246) added; Accounts lists them; no capture left waiting | PENDING | |
 | P5 | UPI Lite top-up SMS without "A/c" (A5) | UPI Lite +500 and Axis −500 | PENDING | |
 | P6 | Axis card bill paid from the bank (A4) | Not counted in Spent; shows as a transfer; pairs with the card's "payment received" SMS | PENDING | |
-| P7 | Debit-card spend (A11) | Review asks "Is Debit Card ••xxxx linked to Axis Bank ••0973?"; Yes moves it and later spends go straight there | PENDING | **Needs the owner's real debit-card SMS**: the fixtures are synthetic |
+| P7 | Debit-card spend (A11) | Review asks "Is Debit Card ••xxxx linked to Axis Bank ••0973?"; Yes moves it and later spends go straight there | PENDING | Real sample added 2026-11-22 (`axis-debitcard-ngef-01`, card ••8285). Axis's real wording names the account too, so it goes straight to ••0973 and the card is learned; the question only appears for an SMS naming the card alone |
 | P8 | Gemini: Save key (A9) | Test runs automatically → "Working · <model>"; "Turn on AI now?" asked once; Ask a question gets a reply | PENDING | |
 | P9 | Buttons in Settings → Security, AI panel, AI screen (A10) | Normal-case, spaced, nothing touching, ≥44px | PENDING | |
 
@@ -103,4 +103,4 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 | 13 | Each screen vs `docs/design/` | Section order, spacing, colours and default-collapsed state match | PENDING | |
 | 14 | Home → Scan bill | Camera opens; saved expense has the photo under Bills & files | PENDING | |
 | 15 | SIP debit (Groww) with a Groww fund added (Platform = Groww) | Saved as a transfer Axis → fund, not spending | PENDING | |
-| 16 | Real debit-card SMS (A11) | Asks once to link the card to Axis ••0973, then all go there | BLOCKED | needs a real debit-card SMS sample |
+| 16 | Real debit-card SMS (A11) | Spend at a shop with card ••8285 lands on Axis ••0973 with the payee and balance; Axis lists card ••8285 | PENDING | fixture `axis-debitcard-ngef-01` |

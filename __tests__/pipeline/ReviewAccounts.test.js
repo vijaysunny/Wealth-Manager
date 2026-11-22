@@ -58,6 +58,35 @@ beforeEach(async () => {
   await addMany(messages.map(capture).filter(Boolean), { balanceMode: 'captured' });
 });
 
+test('A11 real sample: the debit card SMS lands on Axis ••0973 and teaches it card 8285', async () => {
+  await addAllDiscoveredAccounts();
+  const axis = await find(/Axis Bank ••0973/, 'Bank Account');
+  const row = (await getAll()).find((t) => t.id === 'axis-debitcard-ngef-01');
+  expect(row).toMatchObject({ type: 'expense', amount: 6700, merchant: 'NGEF KASTUR', accountId: axis.id });
+  expect(axis.debitCards).toEqual(['8285']);
+  // a later SMS naming only card 8285 now goes straight to Axis ••0973, no question
+  await addMany(
+    [
+      {
+        id: 'card-only',
+        smsId: 'sms:OWNER:card-only',
+        amount: 99,
+        type: 'expense',
+        account: 'Axis Bank',
+        fullDate: '2026-11-25T10:00:00Z',
+        bankName: 'Axis Bank',
+        accountType: 'Bank Account',
+        last4: null,
+        cardLast4: '8285',
+      },
+    ],
+    { balanceMode: 'captured' }
+  );
+  const later = (await getAll()).find((t) => t.id === 'card-only');
+  expect(later.accountUnresolved).toBeFalsy();
+  expect(later.accountId).toBe(axis.id);
+});
+
 test("discovers the owner's accounts from SMS; no balances moved yet", async () => {
   const groups = await discoveredAccounts();
   expect(groups.map((g) => g.suggested.name).sort()).toEqual([
@@ -110,10 +139,11 @@ test('D2: November totals from the fixtures; transfers are not spending', async 
   const rows = await monthlyAggregates('2026-10-01T00:00:00Z', '2026-12-31T00:00:00Z');
   const total = (type) => rows.filter((r) => r.type === type).reduce((s, r) => s + r.total, 0);
   // Written out by hand from the fixture list (not computed by app code):
-  // 26 expenses: 121 + 1998.19 + 178 + 5050 + 42000 + 96 + 25 + 143 + 86 + 600 + 353 + 67.90
+  // 27 expenses: 121 + 1998.19 + 178 + 5050 + 42000 + 96 + 25 + 143 + 86 + 600 + 353 + 67.90
   //   + 281 + 30 + 322 + 50 + 1020.58 + 607.55 + 106.97 + 309 + 75 + 350 + 16 + 250 + 538 + 160
+  //   + 6700 (Axis debit card at NGEF KASTUR)
   // (the Groww SIP stays an expense: no investment account on Groww exists)
-  expect(total('expense')).toBeCloseTo(54834.19, 2);
+  expect(total('expense')).toBeCloseTo(61534.19, 2);
   // 4 credits: 136193 + 40000 + 30000 + 50000
   expect(total('income')).toBeCloseTo(256193, 2);
   // top-ups 500 + 500, card bill 12511.38 and card payments 9145.91 + 5770 + 23618.82 are transfers
@@ -217,7 +247,8 @@ describe('A11: debit-card spends (synthetic samples)', () => {
     rows = await getAll();
     rows.filter((t) => /^dc/.test(t.id)).forEach((t) => expect(t.accountId).toBe(axis.id));
     const after = await find(/Axis Bank ••0973/, 'Bank Account');
-    expect(after.debitCards).toEqual(['4821']);
+    // 8285 was learned from the owner's real debit-card SMS (it names A/c XX620973 too)
+    expect(after.debitCards).toEqual(['8285', '4821']);
     // the latest SMS balance (Avl Bal 10225.67) wins
     expect(after.balance).not.toBe(before);
     expect(after.balance).toBeCloseTo(10225.67, 2);
