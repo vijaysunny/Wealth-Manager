@@ -191,3 +191,34 @@ test('edge cases: long name with a long "extension", unknown size, image mime gu
     attachments: [],
   });
 });
+
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///default/',
+  deleteAsync: jest.fn(async () => {}),
+}));
+
+test('file-system errors that do not matter are ignored (folder exists, file already gone)', async () => {
+  const fs = fakeFs({ 'file:///c/p.jpg': 'x' });
+  fs.makeDirectoryAsync.mockRejectedValue(new Error('exists'));
+  fs.deleteAsync.mockRejectedValue(new Error('gone'));
+  const tx = await addAttachment({ id: 'g' }, { uri: 'file:///c/p.jpg', name: 'p.jpg', size: 1 }, fs, {
+    id: 'f',
+  });
+  expect(tx.attachments).toHaveLength(1);
+  expect((await removeAttachment(tx, 'f', fs)).attachments).toEqual([]);
+  await expect(deleteAllFor('g', fs)).resolves.toBeUndefined();
+  const restored = await restoreAttachmentFiles(
+    {
+      transactions: [{ id: 'g', attachments: [{ id: 'f', name: 'p.jpg' }] }],
+      attachmentFiles: { 'attachments/g/f': { data: 'QQ==' } },
+    },
+    fs
+  );
+  expect(restored.transactions[0].attachments[0].uri).toBe('file:///doc/attachments/g/f-p.jpg');
+});
+
+test('without an fs argument the app file system is used', async () => {
+  const real = require('expo-file-system/legacy');
+  await deleteAllFor('t9');
+  expect(real.deleteAsync).toHaveBeenCalledWith('file:///default/attachments/t9/', { idempotent: true });
+});
