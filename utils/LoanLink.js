@@ -325,3 +325,17 @@ export const missedEmi = (loan, txs = [], now = new Date()) => {
       new Date(t.fullDate).getTime() <= now.getTime()
   );
 };
+
+/**
+ * The link after its transaction's amount was edited: the split still adds up to the amount.
+ * EMI / foreclosure keep the interest (capped at the amount); the rest is principal.
+ */
+export const resplitForAmount = (loanLink, amount) => {
+  if (!loanLink) return loanLink;
+  const amt = round2(num(amount));
+  if (loanLink.kind === 'disbursal') return loanLink;
+  if (loanLink.kind === 'prepayment') return { ...loanLink, principal: amt, interest: 0 };
+  if (loanLink.kind === 'charges') return { ...loanLink, principal: 0, interest: amt };
+  const interest = Math.min(round2(num(loanLink.interest)), amt);
+  return { ...loanLink, interest, principal: round2(amt - interest) };
+};

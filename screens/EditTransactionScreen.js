@@ -32,7 +32,8 @@ import { isSipDebit, linkToInvestment } from '../utils/InvestmentLink';
 import { isInvestment } from '../utils/AccountsOverview';
 import { payeeOf } from '../components/ui/TransactionRow';
 import { trackAsEmiPrefill } from '../utils/LoanForm';
-import { canLink } from '../utils/LoanLink';
+import { canLink, resplitForAmount } from '../utils/LoanLink';
+import { unlinkPayment } from '../utils/LoanService';
 import { isCardEmi } from '../utils/LoanCalculator';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
@@ -225,8 +226,16 @@ export default function EditTransactionScreen({ route, navigation }) {
       const pendingTag = normalizeTag(tagInput);
       const finalTags = pendingTag && !tags.includes(pendingTag) ? [...tags, pendingTag] : tags;
       const name = payee.trim();
+      // A linked loan payment: a new type unlinks it (the link was checked for the old type);
+      // a new amount keeps the principal + interest split adding up.
+      const newType = isTransfer ? transaction.type : type;
+      let loanChanges = {};
+      if (transaction.loanLink && newType !== transaction.type) await unlinkPayment(transaction.id);
+      else if (transaction.loanLink && newAmount !== Number(transaction.amount))
+        loanChanges = { loanLink: resplitForAmount(transaction.loanLink, newAmount) };
       await update(transaction.id, {
-        type: isTransfer ? transaction.type : type,
+        ...loanChanges,
+        type: newType,
         amount: newAmount,
         merchant: name || null,
         title: name || category,

@@ -1,5 +1,6 @@
 /** Phase 13 C6: linking a transaction to a loan; C4 detection is added to this file later. */
 import {
+  resplitForAmount,
   LINK_KINDS,
   splitGap,
   linkError,
@@ -404,4 +405,21 @@ test('C4 edges: mandate check, nameless debits, default arguments, manual source
   expect(
     loanFromDebits({ payee: 'D', emi: 10, left: 1, rate: 0, debitDay: 5 }).months
   ).toBeGreaterThanOrEqual(1);
+});
+
+test('review fix: an edited amount keeps the split adding up', () => {
+  const emi = { loanId: 'l', kind: 'emi', emiNo: 3, principal: 8000, interest: 2000 };
+  expect(resplitForAmount(emi, 9500)).toMatchObject({ principal: 7500, interest: 2000, emiNo: 3 });
+  expect(resplitForAmount(emi, 1500)).toMatchObject({ principal: 0, interest: 1500 });
+  expect(resplitForAmount({ kind: 'prepayment', principal: 5000, interest: 0 }, 6000)).toMatchObject({
+    principal: 6000,
+    interest: 0,
+  });
+  expect(resplitForAmount({ kind: 'charges', principal: 0, interest: 500 }, 590)).toMatchObject({
+    principal: 0,
+    interest: 590,
+  });
+  const d = { kind: 'disbursal', principal: 0, interest: 0 };
+  expect(resplitForAmount(d, 1)).toBe(d);
+  expect(resplitForAmount(undefined, 1)).toBeUndefined();
 });
