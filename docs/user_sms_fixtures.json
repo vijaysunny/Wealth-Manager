@@ -4,14 +4,14 @@
     {
       "id": "axis-cc-spend-01",
       "sender": "UNKNOWN (fill from phone)",
-      "body": "Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nSELVA KUMAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.",
+      "body": "Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nRAVI SHANKAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.",
       "expected": {
         "type": "expense",
         "amount": 121,
         "accountType": "Credit Card",
         "bank": "Axis Bank",
         "last4": "9070",
-        "merchant": "SELVA KUMAR",
+        "merchant": "RAVI SHANKAR",
         "refNo": null,
         "availableLimit": 275541.19,
         "balance": null

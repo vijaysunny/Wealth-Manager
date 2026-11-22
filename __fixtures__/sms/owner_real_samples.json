@@ -1,17 +1,17 @@
 {
-  "_note": "Real samples supplied by the owner. 'expected' = DESIRED behaviour; 'currentlyWrong' = observed in the Phase 10 parser. Sender IDs are unknown (samples were copied from chat) - replace with the real sender from the phone. If this repo is ever pushed to a public GitHub, replace third-party names (HARISH, NANDINI H), the autopay mandate VPA and reference numbers. Phase 12 (2026-11-21): 25 more real samples added from the owner's chat paste; WhatsApp joined the lines, so line breaks were restored to match the bank's layout. Third-party UPI names in the new samples are fakes (Kavya, LATHA); their reference numbers and personalised bank links were replaced with made-up values before pushing (2026-11-22).",
+  "_note": "Real samples supplied by the owner. 'expected' = DESIRED behaviour; 'currentlyWrong' = observed in the Phase 10 parser. Sender IDs are unknown (samples were copied from chat) - replace with the real sender from the phone. If this repo is ever pushed to a public GitHub, replace third-party names (HARISH, NANDINI H; the card-spend payee RAVI SHANKAR is already a fake), the autopay mandate VPA and reference numbers. Phase 12 (2026-11-21): 25 more real samples added from the owner's chat paste; WhatsApp joined the lines, so line breaks were restored to match the bank's layout. Third-party UPI names in the new samples are fakes (Kavya, LATHA); their reference numbers and personalised bank links were replaced with made-up values before pushing (2026-11-22).",
   "messages": [
     {
       "id": "axis-cc-spend-01",
       "sender": "",
-      "body": "Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nSELVA KUMAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.",
+      "body": "Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nRAVI SHANKAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.",
       "expected": {
         "type": "expense",
         "amount": 121,
         "accountType": "Credit Card",
         "bank": "Axis Bank",
         "last4": "9070",
-        "merchant": "SELVA KUMAR",
+        "merchant": "RAVI SHANKAR",
         "refNo": null,
         "availableLimit": 275541.19,
         "balance": null

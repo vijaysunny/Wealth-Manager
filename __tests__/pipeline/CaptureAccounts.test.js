@@ -20,7 +20,7 @@ const SMS = {
   imps178:
     'Debit INR 178.00\nAxis Bank A/c XX0973\n16-11-26 13:45:25\nIMPS/P2A/632013023016/baja\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002',
   axisCard:
-    'Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nSELVA KUMAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.',
+    'Spent INR 121 \nusing Axis Bank Credit Card no. XX9070 on 16-11-26 19:48:20 IST at \nRAVI SHANKAR. \nAvl limit: INR 275541.19. Not you? SMS BLOCK 9070 to +919951860002.',
   sbiCard:
     'Rs.143.00 spent on your SBI Credit Card ending 1987 at PRADHANMANTRIBHARTIYAJ on 08/11/26. Trxn. not done by you? Report at https://sbicard.com/Dispute',
   sbiPay:
