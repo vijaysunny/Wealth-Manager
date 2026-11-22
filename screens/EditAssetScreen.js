@@ -4,6 +4,7 @@ import { StyleSheet, Alert } from 'react-native';
 
 import { updateAccount } from '../data/Storage';
 import { deleteAccount } from '../data/Collections';
+import { hasSchedule } from '../utils/LoanCalculator';
 import { Ionicons } from '@expo/vector-icons';
 
 // Quantity-based assets. AddAsset stores stocks/gold as type 'Investment' with the
@@ -15,6 +16,7 @@ const isDebt = (a) => a.type === 'Credit Card' || a.type === 'Loan';
 
 export default function EditAssetScreen({ navigation, route }) {
   const { asset } = route.params;
+  const scheduled = asset.type === 'Loan' && hasSchedule(asset);
 
   const [name, setName] = useState(asset.name);
   // For Banks/Cash, 'balance' is what we edit. For Stocks/MF, 'quantity' is what we edit.
@@ -46,8 +48,9 @@ export default function EditAssetScreen({ navigation, route }) {
       return;
     }
     const field = isQuantityAsset(asset) ? 'quantity' : 'balance';
-    const changes = { name: name.trim(), [field]: number };
-    if (field === 'balance' && number !== Number(asset.balance))
+    // A scheduled loan's owed amount comes from its EMIs: only the name is saved here.
+    const changes = scheduled ? { name: name.trim() } : { name: name.trim(), [field]: number };
+    if (!scheduled && field === 'balance' && number !== Number(asset.balance))
       changes.balanceSetAt = new Date().toISOString();
     await updateAccount(asset.id, changes);
     navigation.goBack();
@@ -87,19 +90,36 @@ export default function EditAssetScreen({ navigation, route }) {
         <Text style={styles.label}>ASSET NAME</Text>
         <TextInput style={styles.input} value={name} onChangeText={setName} />
 
-        <Text style={styles.label}>
-          {isInvestment
-            ? 'UNITS / QUANTITY HELD'
-            : isDebt(asset)
-              ? 'AMOUNT YOU OWE (₹)'
-              : 'CURRENT BALANCE (₹)'}
-        </Text>
-        <TextInput
-          style={[styles.input, { fontSize: 24, fontWeight: 'bold' }]}
-          value={value}
-          onChangeText={setValue}
-          keyboardType="numeric"
-        />
+        {scheduled ? (
+          <>
+            <Text style={styles.hint}>
+              What you owe is worked out from the EMI schedule. To change it, edit the loan or add a
+              prepayment.
+            </Text>
+            <TouchableOpacity
+              style={styles.linkBtn}
+              onPress={() => navigation.navigate('LoanEdit', { loanId: asset.id })}
+            >
+              <Text style={styles.linkText}>Edit loan details</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>
+              {isInvestment
+                ? 'UNITS / QUANTITY HELD'
+                : isDebt(asset)
+                  ? 'AMOUNT YOU OWE (₹)'
+                  : 'CURRENT BALANCE (₹)'}
+            </Text>
+            <TextInput
+              style={[styles.input, { fontSize: 24, fontWeight: 'bold' }]}
+              value={value}
+              onChangeText={setValue}
+              keyboardType="numeric"
+            />
+          </>
+        )}
 
         {asset.type === 'Credit Card' && (
           <Text style={styles.hint}>Negative = the bank owes you (overpaid)</Text>
@@ -133,5 +153,7 @@ const styles = StyleSheet.create({
   input: { borderBottomWidth: 1, borderColor: '#ccc', fontSize: 18, paddingVertical: 10, color: '#333' },
   saveBtn: { backgroundColor: '#2196F3', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 40 },
   saveText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  linkBtn: { marginTop: 14, paddingVertical: 8 },
+  linkText: { color: '#2196F3', fontSize: 15, fontWeight: 'bold' },
   hint: { color: '#999', fontSize: 12, marginTop: 10, fontStyle: 'italic' },
 });

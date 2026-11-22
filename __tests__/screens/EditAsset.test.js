@@ -53,3 +53,27 @@ test('a loan says Amount you owe; a bank still refuses a negative balance', asyn
   fireEvent.press(screen.getByText('Update Asset'));
   expect(alert).toHaveBeenCalledWith('Error', 'Enter a valid non-negative value');
 });
+
+test('a loan with an EMI schedule: no owed field (it is worked out); points to Edit loan details; saves only the name', async () => {
+  const loan = {
+    id: 'hl',
+    type: 'Loan',
+    name: 'Home loan',
+    balance: 435000,
+    originalAmount: 500000,
+    emiAmount: 10000,
+    firstEmiDate: '2026-01-05T00:00:00.000Z',
+  };
+  await Storage.setItem('user_wealth_accounts', JSON.stringify([loan]));
+  const n = nav();
+  render(<EditAssetScreen navigation={n} route={{ params: { asset: loan } }} />);
+  expect(screen.queryByText('AMOUNT YOU OWE (₹)')).toBeNull();
+  fireEvent.press(screen.getByText('Edit loan details'));
+  expect(n.navigate).toHaveBeenCalledWith('LoanEdit', { loanId: 'hl' });
+  fireEvent.changeText(screen.getByDisplayValue('Home loan'), 'SBI home loan');
+  fireEvent.press(screen.getByText('Update Asset'));
+  await waitFor(() => expect(n.goBack).toHaveBeenCalled());
+  const [saved] = JSON.parse(await Storage.getItem('user_wealth_accounts'));
+  expect(saved).toMatchObject({ name: 'SBI home loan', balance: 435000 });
+  expect(saved.balanceSetAt).toBeUndefined();
+});

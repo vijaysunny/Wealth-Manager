@@ -82,10 +82,13 @@ export const paidCount = (loan, asOf = new Date()) => {
  * What is still owed on `asOf`. Closed loans owe 0. Prepayments ({ date, amount }) on or before
  * asOf come off the principal at their date. Without enough data the stored balance is returned.
  */
+/** True when the owed amount comes from the EMI schedule (a stored balance is then ignored). */
+export const hasSchedule = (loan) =>
+  !!loan && !!firstEmiDateOf(loan) && !!loan.emiAmount && !!loan.originalAmount;
+
 export const calculateOutstandingBalance = (loan, asOf = new Date()) => {
   if (loan.status === 'closed') return 0;
-  const first = firstEmiDateOf(loan);
-  if (!first || !loan.emiAmount || !loan.originalAmount) return parseFloat(loan.balance);
+  if (!hasSchedule(loan)) return parseFloat(loan.balance);
 
   const principal = num(loan.originalAmount);
   const emi = num(loan.emiAmount);
