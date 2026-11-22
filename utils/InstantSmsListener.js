@@ -4,6 +4,8 @@
  * Uses DeduplicationEngine to prevent double-counting with Gmail sync.
  */
 
+import { parseCardStatement } from './CardStatementSms';
+import { applyStatementSms } from './CardService';
 import SmsListener from 'react-native-android-sms-listener';
 import AsyncStorage from '../data/Storage';
 import { sendTransactionNotification } from './NotificationService';
@@ -22,6 +24,13 @@ export const startSmsListener = () => {
     const sender = message.originatingAddress || '';
     console.log('📩 SMS from:', sender);
 
+    // B7: a card statement SMS becomes that card's bill, not a transaction
+    const statement = parseCardStatement(body);
+    if (statement) {
+      if ((await AsyncStorage.getItem('sms_auto_track_enabled')) === 'false') return;
+      await applyStatementSms(statement, new Date(Number(message.timestamp) || Date.now())).catch(() => null);
+      return;
+    }
     const parsed = parseTransactionText(body, { sender, bankFallback: sender || 'Unknown' });
     if (!parsed) return;
 

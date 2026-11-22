@@ -1,6 +1,7 @@
 import SmsAndroid from 'react-native-get-sms-android';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { parseTransactionText, isTransactionalSender } from '../utils/TransactionParser';
+import { parseCardStatement } from '../utils/CardStatementSms';
 import { isAiSmsCandidate } from '../utils/ai/AiTasks';
 import { buildSmsId, hashText } from '../utils/DeduplicationEngine';
 import { collectPages } from '../utils/SmsScan';
@@ -75,7 +76,11 @@ export const scanBankSms = async (minDate = 0) => {
     console.log(`📥 ${messages.length} SMS read, ${relevant.length} from bank-like senders`);
     const unparsed = [];
     const items = parseData(relevant, unparsed);
-    return { ok: true, reason: null, items, unparsed };
+    // B7: card statement SMS → { statement, date } for the card's bill
+    const statements = relevant
+      .map((m) => ({ statement: parseCardStatement(m.body), date: new Date(Number(m.date) || Date.now()) }))
+      .filter((x) => x.statement);
+    return { ok: true, reason: null, items, unparsed, statements };
   } catch (err) {
     console.log('❌ Error reading SMS:', err);
     return { ok: false, reason: 'read_failed', items: [] };

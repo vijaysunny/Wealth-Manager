@@ -185,3 +185,34 @@ describe('syncSms', () => {
     expect(r.status).toBe('error');
   });
 });
+
+test('B7: a scanned card statement goes to the card, not into transactions; a failure does not stop the sync', async () => {
+  const st = mem();
+  const statement = {
+    bankName: 'Axis Bank',
+    lastDigits: '9070',
+    totalDue: 14480.89,
+    minDue: 336,
+    dueDate: new Date(2026, 7, 21),
+    statementDate: null,
+  };
+  const at = new Date(NOW - HOUR);
+  const applyStatement = jest.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue({});
+  const d = {
+    ...deps(st, {
+      ok: true,
+      items: [],
+      unparsed: [],
+      statements: [
+        { statement, date: at },
+        { statement, date: at },
+      ],
+    }),
+    applyStatement,
+  };
+  const r = await syncSms(d);
+  expect(applyStatement).toHaveBeenCalledTimes(2);
+  expect(applyStatement).toHaveBeenCalledWith(statement, at);
+  expect(r.added).toBe(0);
+  expect(d.save).not.toHaveBeenCalled();
+});

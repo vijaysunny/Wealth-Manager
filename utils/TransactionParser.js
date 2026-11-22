@@ -7,6 +7,7 @@
  * classification, category guessing, statement column detection, statement row
  * parsing, and PDF text-line parsing.
  */
+import { isNonTransactionNotice } from './CardStatementSms';
 
 // ── Regexes ───────────────────────────────────────────────────────────────
 
@@ -197,7 +198,8 @@ const firstMatch = (table, text) => {
 
 /** Known bank in sender + body; a wallet/app provider only if no bank is named; else null. */
 export const detectBank = (sender = '', body = '') => {
-  const t = `${sender} ${body}`.toUpperCase();
+  // Reference numbers like "NEFT/HDFCH00000000001" name the other bank's IFSC, not this account's.
+  const t = `${sender} ${body}`.toUpperCase().replace(/\b[A-Z]{4,}\d{6,}\b/g, ' ');
   return firstMatch(BANKS, t) || firstMatch(WALLET_PROVIDERS, t);
 };
 
@@ -550,6 +552,8 @@ const WALLET_SHAPES = {
 const WALLET_CATEGORY = { wallet_topup: 'Wallet Top-up', wallet_withdraw: 'Wallet Withdrawal' };
 
 export const parseTransactionText = (body, { sender = '', bankFallback = 'Unknown Bank' } = {}) => {
+  // B7: statements become the card's bill; lender EMI receipts repeat the bank debit.
+  if (isNonTransactionNotice(body)) return null;
   if (!body) return null;
   const wallet = classifyWalletEvent(body, { sender });
   if (wallet && wallet.ignore) return null;

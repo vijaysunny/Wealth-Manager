@@ -7,6 +7,7 @@ import Storage, { updateAccount } from '../data/Storage';
 import { getAll } from '../data/TransactionRepo';
 import { cardOwed, currentBill, latestAvailableOf, normalizeCard } from './CardMath';
 import { scheduleBillReminder } from './CardReminders';
+import { cardForStatement } from './CardStatementSms';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -102,7 +103,16 @@ export const saveCardStatement = async (cardId, statement) => {
     paid: 0,
   };
   const statements = [
-    ...(card.statements || []).filter((s) => new Date(s.date).toDateString() !== day),
+    ...(card.statements || []).filter(
+      (s) =>
+        new Date(s.date).toDateString() !== day &&
+        // the same bill read again (SMS after a hand entry) has the same due date
+        !(
+          entry.dueDate &&
+          s.dueDate &&
+          new Date(s.dueDate).toDateString() === new Date(entry.dueDate).toDateString()
+        )
+    ),
     entry,
   ].sort((a, b) => new Date(a.date) - new Date(b.date));
   await updateAccount(card.id, { statements });
@@ -128,4 +138,20 @@ export const syncCardReminders = async (now = new Date()) => {
   for (const c of cards)
     await scheduleBillReminder(c, currentBill(normalizeCard(c), txs, now)).catch(() => null);
   return cards.length;
+};
+
+/**
+ * B7: a parsed statement SMS (CardStatementSms) becomes the matching card's bill. The statement
+ * date is the one in the SMS, else the day the SMS arrived. No matching card → null (nothing saved).
+ */
+export const applyStatementSms = async (st, smsDate = new Date()) => {
+  const card = cardForStatement(st, await loadAccounts());
+  if (!card || !st.dueDate || !(st.totalDue >= 0)) return null;
+  return saveCardStatement(card.id, {
+    date: st.statementDate || smsDate,
+    totalDue: st.totalDue,
+    minDue: Math.min(st.minDue || 0, st.totalDue),
+    dueDate: st.dueDate,
+    source: 'sms',
+  });
 };

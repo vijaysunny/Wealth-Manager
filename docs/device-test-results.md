@@ -124,7 +124,7 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 | 2 | Look through Transactions chips and rows, Accounts, Review, pickers | No account or card number appears twice | PENDING | |
 | 3 | Settings → AI → Test; ask a question | "Working · <model>" in under 10 s; the question gets an answer | PENDING | |
 | 4 | Set up Axis card ••9070 with the real limit and statement day | "You owe" matches the Axis app (±₹1) | PENDING | |
-| 5 | After the next statement | Bill shows the right total, minimum and due date; paying from Axis marks it paid; reminder fires 3 days before if unpaid | PENDING | B7 not built: add the bill by hand until D0 samples arrive |
+| 5 | After the next statement | Bill shows the right total, minimum and due date; paying from Axis marks it paid; reminder fires 3 days before if unpaid | PENDING | Axis/SBI statement SMS read automatically (B7); check the bill appears without typing it |
 | 6 | Add a real card EMI under Liabilities | Months left and EMI match the bank app; the Liabilities total doesn't count it twice | PENDING | |
 | 7 | Link Bajaj Finance from Review → Check | Next month's ACH debit links by itself; outstanding matches the Bajaj app | PENDING | |
 | 8 | Add any other loan | Net worth changes by its outstanding amount | PENDING | |

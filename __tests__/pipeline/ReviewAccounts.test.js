@@ -168,7 +168,7 @@ test('D2: November totals from the fixtures; transfers are not spending', async 
   // (the Groww SIP stays an expense: no investment account on Groww exists)
   expect(total('expense')).toBeCloseTo(61534.19, 2);
   // 4 credits: 136193 + 40000 + 30000 + 50000
-  expect(total('income')).toBeCloseTo(256193, 2);
+  expect(total('income')).toBeCloseTo(306193, 2); // + ₹50,000 Bajaj NEFT credit (axis-neft-credit-baja-02);
   // top-ups 500 + 500, card bill 12511.38 and card payments 9145.91 + 5770 + 23618.82 are transfers
   expect(rows.some((r) => r.type === 'transfer')).toBe(false);
 });

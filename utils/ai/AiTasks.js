@@ -9,6 +9,7 @@
  *  - Long digit runs (phone numbers, full account numbers) are masked before text leaves the phone.
  *  - Everything AI-made is tagged 'ai' and SMS rows land in the normal review queue (pending).
  */
+import { isNonTransactionNotice } from '../CardStatementSms';
 import { askAi } from './AiClient';
 import {
   extractRefNo,
@@ -82,7 +83,11 @@ const MONEY_WORD_RE =
 const NOISE_RE =
   /\botp\b|one[- ]time password|verification code|\bcode is\b|will be debited|due (on|date)|\boffer\b|cashback up to|win |\bloan of\b|pre-?approved|apply now/i;
 export const isAiSmsCandidate = (body = '') =>
-  !!body && extractAmount(body) > 0 && MONEY_WORD_RE.test(body) && !NOISE_RE.test(body);
+  !!body &&
+  extractAmount(body) > 0 &&
+  MONEY_WORD_RE.test(body) &&
+  !NOISE_RE.test(body) &&
+  !isNonTransactionNotice(body); // B7: statements and lender EMI receipts
 
 const categoryList = (categories) => [...new Set([...(categories || []), 'General'])];
 

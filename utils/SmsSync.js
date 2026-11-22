@@ -18,6 +18,7 @@ import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, createDedupIndex } from './DeduplicationEngine';
 import { isReportable } from './BalanceService';
 import { formatMoney } from './Format';
+import { applyStatementSms } from './CardService';
 import { aiParseUnparsed, aiCategorizeNew, defaultAiDeps } from './ai/AiSync';
 
 export const SMS_FLAG_KEY = 'sms_auto_track_enabled';
@@ -85,7 +86,7 @@ const notifyOne = async (tx, spentBefore, limit, notify) => {
   await notify(`Spent ${formatMoney(tx.amount)} on ${tx.category}`, body);
 };
 
-const run = async ({ scan, storage, notify, save, now, ai }) => {
+const run = async ({ scan, storage, notify, save, now, ai, applyStatement }) => {
   if ((await storage.getItem(SMS_FLAG_KEY)) === 'false') return { status: 'disabled', added: 0 };
 
   const startedAt = now();
@@ -117,6 +118,14 @@ const run = async ({ scan, storage, notify, save, now, ai }) => {
   // ONE save path (B6): the repo re-checks duplicates, sets reviewStatus, resolves accounts
   // and moves balances atomically. Only what it actually stored counts as added.
   if (fresh.length > 0) fresh = (await save(fresh)).addedTxs;
+  // B7: statement SMS become the card's bill (a card that isn't found is skipped)
+  for (const { statement, date } of res.statements || []) {
+    try {
+      await applyStatement(statement, date);
+    } catch (e) {
+      console.warn('Statement not saved:', e?.message || e);
+    }
+  }
   // Advance on every successful scan (found something or not)
   await storage.setItem(LAST_SYNC_KEY, String(startedAt));
 
@@ -152,6 +161,7 @@ export const syncSms = (deps = {}) => {
     save: (txs) => saveWithDedup(txs, { balanceMode: 'captured' }),
     now: Date.now,
     ai: defaultAiDeps(),
+    applyStatement: applyStatementSms,
     ...deps,
   };
   inFlight = run(d)
