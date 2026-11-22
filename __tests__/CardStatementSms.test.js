@@ -133,7 +133,14 @@ test('edges: no "Dr." marker, missing minimum, bad dates, defaults, accounts wit
   expect(parseCardStatement(sbi.replace(/Min Amt Due Rs \d+;/, '')).minDue).toBe(0);
   expect(parseCardStatement(sbi.replace('dated 06/10/2026', 'dated 31/09/2026')).statementDate).toBeNull();
   expect(isNonTransactionNotice()).toBe(false);
-  expect(isNonTransactionNotice('Your e-statement of account is ready')).toBe(true);
+  expect(isNonTransactionNotice('Your e-statement of account is ready')).toBe(false);
+  expect(isNonTransactionNotice('E-statement of SBI Credit Card ending XX87 has been mailed.')).toBe(true);
+  // a real payment that mentions the statement is still a transaction
+  expect(
+    isNonTransactionNotice(
+      'Payment of Rs 14,480 received against your statement for Axis Bank Credit Card XX9070'
+    )
+  ).toBe(false);
   const st = parseCardStatement(axis);
   expect(cardForStatement(st)).toBeNull();
   expect(

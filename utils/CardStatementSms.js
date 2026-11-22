@@ -76,7 +76,8 @@ export const isLenderEmiReceipt = (body = '') =>
 /** Not a transaction: a card statement or a lender's EMI receipt. */
 export const isNonTransactionNotice = (body = '') =>
   !!parseCardStatement(body) ||
-  /statement .*credit card|e-statement of/i.test(body) ||
+  // a statement notice we couldn't fully read (same wordings, a field missing)
+  /statement for [\w ]*credit card[^.]*\bis generated\b|\be-statement of [\w ]*credit card\b/i.test(body) ||
   isLenderEmiReceipt(body);
 
 /**
