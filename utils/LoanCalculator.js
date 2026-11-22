@@ -117,9 +117,10 @@ export const calculateOutstandingBalance = (loan, asOf = new Date()) => {
       bal = round2(bal - (emi - round2(bal * monthlyRate)));
     }
     while (next < prepayments.length) bal -= prepayments[next++].amount;
-    // The last EMI is adjusted by the lender to clear the paise left by rounding.
-    outstanding = paid >= tenureOf(loan) ? 0 : bal;
+    outstanding = bal;
   }
+  // The last EMI is adjusted by the lender to clear the paise left by rounding (all loan types).
+  if (paid >= tenureOf(loan)) return 0;
   return Math.max(0, round2(outstanding));
 };
 

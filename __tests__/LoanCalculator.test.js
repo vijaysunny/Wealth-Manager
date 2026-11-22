@@ -124,3 +124,15 @@ test('prepayment reduces outstanding (reducing, no-cost, flat)', () => {
     )
   ).toBe(0);
 });
+
+test('no-cost: the last EMI clears the paise left by rounding (₹1,000 over 139 months)', () => {
+  const loan = {
+    originalAmount: 1000,
+    emiAmount: 7.19,
+    tenure: 139,
+    loanType: 'No Cost EMI',
+    firstEmiDate: new Date(2026, 0, 31),
+  };
+  expect(calculateOutstandingBalance(loan, emiDate(loan, 138))).toBe(7.78);
+  expect(calculateOutstandingBalance(loan, emiDate(loan, 139))).toBe(0);
+});
