@@ -114,8 +114,9 @@ test('prepayment reduces outstanding (reducing, no-cost, flat)', () => {
     loanType: 'Flat Rate',
     firstEmiDate: d(2026, 1, 1),
   };
-  expect(calculateOutstandingBalance(flat, d(2026, 3, 1))).toBe(13200 - 3300);
-  expect(calculateOutstandingBalance({ ...flat, tenure: undefined }, d(2026, 3, 1))).toBe(13200 - 3300);
+  // principal only: each ₹1,100 EMI = ₹1,000 principal + ₹100 flat interest
+  expect(calculateOutstandingBalance(flat, d(2026, 3, 1))).toBe(12000 - 3000);
+  expect(calculateOutstandingBalance({ ...flat, tenure: undefined }, d(2026, 3, 1))).toBe(12000 - 3000);
   // a prepayment that clears the loan
   expect(
     calculateOutstandingBalance(

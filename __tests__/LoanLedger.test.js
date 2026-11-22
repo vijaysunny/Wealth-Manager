@@ -225,6 +225,27 @@ test('the last EMI clears the balance; a finished loan has no next EMI', () => {
   });
 });
 
+test('flat rate: linking a payment does not change what is owed (same basis as the schedule)', () => {
+  const flat = {
+    id: 'pl',
+    originalAmount: 100000,
+    emiAmount: 5000,
+    tenure: 24,
+    interestRate: 10,
+    loanType: 'Flat Rate',
+    firstEmiDate: iso(2026, 5, 7),
+  };
+  const before = loanOwed(flat, [], NOW);
+  const linkedEmi = pay('f1', iso(2026, 11, 7), 5000, {
+    kind: 'emi',
+    emiNo: 7,
+    principal: 4166.67,
+    interest: 833.33,
+  });
+  expect(loanOwed(flat, [linkedEmi], NOW)).toBe(before);
+  expect(before).toBe(100000 - 7 * (5000 - 833.33));
+});
+
 test('loanOwed: old rule without links, the ledger with them', () => {
   expect(loanOwed(loan, [], d(2026, 11, 14))).toBe(154384.71);
   expect(loanOwed(loan, [emi5, emi6, prepay()], NOW)).toBe(144384.71);

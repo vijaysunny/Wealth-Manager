@@ -102,9 +102,11 @@ export const calculateOutstandingBalance = (loan, asOf = new Date()) => {
   if (loan.loanType === 'No Cost EMI') {
     outstanding = principal - emi * paid - prepaid;
   } else if (loan.loanType === 'Flat Rate') {
-    const tenureMonths = num(loan.tenure) || 12;
-    const totalPayable = principal + principal * (rate / 100) * (tenureMonths / 12);
-    outstanding = totalPayable - emi * paid - prepaid;
+    // Principal still owed (future interest isn't owed yet): each EMI repays EMI − the flat
+    // monthly interest on the original amount. Same basis as LoanLedger, so linking a payment
+    // doesn't change the figure.
+    const flatInterest = round2((principal * rate) / 1200);
+    outstanding = principal - (emi - flatInterest) * paid - prepaid;
   } else {
     // Reducing balance: month by month, prepayments applied on their dates.
     const monthlyRate = rate / 12 / 100;
