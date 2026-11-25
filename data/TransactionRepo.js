@@ -4,6 +4,7 @@ import { atomic, getDatabase, insertRow, decodeRow, encodeTransaction, sourceId 
 import { applyCategoryRules } from '../utils/FinanceTools';
 import { readValue, writeValue } from './Storage';
 import { countHits } from '../utils/PayeeRules';
+import { markRefundCandidates } from '../utils/RefundMatch';
 import { checkBudgetAlerts } from '../utils/MonthlyBudgets';
 import { filterNew } from '../utils/DeduplicationEngine';
 import { applyToAccounts, reverseOnAccounts, applyCapturedToAccounts } from '../utils/BalanceService';
@@ -58,6 +59,7 @@ const persistMany = (transactions, { balanceMode = 'none', dedup = true } = {}) 
       ({ accounts, txs: candidates } = resolveCaptures(accounts, candidates));
       candidates = linkSipDebits(accounts, candidates); // B3: SIP debit → transfer to the investment
     }
+    candidates = markRefundCandidates(candidates, current); // E5: Review → Check offers a match
     const addedTxs = [];
     const applyTxs = []; // rows whose balance effect is applied below (new + re-linked)
     const live = current.slice();

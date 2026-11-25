@@ -16,6 +16,7 @@ import AsyncStorage from '../data/Storage';
 import { scanBankSms } from '../components/RealSmsReader';
 import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, createDedupIndex } from './DeduplicationEngine';
+import { refundWords } from './RefundMatch';
 import { isReportable } from './BalanceService';
 import { formatMoney } from './Format';
 import { applyStatementSms } from './CardService';
@@ -53,6 +54,7 @@ export const smsToTransaction = (sms) => {
     category: sms.category,
     account: sms.bankName,
     tags: ['auto-sync'],
+    ...(sms.type === 'income' && refundWords(sms.body) ? { refundWords: true } : {}), // E5
     categorySource: 'parser', // A5
     nameSource: 'parser',
     extractedBalance: sms.currentBalance,

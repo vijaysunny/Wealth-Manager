@@ -4,8 +4,7 @@
  * transfers = money moved between own accounts (card bills, wallet top-ups, self transfers).
  * savedPct only exists when there is income, capped to -100…100 (the old tile showed -201%).
  */
-import { isReportable } from './BalanceService';
-import { spendAmount } from './LoanLink';
+import { monthSpend, monthIncome } from './Report';
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -15,17 +14,12 @@ export const inMonth = (tx, date) => {
 };
 
 export const monthSummary = (txs = [], date = new Date()) => {
-  let spent = 0;
-  let income = 0;
+  // spending and income follow the shared report rules (utils/Report: splits, refunds, settlements)
+  const spent = monthSpend(txs, date).total;
+  const income = monthIncome(txs, date);
   let transfers = 0;
-  for (const tx of txs) {
-    if (!tx || !inMonth(tx, date)) continue;
-    const amount = Number(tx.amount) || 0;
-    if (tx.type === 'transfer') transfers += amount;
-    else if (!isReportable(tx)) continue;
-    else if (tx.type === 'expense') spent += spendAmount(tx);
-    else if (tx.type === 'income') income += amount;
-  }
+  for (const tx of txs)
+    if (tx && tx.type === 'transfer' && inMonth(tx, date)) transfers += Number(tx.amount) || 0;
   const savedPct =
     income > 0 ? Math.max(-100, Math.min(100, Math.round(((income - spent) / income) * 100))) : null;
   return { spent: round2(spent), income: round2(income), transfers: round2(transfers), savedPct };

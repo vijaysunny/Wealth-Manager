@@ -1,27 +1,10 @@
 /**
  * BudgetView.js (C5.6) - pure helpers for the Budget screen.
  */
-import { isReportable } from './BalanceService';
-import { spendAmount } from './LoanLink';
+import { monthSpend } from './Report';
 
-const round2 = (n) => Math.round(n * 100) / 100;
-
-/** Spending (reportable expenses only) for the month: { total, byCategory }. */
-export const monthSpending = (txs = [], date = new Date()) => {
-  let total = 0;
-  const byCategory = {};
-  for (const tx of txs) {
-    if (!tx || tx.type !== 'expense' || !isReportable(tx)) continue;
-    const d = new Date(tx.fullDate || tx.date);
-    if (d.getFullYear() !== date.getFullYear() || d.getMonth() !== date.getMonth()) continue;
-    const amount = spendAmount(tx); // C6: Interest only loans leave principal out
-    const cat = tx.category || 'Other';
-    total += amount;
-    byCategory[cat] = (byCategory[cat] || 0) + amount;
-  }
-  Object.keys(byCategory).forEach((k) => (byCategory[k] = round2(byCategory[k])));
-  return { total: round2(total), byCategory };
-};
+/** Spending for the month: { total, byCategory } (shared report rules, utils/Report). */
+export const monthSpending = (txs = [], date = new Date()) => monthSpend(txs, date);
 
 /** ok below 90 %, warn above 90 %, over above 100 %; none without a limit. */
 export const budgetStatus = (spent, limit) => {

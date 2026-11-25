@@ -22,10 +22,18 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Storage from '../data/Storage';
 import { getAll, update, remove } from '../data/TransactionRepo';
-import { parseAmount } from '../utils/Format';
+import { parseAmount, formatMoney } from '../utils/Format';
 import { addAttachment, removeAttachment, sizeLabel } from '../utils/Attachments';
 import { pickFromCamera, pickFromGallery, pickAnyFile, openAttachment } from '../utils/AttachmentPickers';
-import { resolveCaptureAccount, bulkApply, undoLastBulk } from '../utils/FeatureService';
+import {
+  resolveCaptureAccount,
+  bulkApply,
+  undoLastBulk,
+  linkRefund,
+  unlinkRefund,
+  dismissRefund,
+} from '../utils/FeatureService';
+import RefundMatchSheet from '../components/RefundMatchSheet';
 import { normalizeTag, recentTags, visibleTags, SYSTEM_TAGS } from '../utils/Tags';
 import { shortAccountName } from '../utils/TransactionList';
 import { isSipDebit, linkToInvestment } from '../utils/InvestmentLink';
@@ -84,6 +92,8 @@ export default function EditTransactionScreen({ route, navigation }) {
   const [showDate, setShowDate] = useState(false);
   const [resolvedHere, setResolvedHere] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [allTxs, setAllTxs] = useState([]); // E4/E5: links between rows (refunds, splits)
+  const [matching, setMatching] = useState(false);
   const loadedRow = useRef(null); // the stored row before this edit (A3 matches on its payee)
 
   const suggested =
@@ -112,6 +122,7 @@ export default function EditTransactionScreen({ route, navigation }) {
       return;
     }
     setUsedTags(recentTags(allTxs, 12));
+    setAllTxs(allTxs);
     loadedRow.current = allTxs.find((x) => String(x.id) === String(transaction.id)) || null;
   }, [type, category, transaction.id, navigation]);
   useEffect(() => {
@@ -130,6 +141,9 @@ export default function EditTransactionScreen({ route, navigation }) {
       null
   );
   const userTags = visibleTags(tags);
+  const refundOfRow =
+    transaction.refundOf != null ? allTxs.find((x) => String(x.id) === String(transaction.refundOf)) : null;
+  const refunds = allTxs.filter((x) => x.refundOf != null && String(x.refundOf) === String(transaction.id));
   const suggestions = useMemo(() => usedTags.filter((g) => !tags.includes(g)).slice(0, 8), [usedTags, tags]);
 
   const addTagText = (text) => {
@@ -704,6 +718,44 @@ export default function EditTransactionScreen({ route, navigation }) {
             </View>
           ) : null}
 
+          {/* E5: refunds link to the purchase they refund; both rows open each other */}
+          {transaction.type === 'income' && refundOfRow ? (
+            <View style={{ marginBottom: space.md }}>
+              <AppButton
+                title={`Refund of ${payeeOf(refundOfRow)} · ${refundOfRow.date || ''}`.trim()}
+                variant="secondary"
+                icon="return-down-back-outline"
+                onPress={() => navigation.push?.('TransactionDetail', { transaction: refundOfRow })}
+              />
+              <AppButton
+                title="Unlink refund"
+                variant="secondary"
+                style={{ marginTop: space.sm }}
+                onPress={() =>
+                  unlinkRefund(transaction.id)
+                    .then(() => navigation.goBack())
+                    .catch((e) => Alert.alert('Could not unlink', e.message))
+                }
+              />
+            </View>
+          ) : transaction.type === 'income' && !transaction.refundOf ? (
+            <AppButton
+              title="Match to a purchase (refund)"
+              variant="secondary"
+              icon="return-down-back-outline"
+              style={{ marginBottom: space.md }}
+              onPress={() => setMatching(true)}
+            />
+          ) : null}
+          {refunds.length ? (
+            <AppButton
+              title={`Refunded ${formatMoney(refunds.reduce((a, r) => a + Number(r.amount || 0), 0))}`}
+              variant="secondary"
+              icon="return-down-back-outline"
+              style={{ marginBottom: space.md }}
+              onPress={() => navigation.push?.('TransactionDetail', { transaction: refunds[0] })}
+            />
+          ) : null}
           {/* C6: a bank debit (or the loan amount coming in) can be linked to a loan */}
           {linkable ? (
             <AppButton
@@ -751,6 +803,26 @@ export default function EditTransactionScreen({ route, navigation }) {
         <AppButton title="Save changes" size="lg" loading={saving} onPress={handleSave} />
       </View>
 
+      <RefundMatchSheet
+        visible={matching}
+        refund={transaction}
+        txs={allTxs}
+        accountsById={accountsById}
+        onClose={() => setMatching(false)}
+        onLink={(purchaseId) =>
+          linkRefund(transaction.id, purchaseId)
+            .then(() => {
+              setMatching(false);
+              navigation.goBack();
+            })
+            .catch((e) => Alert.alert('Could not link', e.message))
+        }
+        onNotRefund={() =>
+          dismissRefund(transaction.id)
+            .then(() => setMatching(false))
+            .catch((e) => Alert.alert('Could not save', e.message))
+        }
+      />
       <UpdateSimilarSheet
         visible={!!similar}
         result={similar?.result}

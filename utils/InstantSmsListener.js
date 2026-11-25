@@ -10,6 +10,7 @@ import SmsListener from 'react-native-android-sms-listener';
 import AsyncStorage from '../data/Storage';
 import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, buildSmsId, hashText } from './DeduplicationEngine';
+import { refundWords } from './RefundMatch';
 import { isReportable } from './BalanceService';
 import { parseTransactionText } from './TransactionParser';
 import { capturedFields } from './CaptureMapper';
@@ -55,6 +56,7 @@ export const startSmsListener = () => {
       category: parsed.category,
       account: bankName,
       tags: ['auto-sms'],
+      ...(parsed.type === 'income' && refundWords(body) ? { refundWords: true } : {}), // E5
       extractedBalance: parsed.balance,
       ...capturedFields(parsed),
     };

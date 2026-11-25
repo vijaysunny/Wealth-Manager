@@ -16,6 +16,8 @@ import {
   pickCaptureWallet,
   rejectCapture,
   resolveCaptureAccount,
+  linkRefund,
+  dismissRefund,
 } from '../utils/FeatureService';
 import { discoverAccounts, checkItems } from '../utils/AccountDiscovery';
 import { describeCapture, reviewHint, debitCardQuestion } from '../utils/ReviewText';
@@ -29,6 +31,8 @@ import Segmented from '../components/ui/Segmented';
 import { accountInitials } from '../utils/TransactionList';
 import { emiSuggestions } from '../utils/LoanLink';
 import { loadDismissed } from '../utils/LoanService';
+import RefundMatchSheet from '../components/RefundMatchSheet';
+import { payeeOf } from '../utils/PayeeMatch';
 
 const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
 
@@ -66,6 +70,12 @@ export default function ReviewAccountsScreen({ navigation, route }) {
 
   const groups = useMemo(() => discoverAccounts(rows), [rows]);
   const checks = useMemo(() => checkItems(rows), [rows]);
+  // E5: refund-like credits not yet matched to a purchase
+  const refundHints = useMemo(
+    () => rows.filter((x) => x.refundCandidate && !x.refundOf && !x.refundDismissed),
+    [rows]
+  );
+  const [matching, setMatching] = useState(null);
   const loanHints = useMemo(
     () => emiSuggestions(rows, Object.fromEntries(accounts.map((a) => [String(a.id), a])), dismissed),
     [rows, accounts, dismissed]
@@ -260,6 +270,16 @@ export default function ReviewAccountsScreen({ navigation, route }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
       <ScreenHeader title="Review" onBack={() => navigation.goBack()} />
+      <RefundMatchSheet
+        visible={!!matching}
+        refund={matching}
+        txs={rows}
+        accountsById={Object.fromEntries(accounts.map((a) => [String(a.id), a]))}
+        busy={busy}
+        onClose={() => setMatching(null)}
+        onLink={(purchaseId) => run(() => linkRefund(matching.id, purchaseId)).then(() => setMatching(null))}
+        onNotRefund={() => run(() => dismissRefund(matching.id)).then(() => setMatching(null))}
+      />
       <Text style={[styles.intro, { color: t.text2 }]}>
         We read these accounts from your bank SMS. Add each one once and every matching transaction moves to
         it.
@@ -270,7 +290,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
         onChange={setTab}
         options={[
           { value: 'new', label: `New accounts · ${groups.length}` },
-          { value: 'check', label: `Check · ${checks.length + loanHints.length}` },
+          { value: 'check', label: `Check · ${checks.length + loanHints.length + refundHints.length}` },
         ]}
       />
       {tab === 'new' ? (
@@ -293,6 +313,21 @@ export default function ReviewAccountsScreen({ navigation, route }) {
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <View>
+              {refundHints.map((r) => (
+                <Card key={`refund-${r.id}`} testID={`refund-hint-${r.id}`}>
+                  <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 15 }}>
+                    {`${formatMoney(r.amount)} from ${payeeOf(r)}`}
+                  </Text>
+                  <Text style={{ color: t.warnText, marginTop: 4 }}>Looks like a refund.</Text>
+                  <AppButton
+                    title="Match to a purchase"
+                    size="sm"
+                    variant="secondary"
+                    style={{ marginTop: space.sm, alignSelf: 'flex-start' }}
+                    onPress={() => setMatching(r)}
+                  />
+                </Card>
+              ))}
               {loanHints.map((h) => (
                 <Card key={h.key} testID={`loan-hint-${h.key}`}>
                   <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 15 }}>
@@ -314,7 +349,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
             </View>
           }
           ListEmptyComponent={
-            loanHints.length ? null : (
+            loanHints.length || refundHints.length ? null : (
               <Text style={{ color: t.muted, textAlign: 'center', marginTop: space.xxl }}>
                 Nothing to check.
               </Text>

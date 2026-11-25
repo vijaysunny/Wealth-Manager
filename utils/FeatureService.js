@@ -23,6 +23,7 @@ import { reconcileTransaction } from './WalletReconcile';
 import { bulkPatch } from './PayeeMatch';
 import { ruleFromChanges, mergeRule, restoreRule } from './PayeeRules';
 import { recordBulk, takeUndo } from './UndoStore';
+import { linkChanges as refundLinkChanges, UNLINK_CHANGES } from './RefundMatch';
 export const bulkUpdate = (ids, changes) =>
   atomic(async (db) => {
     for (const id of ids) await updateInDb(db, id, changes);
@@ -97,6 +98,21 @@ export const undoLastBulk = () =>
     return { restored: plan.patches.length, skipped: plan.skipped };
   });
 const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
+/** E5: link a refund to the purchase it refunds (checked: it can't exceed what is left). */
+export const linkRefund = (refundId, purchaseId) =>
+  atomic(async (db) => {
+    const all = (await db.getAllAsync('SELECT data FROM transactions')).map(decodeRow);
+    const refund = all.find((t) => String(t.id) === String(refundId));
+    const purchase = all.find((t) => String(t.id) === String(purchaseId));
+    if (!refund || !purchase) throw new Error('Transaction no longer exists');
+    return updateInDb(db, refund.id, refundLinkChanges(refund, purchase, all));
+  });
+/** E5: undo a link; the refund counts as income again. */
+export const unlinkRefund = (refundId) =>
+  atomic((db) => updateInDb(db, refundId, { ...UNLINK_CHANGES, refundCandidate: true }));
+/** E5: "Not a refund": it stays income and is not offered again. */
+export const dismissRefund = (id) =>
+  atomic((db) => updateInDb(db, id, { refundCandidate: false, refundDismissed: true }));
 export const bulkDelete = async (ids) => {
   await atomic(async (db) => {
     for (const id of ids) await removeInDb(db, id);

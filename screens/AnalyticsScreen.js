@@ -1,13 +1,13 @@
 import { Text, View, ScrollView, TouchableOpacity, SafeAreaView } from '../components/Theme';
-import { getAll, monthlyAggregates } from '../data/TransactionRepo';
+import { getAll } from '../data/TransactionRepo';
 import React, { useState, useCallback } from 'react';
 import { StyleSheet, Dimensions, RefreshControl, Modal } from 'react-native';
 import { BarChart, PieChart } from 'react-native-chart-kit';
 import AsyncStorage from '../data/Storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { computeNetWorth, isReportable } from '../utils/BalanceService';
-import { spendAmount } from '../utils/LoanLink';
+import { computeNetWorth } from '../utils/BalanceService';
+import { monthSpend, monthIncome } from '../utils/Report';
 import { formatMoney } from '../utils/Format';
 
 // FIX: subtract extra padding so chart never overflows the screen
@@ -363,19 +363,13 @@ export default function AnalyticsScreen({ navigation }) {
     const wealthJson = await AsyncStorage.getItem('user_wealth_accounts');
     const transactions = txJson ? JSON.parse(txJson) : [];
     const accounts = wealthJson ? JSON.parse(wealthJson) : [];
-    const validTxs = transactions.filter(isReportable);
-    const aggregates = await monthlyAggregates(
-      new Date(selectedYear, selectedMonth - 5, 1).toISOString(),
-      new Date(selectedYear, selectedMonth + 1, 1).toISOString()
-    );
 
     // --- SELECTED MONTH SUMMARY ---
-    const selectedTxs = validTxs.filter((t) => {
-      const d = new Date(t.fullDate || t.date);
-      return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-    });
-    const income = selectedTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const expense = selectedTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + spendAmount(t), 0);
+    // the shared report rules (utils/Report): splits, refunds, settlements, Interest-only loans
+    const monthDate = new Date(selectedYear, selectedMonth, 1);
+    const spend = monthSpend(transactions, monthDate);
+    const income = monthIncome(transactions, monthDate);
+    const expense = spend.total;
     const savings = income - expense;
     const rate = income > 0 ? Math.round((savings / income) * 100) : 0;
     setSummary({
@@ -386,12 +380,7 @@ export default function AnalyticsScreen({ navigation }) {
     });
 
     // --- PIE CHART (expense categories for selected month) ---
-    let catMap = {};
-    selectedTxs
-      .filter((t) => t.type === 'expense')
-      .forEach((t) => {
-        catMap[t.category] = (catMap[t.category] || 0) + spendAmount(t);
-      });
+    const catMap = Object.fromEntries(Object.entries(spend.byCategory).filter(([, v]) => v > 0));
     const colors = [
       '#F44336',
       '#E91E63',
@@ -429,18 +418,9 @@ export default function AnalyticsScreen({ navigation }) {
         y -= 1;
       }
       months.push(MONTHS[m]);
-      const key = y + '-' + String(m + 1).padStart(2, '0');
-      // C6: the SQL total has whole EMIs; take out principal of Interest only loans
-      const loanPrincipal = validTxs
-        .filter((t) => t.type === 'expense' && t.loanLink?.interestOnly)
-        .filter((t) => {
-          const d = new Date(t.fullDate);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === key;
-        })
-        .reduce((s, t) => s + (Number(t.amount) - spendAmount(t)), 0);
-      const mExp =
-        (aggregates.find((row) => row.month === key && row.type === 'expense')?.total || 0) - loanPrincipal;
-      const mInc = aggregates.find((row) => row.month === key && row.type === 'income')?.total || 0;
+      const mDate = new Date(y, m, 1);
+      const mExp = monthSpend(transactions, mDate).total;
+      const mInc = monthIncome(transactions, mDate);
       expenseTrend.push(mExp || 0);
       incomeTrend.push(mInc || 0);
     }

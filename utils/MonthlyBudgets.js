@@ -1,7 +1,6 @@
 import Storage, { readValue, writeValue } from '../data/Storage';
 import { atomic } from '../data/Database';
-import { isReportable } from './BalanceService';
-import { spendAmount } from './LoanLink';
+import { monthSpend } from './Report';
 import { sendTransactionNotification } from './NotificationService';
 export const monthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 export const computeMonthlyBudget = (date, config, transactions, fallback = { limit: 0, categories: {} }) => {
@@ -20,9 +19,7 @@ export const computeMonthlyBudget = (date, config, transactions, fallback = { li
     const limit = Number(base.limit) || 0;
     const effectiveLimit = limit + (base.rollover ? carry : 0);
     if (key === target) return { ...base, limit, carry: base.rollover ? carry : 0, effectiveLimit };
-    const spent = transactions
-      .filter((tx) => tx.type === 'expense' && isReportable(tx) && monthKey(new Date(tx.fullDate)) === key)
-      .reduce((sum, tx) => sum + spendAmount(tx), 0);
+    const spent = monthSpend(transactions, cursor).total;
     carry = Math.max(0, effectiveLimit - spent);
     cursor.setMonth(cursor.getMonth() + 1);
   }
@@ -53,16 +50,12 @@ export const checkBudgetAlerts = () => {
     const txs = JSON.parse((await Storage.getItem('user_transactions')) || '[]');
     const date = new Date();
     const config = await getMonthlyBudget(date, txs);
-    const current = txs.filter(
-      (tx) => tx.type === 'expense' && isReportable(tx) && monthKey(new Date(tx.fullDate)) === monthKey(date)
-    );
+    const month = monthSpend(txs, date);
     for (const [category, limit] of Object.entries({
       Overall: config.effectiveLimit,
       ...config.categories,
     })) {
-      const spent = current
-        .filter((tx) => category === 'Overall' || tx.category === category)
-        .reduce((sum, tx) => sum + spendAmount(tx), 0);
+      const spent = category === 'Overall' ? month.total : month.byCategory[category] || 0;
       if (!(limit > 0)) continue;
       for (const threshold of [80, 100]) {
         const key = `budget_alert_${monthKey(date)}_${category}_${threshold}`;

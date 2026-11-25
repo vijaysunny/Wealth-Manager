@@ -9,7 +9,7 @@
 import { parseSearch, matchesSearch, visibleTags } from './Tags';
 import { payeeOf } from './PayeeMatch';
 import { shortAccountName } from './TransactionList';
-import { totalsOf } from './Report';
+import { totalsOf, categoriesOf } from './Report';
 import { formatMoney } from './Format';
 
 export const SORTS = ['newest', 'oldest', 'amountDesc', 'amountAsc', 'payee'];
@@ -29,6 +29,7 @@ export const FLAG_LABELS = {
   loanPayments: 'Loan payments',
   manual: 'Added by hand',
   sms: 'From SMS',
+  refunds: 'Possible refunds',
 };
 const TYPE_LABELS = { expense: 'Expenses', income: 'Income', transfer: 'Transfers' };
 const AUTO_TAGS = ['imported', 'recurring', 'auto'];
@@ -95,6 +96,7 @@ const FLAG_TESTS = {
   loanPayments: (tx) => !!tx.loanLink,
   manual: (tx) => !tx.smsId && !tx.gmailMsgId && !(tx.tags || []).some((g) => AUTO_TAGS.includes(g)),
   sms: (tx) => !!tx.smsId,
+  refunds: (tx) => !!tx.refundCandidate && !tx.refundOf,
 };
 
 /** Either side of a transfer, by id; older rows that only store the account's name match by name. */
@@ -138,7 +140,7 @@ export const runQuery = (rows, query, asOf = new Date(), { accounts = [] } = {})
     }
     if (q.types.length && !q.types.includes(tx.type)) return false;
     if (accs.length && !accs.some((a) => onAccount(tx, a))) return false;
-    if (q.categories.length && !q.categories.includes(tx.category)) return false;
+    if (q.categories.length && !categoriesOf(tx).some((c) => q.categories.includes(c))) return false;
     const amt = Number(tx.amount);
     if (q.amountMin != null && !(amt >= q.amountMin)) return false;
     if (q.amountMax != null && !(amt <= q.amountMax)) return false;
