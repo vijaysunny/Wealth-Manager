@@ -12,20 +12,10 @@ import MoneyText from './MoneyText';
 import { getCategoryIcon } from '../../utils/icons';
 import { visibleTags } from '../../utils/Tags';
 import { shortAccountName } from '../../utils/TransactionList';
+import { payeeOf } from '../../utils/PayeeMatch';
 
-// A5: the payee comes first. A title that only repeats the category (SMS rows without a
-// merchant are titled with it) never hides a merchant or counterparty.
-export const payeeOf = (tx) => {
-  const title = tx.title && tx.title !== tx.category ? tx.title : null;
-  return (
-    tx.merchant ||
-    tx.counterparty ||
-    title ||
-    tx.category ||
-    tx.title ||
-    (tx.type === 'transfer' ? 'Transfer' : 'Transaction')
-  );
-};
+// A5: the payee comes first (shared with PayeeMatch, which groups rows by it).
+export { payeeOf };
 
 /** The outline variant of an Ionicons name when the font has one (design: outline icons). */
 export const outlineIcon = (name) => {
