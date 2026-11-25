@@ -31,6 +31,7 @@ import { shortAccountName } from '../utils/TransactionList';
 import { isSipDebit, linkToInvestment } from '../utils/InvestmentLink';
 import { isInvestment } from '../utils/AccountsOverview';
 import { payeeOf } from '../components/ui/TransactionRow';
+import { payeeName } from '../utils/PayeeMatch';
 import { trackAsEmiPrefill } from '../utils/LoanForm';
 import { canLink, resplitForAmount } from '../utils/LoanLink';
 import { unlinkPayment } from '../utils/LoanService';
@@ -233,8 +234,14 @@ export default function EditTransactionScreen({ route, navigation }) {
       if (transaction.loanLink && newType !== transaction.type) await unlinkPayment(transaction.id);
       else if (transaction.loanLink && newAmount !== Number(transaction.amount))
         loanChanges = { loanLink: resplitForAmount(transaction.loanLink, newAmount) };
+      // A5: what the owner changed here is theirs; rules and "apply to similar" leave it alone
+      const sources = {
+        ...(category !== (transaction.category || '') ? { categorySource: 'user' } : {}),
+        ...(name && name !== payeeName(transaction) ? { nameSource: 'user' } : {}),
+      };
       await update(transaction.id, {
         ...loanChanges,
+        ...sources,
         type: newType,
         amount: newAmount,
         merchant: name || null,

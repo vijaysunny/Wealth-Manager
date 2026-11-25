@@ -53,6 +53,8 @@ export const smsToTransaction = (sms) => {
     category: sms.category,
     account: sms.bankName,
     tags: ['auto-sync'],
+    categorySource: 'parser', // A5
+    nameSource: 'parser',
     extractedBalance: sms.currentBalance,
     ...(sms.captured || {}),
   };
@@ -109,7 +111,12 @@ const run = async ({ scan, storage, notify, save, now, ai, applyStatement }) => 
   }
   // Optional AI steps (Settings → AI assistant): read SMS the parser missed, categorize 'General'
   for (const item of await aiParseUnparsed(res.unparsed, storage, ai)) {
-    const tx = { ...smsToTransaction(item), tags: ['auto-sync', 'ai'] };
+    const tx = {
+      ...smsToTransaction(item),
+      tags: ['auto-sync', 'ai'],
+      categorySource: 'ai',
+      nameSource: 'ai',
+    };
     if (dedup.check(tx)) continue;
     fresh.push(tx);
   }

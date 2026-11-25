@@ -1,3 +1,4 @@
+import { isLocked, sourceOf } from './PayeeMatch';
 export const xirr = (flows) => {
   if (flows.length < 2 || !flows.some((f) => f.amount < 0) || !flows.some((f) => f.amount > 0)) return null;
   const ordered = flows
@@ -70,12 +71,14 @@ export const filterHistory = (
     );
   });
 export const applyCategoryRules = (tx, rules) => {
+  // A5: a category the owner chose (by hand or in bulk) is never changed by a rule
+  if (isLocked(sourceOf(tx, 'category'))) return tx;
   const text = [tx.title, tx.merchant, tx.vpa, tx.note].join(' ').toLowerCase();
   const hit = rules.find((rule) => rule.pattern?.trim() && text.includes(rule.pattern.toLowerCase()));
   if (!hit) return tx;
   // A merchant the owner has named is a known payee, not a possible self-transfer
   const { transferCandidate, ...rest } = tx;
-  return { ...rest, category: hit.category };
+  return { ...rest, category: hit.category, categorySource: 'rule' };
 };
 export const escapeCsv = (value) => {
   const safe = String(value ?? '').replace(/^[=+@-]/, (match) => "'" + match);

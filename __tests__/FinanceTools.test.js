@@ -73,3 +73,19 @@ test('a category rule hit clears the self-transfer hint (owner named the payee)'
   expect(out.transferCandidate).toBeUndefined();
   expect(applyCategoryRules(tx, [{ pattern: 'zzz', category: 'X' }])).toBe(tx);
 });
+
+describe('A5: category sources', () => {
+  const tx = { id: 1, title: 'SWIGGY', merchant: 'SWIGGY', category: 'General' };
+  const rules = [{ pattern: 'swiggy', category: 'Food' }];
+  test('a rule marks the category as set by a rule', () => {
+    expect(applyCategoryRules(tx, rules)).toMatchObject({ category: 'Food', categorySource: 'rule' });
+  });
+  test.each(['user', 'bulk'])('a category set by %s is never changed by a rule', (src) => {
+    const own = { ...tx, category: 'Health', categorySource: src };
+    expect(applyCategoryRules(own, rules)).toBe(own);
+  });
+  test('parser and AI categories can still be changed by a rule', () => {
+    expect(applyCategoryRules({ ...tx, categorySource: 'ai' }, rules).category).toBe('Food');
+    expect(applyCategoryRules({ ...tx, categorySource: 'parser' }, rules).category).toBe('Food');
+  });
+});
