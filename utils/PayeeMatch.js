@@ -159,3 +159,36 @@ export const findSimilar = (before, after, all, opts = {}) => {
   }
   return { matches, skipped, changes, keptCategory, keptName };
 };
+
+/**
+ * A3: the changes "apply to similar" makes to one row (empty object when none). A name or category
+ * the owner set by hand is kept unless opts.force (they picked these rows themselves, A4).
+ * System tags are kept.
+ */
+export const bulkPatch = (row, changes, { force = false } = {}) => {
+  const patch = {};
+  const nameFree = force || sourceOf(row, 'name') !== 'user';
+  const catFree = force || sourceOf(row, 'category') !== 'user';
+  if (changes.name && nameFree && payeeName(row) !== changes.name.to) {
+    patch.merchant = changes.name.to;
+    patch.title = changes.name.to;
+    patch.nameSource = 'bulk';
+  }
+  if (changes.category && catFree && row.category !== changes.category.to) {
+    patch.category = changes.category.to;
+    patch.categorySource = 'bulk';
+    // a row without a payee is titled with its category: keep that in step
+    if (!patch.title && row.title === row.category) patch.title = changes.category.to;
+  }
+  if (changes.tags) {
+    const cur = (row.tags || []).map(normalizeTag).filter(Boolean);
+    const next = [
+      ...new Set([
+        ...cur.filter((g) => !changes.tags.remove.includes(g)),
+        ...changes.tags.add.map(normalizeTag),
+      ]),
+    ];
+    if (JSON.stringify(next) !== JSON.stringify(cur)) patch.tags = next;
+  }
+  return patch;
+};

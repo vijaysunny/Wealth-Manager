@@ -6,6 +6,7 @@ import {
   willChangeFor,
   sourceOf,
   isLocked,
+  bulkPatch,
 } from '../utils/PayeeMatch';
 
 const tx = (over = {}) => ({
@@ -205,5 +206,38 @@ describe('edge cases', () => {
   test('payeeOf falls back to Transfer / Transaction', () => {
     expect(payeeKey({ type: 'transfer' })).toBeNull();
     expect(payeeKey({ type: 'expense' })).toBeNull();
+  });
+});
+
+describe('bulkPatch', () => {
+  const changes = {
+    name: { from: 'SWIGGY INST', to: 'Swiggy Instamart' },
+    category: { from: 'General', to: 'Food' },
+    tags: { add: ['groceries'], remove: ['work'] },
+  };
+  test('name, category and tags with bulk sources; system tags kept', () => {
+    expect(bulkPatch(tx({ tags: ['auto-sms', 'work'] }), changes)).toEqual({
+      merchant: 'Swiggy Instamart',
+      title: 'Swiggy Instamart',
+      nameSource: 'bulk',
+      category: 'Food',
+      categorySource: 'bulk',
+      tags: ['auto-sms', 'groceries'],
+    });
+  });
+  test('owner-set name and category are kept unless forced', () => {
+    const own = tx({ nameSource: 'user', categorySource: 'user', category: 'Health', tags: ['groceries'] });
+    expect(bulkPatch(own, changes)).toEqual({});
+    expect(bulkPatch(own, changes, { force: true })).toMatchObject({
+      category: 'Food',
+      merchant: 'Swiggy Instamart',
+    });
+  });
+  test('a row titled with its category keeps its title in step', () => {
+    expect(bulkPatch({ title: 'General', category: 'General' }, { category: changes.category })).toEqual({
+      category: 'Food',
+      categorySource: 'bulk',
+      title: 'Food',
+    });
   });
 });

@@ -20,10 +20,83 @@ import {
   reverseOnAccounts,
 } from './BalanceService';
 import { reconcileTransaction } from './WalletReconcile';
+import { bulkPatch } from './PayeeMatch';
+import { ruleFromChanges, mergeRule, restoreRule } from './PayeeRules';
+import { recordBulk, takeUndo } from './UndoStore';
 export const bulkUpdate = (ids, changes) =>
   atomic(async (db) => {
     for (const id of ids) await updateInDb(db, id, changes);
   });
+/**
+ * A3/A4: copy the owner's changes ({ name?, category?, tags? }) to these rows in one batch,
+ * through updateInDb. opts.ruleKey also saves a payee rule for future transactions;
+ * opts.force changes names/categories the owner set by hand (rows they picked themselves).
+ * The change can be undone (undoLastBulk) for 10 minutes. Returns { updated }.
+ */
+export const bulkApply = async (
+  ids,
+  changes,
+  { ruleKey = null, ruleLabel = '', force = false, kind = 'apply' } = {}
+) => {
+  const { entries, rule } = await atomic(async (db) => {
+    const done = [];
+    for (const id of ids) {
+      const row = await db.getFirstAsync('SELECT data FROM transactions WHERE id = ?', String(id));
+      if (!row) continue;
+      const old = decodeRow(row);
+      const patch = bulkPatch(old, changes, { force });
+      if (!Object.keys(patch).length) continue;
+      await updateInDb(db, old.id, patch);
+      done.push({ id: old.id, before: pick(old, Object.keys(patch)), after: patch });
+    }
+    let saved = null;
+    const newRule = ruleKey ? ruleFromChanges(ruleKey, changes, ruleLabel) : null;
+    if (newRule) {
+      const rules = JSON.parse((await readValue(db, 'category_rules')) || '[]');
+      const merged = mergeRule(rules, newRule);
+      await writeValue(db, 'category_rules', JSON.stringify(merged.rules));
+      saved = { id: merged.id, previous: merged.previous };
+    }
+    return { entries: done, rule: saved };
+  });
+  recordBulk(kind, entries, rule ? { rule } : {});
+  return { updated: entries.length };
+};
+/** B5: change the same fields on every row (category, account, reports…) with undo. */
+export const bulkSet = async (ids, changes, kind = 'set') => {
+  const entries = await atomic(async (db) => {
+    const done = [];
+    for (const id of ids) {
+      const row = await db.getFirstAsync('SELECT data FROM transactions WHERE id = ?', String(id));
+      if (!row) continue;
+      const old = decodeRow(row);
+      const fields = Object.keys(changes).filter(
+        (f) => JSON.stringify(old[f] ?? null) !== JSON.stringify(changes[f] ?? null)
+      );
+      if (!fields.length) continue;
+      const patch = pick(changes, fields);
+      await updateInDb(db, old.id, patch);
+      done.push({ id: old.id, before: pick(old, fields), after: patch });
+    }
+    return done;
+  });
+  recordBulk(kind, entries);
+  return { updated: entries.length };
+};
+/** B6: undo the last bulk change. Returns { restored, skipped } or null when there is none. */
+export const undoLastBulk = () =>
+  atomic(async (db) => {
+    const rows = (await db.getAllAsync('SELECT data FROM transactions')).map(decodeRow);
+    const plan = takeUndo(rows);
+    if (!plan) return null;
+    for (const { id, changes } of plan.patches) await updateInDb(db, id, changes);
+    if (plan.rule) {
+      const rules = JSON.parse((await readValue(db, 'category_rules')) || '[]');
+      await writeValue(db, 'category_rules', JSON.stringify(restoreRule(rules, plan.rule)));
+    }
+    return { restored: plan.patches.length, skipped: plan.skipped };
+  });
+const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
 export const bulkDelete = async (ids) => {
   await atomic(async (db) => {
     for (const id of ids) await removeInDb(db, id);

@@ -13,7 +13,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import TabBar from './components/ui/TabBar';
-import { AppState, InteractionManager } from 'react-native';
+import SnackbarHost from './components/ui/SnackbarHost';
+import { AppState, InteractionManager, View } from 'react-native';
 
 // --- SCREENS ---
 import HomeScreen from './screens/HomeScreen';
@@ -229,7 +230,10 @@ export default function App() {
         <ThemeProvider>
           <AppLock>
             <Onboarding>
-              <AppContent />
+              <View style={{ flex: 1 }}>
+                <AppContent />
+                <SnackbarHost />
+              </View>
             </Onboarding>
           </AppLock>
         </ThemeProvider>

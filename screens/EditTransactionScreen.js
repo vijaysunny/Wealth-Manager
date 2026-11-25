@@ -5,7 +5,7 @@
  * Sticky Save changes. Transfers keep their amount, accounts and type (change them by
  * deleting and recreating the transfer); payee, tags, date and files can still be edited.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -31,7 +31,10 @@ import { shortAccountName } from '../utils/TransactionList';
 import { isSipDebit, linkToInvestment } from '../utils/InvestmentLink';
 import { isInvestment } from '../utils/AccountsOverview';
 import { payeeOf } from '../components/ui/TransactionRow';
-import { payeeName } from '../utils/PayeeMatch';
+import { payeeName, payeeKey, findSimilar } from '../utils/PayeeMatch';
+import { bulkApply, undoLastBulk } from '../utils/FeatureService';
+import { showSnackbar } from '../utils/Snackbar';
+import UpdateSimilarSheet from '../components/UpdateSimilarSheet';
 import { trackAsEmiPrefill } from '../utils/LoanForm';
 import { canLink, resplitForAmount } from '../utils/LoanLink';
 import { unlinkPayment } from '../utils/LoanService';
@@ -82,6 +85,7 @@ export default function EditTransactionScreen({ route, navigation }) {
   const [showDate, setShowDate] = useState(false);
   const [resolvedHere, setResolvedHere] = useState(false);
   const [saving, setSaving] = useState(false);
+  const loadedRow = useRef(null); // the stored row before this edit (A3 matches on its payee)
 
   const suggested =
     transaction.accountUnresolved && !resolvedHere && transaction.suggestedAccount
@@ -109,6 +113,7 @@ export default function EditTransactionScreen({ route, navigation }) {
       return;
     }
     setUsedTags(recentTags(allTxs, 12));
+    loadedRow.current = allTxs.find((x) => String(x.id) === String(transaction.id)) || null;
   }, [type, category, transaction.id, navigation]);
   useEffect(() => {
     load().catch((e) => Alert.alert('Load error', e.message));
@@ -239,7 +244,7 @@ export default function EditTransactionScreen({ route, navigation }) {
         ...(category !== (transaction.category || '') ? { categorySource: 'user' } : {}),
         ...(name && name !== payeeName(transaction) ? { nameSource: 'user' } : {}),
       };
-      await update(transaction.id, {
+      const saved = await update(transaction.id, {
         ...loanChanges,
         ...sources,
         type: newType,
@@ -254,11 +259,53 @@ export default function EditTransactionScreen({ route, navigation }) {
         fullDate: date.toISOString(),
         excludeFromReports: !countInReports,
       });
+      // A3: offer to copy payee / category / tag changes to the same payee's other transactions
+      const before = loadedRow.current || transaction;
+      const found = findSimilar(before, saved, await getAll(), { categories });
+      if (found.matches.length) {
+        setSimilar({ result: found, before });
+        return;
+      }
       navigation.goBack();
     } catch (e) {
       Alert.alert('Could not save', e.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const [similar, setSimilar] = useState(null); // A3: { result, before } while the sheet is open
+  const [applying, setApplying] = useState(false);
+  const onlyThis = () => {
+    setSimilar(null);
+    navigation.goBack();
+  };
+  const applySimilar = async ({ ids, changes, future }) => {
+    setApplying(true);
+    try {
+      const { before } = similar;
+      const { updated } = await bulkApply(ids, changes, {
+        ruleKey: future ? payeeKey(before, { categories }) : null,
+        ruleLabel: payeeName(before),
+      });
+      setSimilar(null);
+      navigation.goBack();
+      showSnackbar({
+        text: `Updated ${updated} transaction${updated === 1 ? '' : 's'}`,
+        duration: 10000,
+        action: {
+          label: 'Undo',
+          onPress: async () => {
+            const r = await undoLastBulk().catch(() => null);
+            if (!r) return showSnackbar({ text: 'Nothing to undo' });
+            showSnackbar({ text: r.skipped ? `Undone · ${r.skipped} changed since, kept` : 'Undone' });
+          },
+        },
+      });
+    } catch (e) {
+      Alert.alert('Could not update', e.message);
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -705,6 +752,14 @@ export default function EditTransactionScreen({ route, navigation }) {
         <AppButton title="Save changes" size="lg" loading={saving} onPress={handleSave} />
       </View>
 
+      <UpdateSimilarSheet
+        visible={!!similar}
+        result={similar?.result}
+        oldName={similar ? payeeName(similar.before) || similar.before.category : ''}
+        busy={applying}
+        onOnlyThis={onlyThis}
+        onUpdate={applySimilar}
+      />
       {showDate && (
         <DateTimePicker
           value={date}
