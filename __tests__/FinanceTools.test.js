@@ -89,3 +89,74 @@ describe('A5: category sources', () => {
     expect(applyCategoryRules({ ...tx, categorySource: 'parser' }, rules).category).toBe('Food');
   });
 });
+
+describe('A6: payee rules', () => {
+  const sms = (over = {}) => ({
+    id: 9,
+    type: 'expense',
+    merchant: 'SWIGGY INST',
+    title: 'SWIGGY INST',
+    category: 'General',
+    tags: ['auto-sms'],
+    ...over,
+  });
+  const payee = {
+    id: 'p1',
+    kind: 'payee',
+    payeeKey: 'swiggy inst',
+    rename: 'Swiggy Instamart',
+    category: 'Food',
+    tagsAdd: ['groceries'],
+  };
+  const contains = { id: 'c1', pattern: 'swiggy', category: 'Dining', tagsAdd: ['delivery'] };
+  test('payee rules come before contains rules; rename, category and tags with their sources', () => {
+    const out = applyCategoryRules(sms(), [contains, payee]);
+    expect(out).toMatchObject({
+      merchant: 'Swiggy Instamart',
+      title: 'Swiggy Instamart',
+      nameSource: 'rule',
+      category: 'Food',
+      categorySource: 'rule',
+    });
+    expect(out.tags).toEqual(['auto-sms', 'groceries', 'delivery']);
+    expect(out.ruleIds).toEqual(['p1', 'c1']);
+  });
+  test('a rule matches the original SMS name, not the renamed one', () => {
+    expect(
+      applyCategoryRules(sms({ merchant: 'Swiggy Instamart', title: 'Swiggy Instamart' }), [payee])
+    ).toMatchObject({ category: 'General' });
+  });
+  test.each(['user', 'bulk'])('never overrides a %s category or name; tags still added', (src) => {
+    const out = applyCategoryRules(sms({ categorySource: src, nameSource: src, category: 'Health' }), [
+      payee,
+    ]);
+    expect(out).toMatchObject({ category: 'Health', merchant: 'SWIGGY INST' });
+    expect(out.tags).toContain('groceries');
+  });
+  test("tagsRemove removes only tags a rule added, never the owner's", () => {
+    const remover = { id: 'p2', kind: 'payee', payeeKey: 'swiggy inst', tagsRemove: ['delivery', 'work'] };
+    const out = applyCategoryRules(sms({ tags: ['work'] }), [remover, { ...contains, category: undefined }]);
+    // the payee rule runs first, so 'delivery' was not there yet when it ran
+    expect(out.tags).toEqual(['work', 'delivery']);
+    const both = {
+      id: 'p3',
+      kind: 'payee',
+      payeeKey: 'swiggy inst',
+      tagsAdd: ['x'],
+      tagsRemove: ['x', 'work'],
+    };
+    expect(applyCategoryRules(sms({ tags: ['work'] }), [both]).tags).toEqual(['work']);
+  });
+  test('old rules without kind still work and a row titled with its category keeps it in step', () => {
+    const out = applyCategoryRules({ title: 'General', category: 'General', note: 'ZOMATO order' }, [
+      { pattern: 'zomato', category: 'Food' },
+    ]);
+    expect(out).toMatchObject({ category: 'Food', title: 'Food' });
+    expect(out.ruleIds).toBeUndefined();
+  });
+  test('no rules or a rule with nothing to do leaves the row as is', () => {
+    const tx = sms();
+    expect(applyCategoryRules(tx, undefined)).toBe(tx);
+    expect(applyCategoryRules(tx, [{ id: 'e', kind: 'payee', payeeKey: 'swiggy inst' }])).toBe(tx);
+  });
+});

@@ -123,29 +123,21 @@ export const willChangeFor = (row, changes) => {
 const newestFirst = (a, b) => String(b.fullDate || '').localeCompare(String(a.fullDate || ''));
 
 /**
- * Other rows from the same payee that this edit could be copied to.
- * Matches on the payee before the edit (the others still carry the old name) and after it.
- * Returns { matches: [{ ...row, willChange }], skipped: [{ id, reason }], changes, keptCategory, keptName }.
+ * The rows `changes` could be copied to, out of `rows` (already the same payee): newest first,
+ * transfers and loan payments skipped, `type` (when given) must match. A name or category the
+ * owner set by hand is kept and counted (keptName / keptCategory).
  */
-export const findSimilar = (before, after, all, opts = {}) => {
-  const changes = diffEdit(before, after);
-  const empty = { matches: [], skipped: [], changes, keptCategory: 0, keptName: 0 };
-  if (!Object.keys(changes).length || before.type === 'transfer') return empty;
-  const keys = new Set([payeeKey(before, opts), payeeKey(after, opts)].filter(Boolean));
-  if (!keys.size) return empty;
+export const matchRows = (rows, changes, { type = null } = {}) => {
   const matches = [];
   const skipped = [];
   let keptCategory = 0;
   let keptName = 0;
-  const rows = (all || [])
-    .filter((r) => r && !r.deleted && String(r.id) !== String(before.id) && keys.has(payeeKey(r, opts)))
-    .sort(newestFirst);
-  for (const r of rows) {
+  for (const r of rows.slice().sort(newestFirst)) {
     if (r.type === 'transfer') {
       skipped.push({ id: r.id, reason: 'transfer' });
       continue;
     }
-    if (r.type !== before.type) continue;
+    if (type && r.type !== type) continue;
     if (r.loanLink) {
       skipped.push({ id: r.id, reason: 'loan' });
       continue;
@@ -157,7 +149,24 @@ export const findSimilar = (before, after, all, opts = {}) => {
     if (!willChange.length) continue;
     matches.push({ ...r, willChange });
   }
-  return { matches, skipped, changes, keptCategory, keptName };
+  return { matches, skipped, keptCategory, keptName };
+};
+
+/**
+ * Other rows from the same payee that this edit could be copied to.
+ * Matches on the payee before the edit (the others still carry the old name) and after it.
+ * Returns { matches: [{ ...row, willChange }], skipped: [{ id, reason }], changes, keptCategory, keptName }.
+ */
+export const findSimilar = (before, after, all, opts = {}) => {
+  const changes = diffEdit(before, after);
+  const empty = { matches: [], skipped: [], changes, keptCategory: 0, keptName: 0 };
+  if (!Object.keys(changes).length || before.type === 'transfer') return empty;
+  const keys = new Set([payeeKey(before, opts), payeeKey(after, opts)].filter(Boolean));
+  if (!keys.size) return empty;
+  const rows = (all || []).filter(
+    (r) => r && !r.deleted && String(r.id) !== String(before.id) && keys.has(payeeKey(r, opts))
+  );
+  return { ...matchRows(rows, changes, { type: before.type }), changes };
 };
 
 /**

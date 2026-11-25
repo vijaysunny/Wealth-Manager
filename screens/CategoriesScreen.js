@@ -6,7 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
-import { AppButton, Chip, ScreenHeader } from '../components/ui';
+import { AppButton, Card, Chip, ListRow, ScreenHeader } from '../components/ui';
 
 export const DEFAULT_CATS = [
   'Food',
@@ -67,6 +67,13 @@ export default function CategoriesScreen({ navigation }) {
         contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: space.xxl }}
         keyboardShouldPersistTaps="handled"
       >
+        <Card padding={0} style={{ paddingHorizontal: space.lg, marginBottom: space.lg }}>
+          <ListRow
+            label="Payee rules"
+            sublabel="Rename, categorise and tag new transactions from a payee"
+            onPress={() => navigation.navigate('PayeeRules')}
+          />
+        </Card>
         <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'center' }}>
           <TextInput
             testID="new-category"

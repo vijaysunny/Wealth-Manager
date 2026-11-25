@@ -315,11 +315,6 @@ export default function SettingsScreen({ navigation }) {
             />
             <Divider t={t} />
             <ListRow
-              label="Category rules"
-              onPress={() => navigation.navigate('MoneyTool', { tab: 'Rules' })}
-            />
-            <Divider t={t} />
-            <ListRow
               label="New transfer between accounts"
               onPress={() => navigation.navigate('MoneyTool', { tab: 'Transfers' })}
             />

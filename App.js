@@ -38,6 +38,7 @@ import ReviewAccountsScreen from './screens/ReviewAccountsScreen';
 import ScanSmsScreen from './screens/ScanSmsScreen';
 import BackupScreen from './screens/BackupScreen';
 import CategoriesScreen from './screens/CategoriesScreen';
+import PayeeRulesScreen from './screens/PayeeRulesScreen';
 import BankEmiScreen from './screens/BankEmiScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardSetupScreen from './screens/CardSetupScreen';
@@ -198,6 +199,7 @@ function AppContent() {
         <Stack.Screen name="ScanSms" component={ScanSmsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Backup" component={BackupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Categories" component={CategoriesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="PayeeRules" component={PayeeRulesScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanDetail" component={LoanDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="BankEmi" component={BankEmiScreen} options={{ headerShown: false }} />

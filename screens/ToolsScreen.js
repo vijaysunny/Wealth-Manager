@@ -11,12 +11,10 @@ import { bulkUpdate, bulkDelete, contributeToGoal, saveNetWorthSnapshot } from '
 import { filterHistory, xirr, amortize } from '../utils/FinanceTools';
 import { exportHistory } from '../utils/HistoryExport';
 import { parseAmount, parseNonNegative, formatMoney } from '../utils/Format';
-import { mutateList } from '../data/Collections';
 // C4: the Money tools hub is gone. Each section is its own screen (route MoneyTool, param tab),
 // opened from where it belongs; review lives in Review accounts.
 export const TOOL_TITLES = {
   Transfers: 'New transfer',
-  Rules: 'Category rules',
   History: 'Bulk edit & export',
   Goals: 'Goal contributions',
   Wealth: 'Money calculators',
@@ -52,15 +50,13 @@ export default function ToolsScreen({ navigation, route }) {
   const [accounts, setAccounts] = useState([]),
     [rows, setRows] = useState([]),
     [goals, setGoals] = useState([]),
-    [rules, setRules] = useState([]),
     [snapshots, setSnapshots] = useState([]);
   // B5: Card detail → Record payment pre-fills bank → card and the amount left on the bill.
   const prefill = route.params?.prefill || {};
   const [from, setFrom] = useState(prefill.fromId ?? ''),
     [to, setTo] = useState(prefill.toId ?? ''),
     [amount, setAmount] = useState(prefill.amount ? String(prefill.amount) : '');
-  const [pattern, setPattern] = useState(''),
-    [category, setCategory] = useState('');
+  const [category, setCategory] = useState('');
   const [query, setQuery] = useState(''),
     [accountFilter, setAccountFilter] = useState(''),
     [min, setMin] = useState(''),
@@ -79,11 +75,10 @@ export default function ToolsScreen({ navigation, route }) {
   const [card, setCard] = useState('');
   const load = useCallback(async () => {
     const values = Object.fromEntries(
-      await Storage.multiGet(['user_wealth_accounts', 'user_goals', 'category_rules', 'networth_history'])
+      await Storage.multiGet(['user_wealth_accounts', 'user_goals', 'networth_history'])
     );
     setAccounts(JSON.parse(values.user_wealth_accounts || '[]'));
     setGoals(JSON.parse(values.user_goals || '[]'));
-    setRules(JSON.parse(values.category_rules || '[]'));
     setSnapshots(JSON.parse(values.networth_history || '[]'));
     setRows(await getAll());
   }, []);
@@ -182,40 +177,6 @@ export default function ToolsScreen({ navigation, route }) {
                 })
               }
             />
-          </View>
-        )}
-        {tab === 'Rules' && (
-          <View>
-            <Text style={{ fontWeight: 'bold' }}>Category rules (first match wins)</Text>
-            <Field label="Merchant / VPA / text contains" value={pattern} onChangeText={setPattern} />
-            <Field label="Category" value={category} onChangeText={setCategory} />
-            <AppButton
-              title="Add rule"
-              onPress={() =>
-                run(async () => {
-                  if (!pattern.trim() || !category.trim())
-                    throw new Error('Enter matching text and category');
-                  await mutateList('category_rules', (list) => [
-                    ...list,
-                    { id: Date.now(), pattern: pattern.trim(), category: category.trim() },
-                  ]);
-                  setPattern('');
-                })
-              }
-            />
-            {rules.map((rule) => (
-              <View key={rule.id}>
-                <Text>
-                  {rule.pattern} → {rule.category}
-                </Text>
-                <AppButton
-                  title="Remove rule"
-                  onPress={() =>
-                    run(() => mutateList('category_rules', (list) => list.filter((r) => r.id !== rule.id)))
-                  }
-                />
-              </View>
-            ))}
           </View>
         )}
         {tab === 'History' && (

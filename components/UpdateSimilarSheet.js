@@ -63,7 +63,15 @@ const Check = ({ on, round, label, onPress, t }) => (
   </Pressable>
 );
 
-export default function UpdateSimilarSheet({ visible, result, oldName, onOnlyThis, onUpdate, busy = false }) {
+export default function UpdateSimilarSheet({
+  visible,
+  result,
+  oldName,
+  onOnlyThis,
+  onUpdate,
+  busy = false,
+  showFuture = true, // false: "Apply to past transactions now" from the rules screen (the rule exists)
+}) {
   const t = useTokens();
   const changes = useMemo(() => result?.changes || {}, [result]);
   const matches = useMemo(() => result?.matches || [], [result]);
@@ -143,7 +151,7 @@ export default function UpdateSimilarSheet({ visible, result, oldName, onOnlyThi
             accessibilityRole="header"
             style={{ color: t.text, fontFamily: fonts.display, fontSize: 22, marginBottom: space.xs }}
           >
-            {`Apply to ${n} more from this payee?`}
+            {showFuture ? `Apply to ${n} more from this payee?` : `Apply to ${n} past transactions?`}
           </Text>
           <Text style={{ color: t.text2, fontFamily: fonts.body, fontSize: 15, marginBottom: space.lg }}>
             Other transactions from <Text style={{ fontFamily: fonts.semibold }}>{oldName}</Text>. Pick which
@@ -224,28 +232,35 @@ export default function UpdateSimilarSheet({ visible, result, oldName, onOnlyThi
             ) : null}
           </View>
 
-          <View
-            style={{
-              borderWidth: 1,
-              borderColor: t.border,
-              borderRadius: radius.lg,
-              paddingHorizontal: space.md,
-              marginBottom: space.lg,
-            }}
-          >
-            <AppSwitch
-              testID="future-switch"
-              label="Also for future SMS"
-              sublabel={anyTicked ? ruleSummary(oldName, ch) : null}
-              value={future && anyTicked}
-              disabled={!anyTicked}
-              onValueChange={setFuture}
-            />
-          </View>
+          {showFuture ? (
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: t.border,
+                borderRadius: radius.lg,
+                paddingHorizontal: space.md,
+                marginBottom: space.lg,
+              }}
+            >
+              <AppSwitch
+                testID="future-switch"
+                label="Also for future SMS"
+                sublabel={anyTicked ? ruleSummary(oldName, ch) : null}
+                value={future && anyTicked}
+                disabled={!anyTicked}
+                onValueChange={setFuture}
+              />
+            </View>
+          ) : null}
         </ScrollView>
         <View style={{ flexDirection: 'row', gap: space.md }}>
           <View style={{ flex: 1 }}>
-            <AppButton title="Only this one" variant="secondary" size="lg" onPress={onOnlyThis} />
+            <AppButton
+              title={showFuture ? 'Only this one' : 'Not now'}
+              variant="secondary"
+              size="lg"
+              onPress={onOnlyThis}
+            />
           </View>
           <View style={{ flex: 1 }}>
             <AppButton
@@ -253,7 +268,7 @@ export default function UpdateSimilarSheet({ visible, result, oldName, onOnlyThi
               size="lg"
               loading={busy}
               disabled={!anyTicked || n === 0}
-              onPress={() => onUpdate({ ids, changes: ch, future: future && anyTicked })}
+              onPress={() => onUpdate({ ids, changes: ch, future: showFuture && future && anyTicked })}
             />
           </View>
         </View>

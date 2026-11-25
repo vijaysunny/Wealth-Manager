@@ -126,6 +126,7 @@ const buildTx = (entry, dueDate) => ({
   amount: entry.amount,
   type: entry.type,
   category: entry.category || 'General',
+  ...(entry.category ? { categorySource: 'user' } : {}), // A6: the owner chose it; rules leave it alone
   account: entry.account || 'Cash',
   date: dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
   fullDate: dueDate.toISOString(),

@@ -162,3 +162,34 @@ test('integration: findSimilar then bulkApply on the old name', async () => {
   expect(rows[2]).toMatchObject({ merchant: 'Swiggy Instamart', category: 'Food' });
   expect(rows[3].category).toBe('Health');
 });
+
+test('integration: a rule saved from the sheet renames, categorises and tags the next SMS; hits counted', async () => {
+  await bulkApply([2], changes, { ruleKey: 'swiggy inst', ruleLabel: 'SWIGGY INST' });
+  await Repo.addMany(
+    [
+      tx(8, { smsId: 'sms:new', merchant: 'SWIGGY INST', title: 'SWIGGY INST' }),
+      tx(9, { smsId: 'sms:hand', categorySource: 'user', category: 'Health' }),
+    ],
+    { balanceMode: 'none' }
+  );
+  const rows = await byId();
+  expect(rows[8]).toMatchObject({
+    merchant: 'Swiggy Instamart',
+    category: 'Food',
+    categorySource: 'rule',
+    nameSource: 'rule',
+  });
+  expect(rows[8].tags).toEqual(['auto-sms', 'groceries']);
+  expect(rows[9].category).toBe('Health');
+  expect((await rules())[0].hits).toBe(2);
+});
+
+test('rules apply to statement imports and recurring postings, not to manual entries', async () => {
+  await bulkApply([2], { category: changes.category }, { ruleKey: 'swiggy inst' });
+  await Repo.addMany(
+    [tx(10, { tags: ['imported'] }), tx(11, { tags: ['recurring', 'auto'] }), tx(12, { tags: [] })],
+    { balanceMode: 'none' }
+  );
+  const rows = await byId();
+  expect([rows[10].category, rows[11].category, rows[12].category]).toEqual(['Food', 'Food', 'General']);
+});

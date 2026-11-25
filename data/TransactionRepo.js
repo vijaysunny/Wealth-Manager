@@ -2,7 +2,8 @@ import { deleteAllFor } from '../utils/Attachments';
 import { linkSipDebits } from '../utils/InvestmentLink';
 import { atomic, getDatabase, insertRow, decodeRow, encodeTransaction, sourceId } from './Database';
 import { applyCategoryRules } from '../utils/FinanceTools';
-import { readValue } from './Storage';
+import { readValue, writeValue } from './Storage';
+import { countHits } from '../utils/PayeeRules';
 import { checkBudgetAlerts } from '../utils/MonthlyBudgets';
 import { filterNew } from '../utils/DeduplicationEngine';
 import { applyToAccounts, reverseOnAccounts, applyCapturedToAccounts } from '../utils/BalanceService';
@@ -37,11 +38,14 @@ export const moveBalances = async (db, task) => {
 const persistMany = (transactions, { balanceMode = 'none', dedup = true } = {}) =>
   atomic(async (db) => {
     const rules = JSON.parse((await readValue(db, 'category_rules')) || '[]');
-    transactions = transactions.map((tx) =>
-      tx.smsId || tx.gmailMsgId
-        ? applyCategoryRules({ ...tx, reviewStatus: tx.reviewStatus || 'pending' }, rules)
-        : tx
-    );
+    // A6: rules apply to every capture, statement import and recurring posting (not manual entries,
+    // whose category the owner picks; a category set by hand is never changed)
+    transactions = transactions.map((tx) => {
+      const capture = tx.smsId || tx.gmailMsgId;
+      if (capture) return applyCategoryRules({ ...tx, reviewStatus: tx.reviewStatus || 'pending' }, rules);
+      const tags = tx.tags || [];
+      return tags.includes('imported') || tags.includes('recurring') ? applyCategoryRules(tx, rules) : tx;
+    });
     const current = (await db.getAllAsync('SELECT data FROM transactions')).map(decodeRow);
     const rejected = new Set(JSON.parse((await readValue(db, 'rejected_sources')) || '[]'));
     let candidates = (dedup ? filterNew(transactions, current) : transactions).filter(
@@ -104,6 +108,8 @@ const persistMany = (transactions, { balanceMode = 'none', dedup = true } = {}) 
     if (balanceMode === 'captured') await moveBalances(db, () => applyCapturedToAccounts(accounts, applyTxs));
     if (balanceMode === 'delta')
       await moveBalances(db, (accounts) => addedTxs.reduce(applyToAccounts, accounts));
+    const counted = countHits(rules, addedTxs);
+    if (counted !== rules) await writeValue(db, 'category_rules', JSON.stringify(counted));
     return { added: addedTxs.length, skipped: transactions.length - addedTxs.length, addedTxs };
   });
 export const addMany = async (...args) => {
