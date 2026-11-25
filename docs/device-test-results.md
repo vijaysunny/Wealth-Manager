@@ -129,3 +129,24 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 | 7 | Link Bajaj Finance from Review → Check | Next month's ACH debit links by itself; outstanding matches the Bajaj app | PENDING | |
 | 8 | Add any other loan | Net worth changes by its outstanding amount | PENDING | |
 | 9 | Link a real EMI with the lender's split; link a prepayment | "Principal still owed" matches the lender (±₹1); the new end date matches | PENDING | |
+
+---
+
+# Phase 14 device checks (plan C4, E7)
+
+**Status: not started.** Pending until the owner confirms on the phone. Scenarios are copied from `docs/PHASE14_PLAN.md` § C4 and § E7.
+
+| Field | Value |
+|---|---|
+| Date | |
+| Device / Android version | |
+| App build (commit / EAS build id) | |
+
+| # | Scenario | Expected | Result | Notes / evidence |
+|---|---|---|---|---|
+| C4-1 | On one "SWIGGY INST" transaction rename it to "Swiggy Instamart", set Food, add #groceries | The sheet shows all three changes and the other transactions; Update; the list shows the new name; Budget shows the new totals; `#groceries` finds them; Undo works within 10 s | PENDING | |
+| C4-2 | Leave "Also for future SMS" on | The next Swiggy SMS arrives renamed, as Food, tagged #groceries | PENDING | |
+| C4-3 | Filter November + Expenses + Axis Card | The total matches the card's "This cycle" spend for the same dates | PENDING | |
+| C4-4 | Sort by amount, switch to another app and back; then restart the app | Sort and filters still there; after a restart the sort is remembered and filters are cleared | PENDING | |
+| C4-5 | Long-press → select 5 → Tag #tax-2026 → search `#tax-2026` | Shows those 5 | PENDING | |
+| C4-6 | Scroll Transactions with a full year of SMS | Smooth | PENDING | |

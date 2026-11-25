@@ -193,3 +193,21 @@ test('rules apply to statement imports and recurring postings, not to manual ent
   const rows = await byId();
   expect([rows[10].category, rows[11].category, rows[12].category]).toEqual(['Food', 'Food', 'General']);
 });
+
+test('C2: after apply-to-similar, Budget moves the sum from General to Food, #groceries finds them, Undo restores', async () => {
+  const { monthSpending } = require('../utils/BudgetView');
+  const { runQuery, defaultQuery } = require('../utils/TransactionQuery');
+  const month = new Date(2026, 10, 15);
+  const before = monthSpending(await Repo.getAll(), month).byCategory;
+  await bulkApply([1, 2], changes);
+  const after = monthSpending(await Repo.getAll(), month).byCategory;
+  expect(round(after.Food || 0)).toBe(200);
+  expect(round(after.General || 0)).toBe(round(before.General - 200));
+  const found = runQuery(await Repo.getAll(), { ...defaultQuery(), text: '#groceries' }, month).rows.map(
+    (r) => r.id
+  );
+  expect(found.sort()).toEqual([1, 2]);
+  await undoLastBulk();
+  expect(monthSpending(await Repo.getAll(), month).byCategory).toEqual(before);
+});
+const round = (n) => Math.round(n * 100) / 100;

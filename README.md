@@ -50,6 +50,14 @@ Gmail is switched off by default (`EXPO_PUBLIC_ENABLE_GMAIL=false`); the owner r
 | `utils/TransferPairing.js` | Words a bank debit for a card bill carries | The owner's bank-side SMS for a card bill payment. |
 | `utils/TransactionParser.js` wallet rules | Paytm Wallet, Amazon Pay, FASTag, MobiKwik names; FASTag "recharge"; wallet → bank returns | Real SMS from those wallets (only the Axis UPI Lite top-up is real). |
 
+## Organising transactions
+
+- **Apply to similar.** Change a transaction's payee name, category or tags and save: if the same payee has other transactions, a sheet offers to copy the changes ("Apply to N more from this payee?"). Untick a change or a transaction to leave it out. "Also for future SMS" saves a payee rule. "Updated N transactions · Undo" lasts 10 seconds, and the last bulk change can be undone for 10 minutes. A category or name you set by hand on another transaction is kept; loan payments and transfers are skipped.
+- **Same payee** means the same UPI ID, or the same name after dropping case, punctuation, "Pvt Ltd" and similar words and reference numbers. There is no fuzzy matching: "SWIGGY INST" and "Swiggy Instamart" are different payees until you rename one.
+- **Payee rules** (Settings → Categories → Payee rules) rename, categorise and tag new SMS, Gmail, statement-import and recurring transactions from a payee. They never change a category or name you set by hand, and never remove a tag you added. Each rule shows how often it was used. Add a rule from a recent payee or "contains text"; ⋯ → "Apply to past transactions now" runs the same sheet for past rows.
+- **Transactions list.** The Filter button opens Sort & filter: date (this month, last month, last 3 months, this FY from 1 April, custom), type, accounts, categories, amount range and "Show only" (needs review, has file, has tags, not in reports, loan payments, added by hand, from SMS). Active filters show as removable chips. The summary line shows the count and what was spent (the same rules as Budget: transfers and rows left out of reports don't count). The sort is remembered; filters reset when the app restarts. Budget category rows and Home's "Spent this month" open the list already filtered.
+- **Select mode.** Long-press a transaction or tap Select. The bar changes Category, Tag, Account, "Not in reports" or deletes; ⋯ has Rename payee and Export selected. Category and Account skip loan payments and transfers. Every change except Delete can be undone.
+
 ## Data and recovery
 
 The first run migrates AsyncStorage to SQLite in a transaction and checks the row count. It retains user_transactions_backup and a complete sqlite_migration_backup in the original storage. Corrupt rows or duplicate IDs abort migration with a retry screen; original data remains available for recovery. Legacy imports do not record whether their balances were adjusted, so verify balances after migration.
