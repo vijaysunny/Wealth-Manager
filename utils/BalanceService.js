@@ -39,7 +39,8 @@ const num = (v) => {
 // ── Report / net-worth helpers ────────────────────────────────────────────
 
 /** One filter for every report (Home, Budget, History, Savings, Analytics, alerts). [C11] */
-export const isReportable = (tx) => !!tx && tx.type !== 'transfer' && !tx.excludeFromReports;
+export { isReportable } from './Report'; // the report rules live in one place (Phase 14)
+import { isReportable } from './Report';
 
 export const isLiability = (account) => LIABILITY_TYPES.includes(account && account.type);
 

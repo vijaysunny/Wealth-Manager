@@ -1,7 +1,7 @@
 /**
  * TransactionList.js (C5.2) - pure helpers for the Transactions screen.
  */
-import { isReportable } from './BalanceService';
+import { isReportable } from './Report';
 
 const dayKey = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
