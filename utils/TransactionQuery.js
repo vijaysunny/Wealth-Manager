@@ -220,3 +220,14 @@ export const removeChip = (query, key) => {
       return q;
   }
 };
+
+const ymd = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** B4: the date filter for a calendar month ("This month" when it is the current one). */
+export const monthDate = (month, asOf = new Date()) => {
+  if (month.getFullYear() === asOf.getFullYear() && month.getMonth() === asOf.getMonth())
+    return { preset: 'thisMonth' };
+  const y = month.getFullYear();
+  const m = month.getMonth();
+  return { preset: 'custom', from: ymd(new Date(y, m, 1)), to: ymd(new Date(y, m + 1, 0)) };
+};

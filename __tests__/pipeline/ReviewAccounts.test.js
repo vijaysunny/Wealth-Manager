@@ -4,7 +4,7 @@
  */
 import fs from 'fs';
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, fireEvent } from '@testing-library/react-native';
 import path from 'path';
 import Storage from '../../data/Storage';
 import { addMany, getAll, monthlyAggregates } from '../../data/TransactionRepo';
@@ -287,6 +287,8 @@ test('A1 screen: Transactions account chips show each last-4 exactly once after 
   await addAllDiscoveredAccounts();
   const nav = { navigate: jest.fn(), goBack: jest.fn(), addListener: () => () => {} };
   render(React.createElement(AllTransactionsScreen, { navigation: nav, route: { params: {} } }));
+  // B3: the account chips live in the filter sheet
+  fireEvent.press(await screen.findByTestId('filter-button'));
   for (const label of ['Axis ••0973', 'Axis Card ••9070', 'SBI Card ••1987', 'Equitas Small Finance ••1246'])
     expect((await screen.findAllByRole('button', { name: label })).length).toBeGreaterThan(0);
   const chipLabels = screen

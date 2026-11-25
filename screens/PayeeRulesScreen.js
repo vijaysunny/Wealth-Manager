@@ -369,7 +369,7 @@ export default function PayeeRulesScreen({ navigation }) {
             icon="git-branch-outline"
             title="No payee rules yet"
             body="Change a transaction's payee, category or tags and keep “Also for future SMS” on, or add a rule here."
-            action={<AppButton title="Add rule" icon="add" onPress={() => setForm({ ...emptyForm })} />}
+            action={{ label: 'Add rule', icon: 'add', onPress: () => setForm({ ...emptyForm }) }}
           />
         )}
       </ScrollView>

@@ -151,7 +151,7 @@ describe('A7.9 / History transfers', () => {
     expect(StyleSheet.flatten(screen.getByText('₹500').props.style).color).toBe(tokens.light.muted);
   });
 
-  test('C5.2: #tag search, tag chips, account chips and Has file', async () => {
+  test('C5.2/B2: #tag search and the no-match state', async () => {
     const { addMany } = require('../../data/TransactionRepo');
     await Storage.setItem(
       'user_wealth_accounts',
@@ -195,17 +195,10 @@ describe('A7.9 / History transfers', () => {
     expect(screen.getByText('ODS parking')).toBeTruthy();
     fireEvent.changeText(screen.getByTestId('tx-search'), '#tax-2026');
     expect(screen.queryByText('ODS parking')).toBeNull();
-    expect(screen.getByRole('button', { name: '#tax-2026' }).props.accessibilityState.selected).toBe(true);
-    fireEvent.press(screen.getByRole('button', { name: '#tax-2026' }));
-    expect(screen.getByText('ODS parking')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Axis Card ••9070'));
-    expect(screen.queryByText('Google')).toBeNull();
-    fireEvent.press(screen.getByRole('button', { name: 'All accounts' }));
-    fireEvent.press(screen.getByRole('button', { name: 'Has file' }));
-    expect(screen.getByText('Google')).toBeTruthy();
-    expect(screen.queryByText('ODS parking')).toBeNull();
     fireEvent.changeText(screen.getByTestId('tx-search'), 'nothing-like-this');
-    expect(screen.getByText('Nothing matches')).toBeTruthy();
+    expect(screen.getByText('No transactions match these filters')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.getByText('ODS parking')).toBeTruthy();
   });
 });
 
@@ -316,7 +309,8 @@ describe('HomeScreen (C5.1)', () => {
     render(<HomeScreen navigation={n} />);
     expect(await screen.findByText('₹2,329.19')).toBeTruthy();
     expect(screen.getByTestId('transfers-amount').props.children).toBe('₹12,511.38');
-    expect(screen.getAllByRole('button', { name: /,\s*\d/ })).toHaveLength(3);
+    const rowButtons = screen.getAllByRole('button', { name: /,\s*\d/ });
+    expect(rowButtons.filter((b) => b.props.testID !== 'spent-link')).toHaveLength(3);
     expect(screen.getByText('#tax-2026')).toBeTruthy();
     expect(screen.queryByText(/auto-sms/)).toBeNull();
     expect(screen.getByTestId('has-file')).toBeTruthy();
@@ -324,6 +318,10 @@ describe('HomeScreen (C5.1)', () => {
     expect(n.navigate).toHaveBeenCalledWith('Transactions');
     fireEvent.press(screen.getByRole('button', { name: 'Search transactions' }));
     expect(n.navigate).toHaveBeenCalledWith('Transactions', { focusSearch: true });
+    fireEvent.press(screen.getByTestId('spent-link'));
+    expect(n.navigate).toHaveBeenCalledWith('Transactions', {
+      query: { date: { preset: 'thisMonth' }, types: ['expense'] },
+    });
   });
 });
 

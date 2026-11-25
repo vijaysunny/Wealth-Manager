@@ -8,7 +8,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTokens } from '../Theme';
 import { fonts, radius, space } from '../tokens';
 
-export default function Chip({ label, selected = false, onPress, onRemove, icon, tone = 'default', testID }) {
+export default function Chip({
+  label,
+  selected = false,
+  onPress,
+  onRemove,
+  removeLabel,
+  icon,
+  tone = 'default',
+  testID,
+}) {
   const t = useTokens();
   const tag = tone === 'tag';
   const bg = selected ? t.primary : tag ? t.primarySoft : t.card;
@@ -53,7 +62,7 @@ export default function Chip({ label, selected = false, onPress, onRemove, icon,
       {onRemove ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Remove ${label}`}
+          accessibilityLabel={removeLabel || `Remove ${label}`}
           onPress={onRemove}
           hitSlop={8}
           style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center', marginLeft: 2 }}

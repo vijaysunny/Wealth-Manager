@@ -424,7 +424,7 @@ export default function CardDetailScreen({ navigation, route }) {
           <Text style={{ color: t.text, fontFamily: fonts.display, fontSize: 20 }}>On this card</Text>
           <Text
             accessibilityRole="link"
-            onPress={() => navigation.navigate('Transactions', { accountId: card.id })}
+            onPress={() => navigation.navigate('Transactions', { query: { accountIds: [String(card.id)] } })}
             style={{
               color: t.primary,
               fontFamily: fonts.semibold,

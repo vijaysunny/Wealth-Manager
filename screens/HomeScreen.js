@@ -12,6 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
 import { getAll } from '../data/TransactionRepo';
 import { shiftMonth, formatMoney } from '../utils/Format';
+import { monthDate } from '../utils/TransactionQuery';
 import { backupStatus, LAST_BACKUP_KEY } from '../utils/BackupReminder';
 import { permissionWarnings } from '../utils/PermissionHealth';
 import { hasReceivePermission, isTrackingEnabled } from '../utils/SmsTracking';
@@ -145,17 +146,27 @@ export default function HomeScreen({ navigation }) {
               onPress={() => !isCurrentMonth && setMonth(shiftMonth(month, 1))}
             />
           </View>
-          <Text style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 15, marginTop: space.md }}>
-            Spent this month
-          </Text>
-          <Text
-            testID="spent-amount"
-            adjustsFontSizeToFit
-            numberOfLines={1}
-            style={{ color: '#FFFFFF', fontFamily: fonts.display, fontSize: 40, marginTop: space.xs }}
+          {/* B4: "Spent" opens that month's expenses */}
+          <Pressable
+            testID="spent-link"
+            accessibilityRole="button"
+            accessibilityLabel={`Spent ${formatMoney(summary.spent)}. Show expenses`}
+            onPress={() =>
+              navigation.navigate('Transactions', { query: { date: monthDate(month), types: ['expense'] } })
+            }
           >
-            {formatMoney(summary.spent)}
-          </Text>
+            <Text style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 15, marginTop: space.md }}>
+              Spent this month
+            </Text>
+            <Text
+              testID="spent-amount"
+              adjustsFontSizeToFit
+              numberOfLines={1}
+              style={{ color: '#FFFFFF', fontFamily: fonts.display, fontSize: 40, marginTop: space.xs }}
+            >
+              {formatMoney(summary.spent)}
+            </Text>
+          </Pressable>
           <Text style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 13, marginTop: space.xs }}>
             Card bills and wallet top-ups are transfers, not spending
           </Text>

@@ -5,6 +5,7 @@ import {
   activeFilterChips,
   removeChip,
   activeCount,
+  monthDate,
 } from '../utils/TransactionQuery';
 
 const at = (y, m, d, h = 12) => new Date(y, m - 1, d, h).toISOString();
@@ -282,4 +283,16 @@ test('performance: 5,000 rows with every filter on (warning only)', () => {
   if (ms > 50) console.warn(`runQuery over 5,000 rows took ${Math.round(ms)} ms (target < 50 ms)`);
   const all = runQuery(rows, q({ sort: 'payee' }), asOf);
   expect(all.rows).toHaveLength(5000);
+});
+
+test('monthDate: this month or a custom range for that month', () => {
+  expect(monthDate(new Date(2026, 10, 3), asOf)).toEqual({ preset: 'thisMonth' });
+  expect(monthDate(new Date(2026, 1, 3), asOf)).toEqual({
+    preset: 'custom',
+    from: '2026-02-01',
+    to: '2026-02-28',
+  });
+  expect(activeFilterChips(q({ date: monthDate(new Date(2026, 1, 3), asOf) }), [], asOf)[0].label).toBe(
+    '1 Feb – 28 Feb'
+  );
 });

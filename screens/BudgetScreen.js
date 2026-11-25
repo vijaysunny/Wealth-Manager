@@ -13,6 +13,7 @@ import { getAll } from '../data/TransactionRepo';
 import { getMonthlyBudget, saveMonthlyBudget } from '../utils/MonthlyBudgets';
 import { parseAmount, shiftMonth, formatMoney } from '../utils/Format';
 import { monthSpending, categoryRows, previousMonthName } from '../utils/BudgetView';
+import { monthDate } from '../utils/TransactionQuery';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space } from '../components/tokens';
 import { AppButton, AppSwitch, IconButton, OptionSheet } from '../components/ui';
@@ -227,8 +228,13 @@ export default function BudgetScreen({ navigation }) {
                 key={r.name}
                 testID={`cat-${r.name}`}
                 accessibilityRole="button"
-                accessibilityLabel={`${r.name}, ${formatMoney(Math.round(r.spent))}${r.limit ? ` of ${formatMoney(r.limit)}` : ', no limit'}. Set limit`}
-                onPress={() => setEditing({ name: r.name, text: r.limit ? String(r.limit) : '' })}
+                accessibilityLabel={`${r.name}, ${formatMoney(Math.round(r.spent))}${r.limit ? ` of ${formatMoney(r.limit)}` : ', no limit'}. Show transactions`}
+                // B4: a category row opens its transactions for this month; the limit has its own button
+                onPress={() =>
+                  navigation.navigate('Transactions', {
+                    query: { date: monthDate(month), categories: [r.name], types: ['expense'] },
+                  })
+                }
                 style={({ pressed }) => [
                   styles.catRow,
                   {
@@ -254,9 +260,19 @@ export default function BudgetScreen({ navigation }) {
                   >
                     {formatMoney(Math.round(r.spent))}
                   </Text>
-                  <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 16 }}>
-                    {r.limit ? ` / ${formatMoney(r.limit)}` : ' · Set limit'}
-                  </Text>
+                  <Pressable
+                    testID={`limit-${r.name}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={r.limit ? `Edit limit for ${r.name}` : `Set limit for ${r.name}`}
+                    hitSlop={12}
+                    onPress={() => setEditing({ name: r.name, text: r.limit ? String(r.limit) : '' })}
+                  >
+                    <Text
+                      style={{ color: r.limit ? t.muted : t.primary, fontFamily: fonts.body, fontSize: 16 }}
+                    >
+                      {r.limit ? ` / ${formatMoney(r.limit)}` : ' · Set limit'}
+                    </Text>
+                  </Pressable>
                 </View>
                 <View style={[styles.track, { backgroundColor: t.divider }]}>
                   <View

@@ -33,6 +33,13 @@ export const accountChip = (tx, accountsById = {}) => {
   return `${from} → ${shortAccountName(toAcc?.name || tx.toAccount, toAcc?.last4)}`;
 };
 
+const shortDate = (tx) => {
+  const d = new Date(tx.fullDate);
+  return Number.isNaN(d.getTime())
+    ? tx.date
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+};
+
 export default function TransactionRow({ tx, onPress, accountsById, showDate = false, divider = true }) {
   const t = useTokens();
   const transfer = tx.type === 'transfer';
@@ -41,7 +48,8 @@ export default function TransactionRow({ tx, onPress, accountsById, showDate = f
   const files = Array.isArray(tx.attachments) ? tx.attachments.length : 0;
   const chip = accountChip(tx, accountsById);
   const payee = payeeOf(tx);
-  const sub = [transfer ? null : tx.category, showDate ? tx.date : null].filter(Boolean).join(' · ');
+  // B2: a flat list (sorted by amount or payee) shows the date first: "9 Nov · Food"
+  const sub = [showDate ? shortDate(tx) : null, transfer ? null : tx.category].filter(Boolean).join(' · ');
   return (
     <Pressable
       accessibilityRole="button"

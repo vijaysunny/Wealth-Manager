@@ -96,7 +96,7 @@ describe('Card detail', () => {
     expect(screen.getByText('ODS Protect parking')).toBeTruthy();
     expect(screen.getByText(/this cycle$/)).toBeTruthy();
     fireEvent.press(screen.getByText('See all'));
-    expect(n.navigate).toHaveBeenCalledWith('Transactions', { accountId: 'ac' });
+    expect(n.navigate).toHaveBeenCalledWith('Transactions', { query: { accountIds: ['ac'] } });
   });
 
   test('Overdue badge after the due date; no EMI row without tracked EMIs', async () => {

@@ -52,14 +52,23 @@ test('Set saves the monthly budget', async () => {
   expect((await getMonthlyBudget(now, [])).limit).toBe(40000);
 });
 
-test('tapping a row opens the limit sheet; over the limit turns danger', async () => {
-  render(<BudgetScreen navigation={{ navigate: jest.fn() }} />);
+test("B4: tapping a row opens that category's transactions for the month", async () => {
+  const navigate = jest.fn();
+  render(<BudgetScreen navigation={{ navigate }} />);
   fireEvent.press(await screen.findByTestId('cat-Food'));
+  expect(navigate).toHaveBeenCalledWith('Transactions', {
+    query: { date: { preset: 'thisMonth' }, categories: ['Food'], types: ['expense'] },
+  });
+});
+
+test('the limit button opens the limit sheet; over the limit turns danger', async () => {
+  render(<BudgetScreen navigation={{ navigate: jest.fn() }} />);
+  fireEvent.press(await screen.findByTestId('limit-Food'));
   fireEvent.changeText(screen.getByTestId('limit-input'), '300');
   fireEvent.press(screen.getByRole('button', { name: 'Save limit' }));
   expect(await screen.findByText('Over by ₹22')).toBeTruthy();
   expect((await getMonthlyBudget(now, [])).categories).toEqual({ Food: 300 });
-  fireEvent.press(screen.getByTestId('cat-Food'));
+  fireEvent.press(screen.getByTestId('limit-Food'));
   fireEvent.changeText(screen.getByTestId('limit-input'), '');
   fireEvent.press(screen.getByRole('button', { name: 'Save limit' }));
   await waitFor(async () => expect((await getMonthlyBudget(now, [])).categories).toEqual({}));
