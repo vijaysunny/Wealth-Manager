@@ -110,13 +110,14 @@ const time = (tx) => {
 };
 const byId = (a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true });
 const newer = (a, b) => time(b) - time(a) || byId(a, b);
+// One collator for the whole sort: localeCompare with options builds a new one per call (slow).
+const PAYEE_COLLATOR = new Intl.Collator('en-IN', { sensitivity: 'base' });
 const COMPARE = {
   newest: newer,
   oldest: (a, b) => time(a) - time(b) || byId(a, b),
   amountDesc: (a, b) => Number(b.amount) - Number(a.amount) || newer(a, b),
   amountAsc: (a, b) => Number(a.amount) - Number(b.amount) || newer(a, b),
-  payee: (a, b) =>
-    String(payeeOf(a)).localeCompare(String(payeeOf(b)), 'en-IN', { sensitivity: 'base' }) || newer(a, b),
+  payee: (a, b) => PAYEE_COLLATOR.compare(String(payeeOf(a)), String(payeeOf(b))) || newer(a, b),
 };
 
 /**
