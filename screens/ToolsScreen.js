@@ -1,21 +1,19 @@
 import { View, Text, TextInput, ScrollView, SafeAreaView, useTokens } from '../components/Theme';
 import React, { useCallback, useState } from 'react';
-import { Alert, Switch } from 'react-native';
+import { Alert } from 'react-native';
 import AppButton from '../components/ui/AppButton';
 import ScreenHeader from '../components/ui/ScreenHeader';
 
 import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
-import { add, getAll } from '../data/TransactionRepo';
-import { bulkUpdate, bulkDelete, contributeToGoal, saveNetWorthSnapshot } from '../utils/FeatureService';
-import { filterHistory, xirr, amortize } from '../utils/FinanceTools';
-import { exportHistory } from '../utils/HistoryExport';
+import { add } from '../data/TransactionRepo';
+import { contributeToGoal, saveNetWorthSnapshot } from '../utils/FeatureService';
+import { xirr, amortize } from '../utils/FinanceTools';
 import { parseAmount, parseNonNegative, formatMoney } from '../utils/Format';
 // C4: the Money tools hub is gone. Each section is its own screen (route MoneyTool, param tab),
 // opened from where it belongs; review lives in Review accounts.
 export const TOOL_TITLES = {
   Transfers: 'New transfer',
-  History: 'Bulk edit & export',
   Goals: 'Goal contributions',
   Wealth: 'Money calculators',
 };
@@ -48,7 +46,6 @@ export default function ToolsScreen({ navigation, route }) {
   const t = useTokens();
   const tab = TOOL_TITLES[route.params?.tab] ? route.params.tab : 'Transfers';
   const [accounts, setAccounts] = useState([]),
-    [rows, setRows] = useState([]),
     [goals, setGoals] = useState([]),
     [snapshots, setSnapshots] = useState([]);
   // B5: Card detail → Record payment pre-fills bank → card and the amount left on the bill.
@@ -56,14 +53,6 @@ export default function ToolsScreen({ navigation, route }) {
   const [from, setFrom] = useState(prefill.fromId ?? ''),
     [to, setTo] = useState(prefill.toId ?? ''),
     [amount, setAmount] = useState(prefill.amount ? String(prefill.amount) : '');
-  const [category, setCategory] = useState('');
-  const [query, setQuery] = useState(''),
-    [accountFilter, setAccountFilter] = useState(''),
-    [min, setMin] = useState(''),
-    [max, setMax] = useState(''),
-    [start, setStart] = useState(''),
-    [end, setEnd] = useState(''),
-    [selected, setSelected] = useState([]);
   const [goalId, setGoalId] = useState(route.params?.goalId ? String(route.params.goalId) : ''),
     [contribution, setContribution] = useState('');
   const [flows, setFlows] = useState(''),
@@ -80,7 +69,6 @@ export default function ToolsScreen({ navigation, route }) {
     setAccounts(JSON.parse(values.user_wealth_accounts || '[]'));
     setGoals(JSON.parse(values.user_goals || '[]'));
     setSnapshots(JSON.parse(values.networth_history || '[]'));
-    setRows(await getAll());
   }, []);
   useFocusEffect(
     useCallback(() => {
@@ -95,14 +83,6 @@ export default function ToolsScreen({ navigation, route }) {
       Alert.alert('Cannot complete', error.message);
     }
   };
-  const filtered = filterHistory(rows, {
-    text: query,
-    account: accountFilter,
-    min: min ? parseAmount(min) : null,
-    max: max ? parseAmount(max) : null,
-    from: start,
-    to: end,
-  });
   const spendable = accounts.filter((a) =>
     ['Cash', 'Bank Account', 'Wallet', 'Credit Card'].includes(a.type)
   );
@@ -177,91 +157,6 @@ export default function ToolsScreen({ navigation, route }) {
                 })
               }
             />
-          </View>
-        )}
-        {tab === 'History' && (
-          <View>
-            <Field
-              label="Search description, merchant, category or tags"
-              value={query}
-              onChangeText={setQuery}
-            />
-            <Field label="Minimum amount" value={min} onChangeText={setMin} number />
-            <Field label="Maximum amount" value={max} onChangeText={setMax} number />
-            <Field label="From date (YYYY-MM-DD)" value={start} onChangeText={setStart} />
-            <Field label="To date (YYYY-MM-DD)" value={end} onChangeText={setEnd} />
-            <Choices
-              items={[
-                { id: '', name: 'All accounts' },
-                ...accounts.map((a) => ({ id: a.name, name: a.name })),
-              ]}
-              value={accountFilter}
-              onChange={setAccountFilter}
-            />
-            <Text>
-              {filtered.length} matches · {selected.length} selected
-            </Text>
-            <AppButton title="Export matching CSV" onPress={() => run(() => exportHistory(filtered))} />
-            <AppButton
-              title="Export matching Excel"
-              onPress={() => run(() => exportHistory(filtered, 'xlsx'))}
-            />
-            <AppButton title="Select matching rows" onPress={() => setSelected(filtered.map((t) => t.id))} />
-            <AppButton title="Clear selection" onPress={() => setSelected([])} />
-            <Field label="New category for selected rows" value={category} onChangeText={setCategory} />
-            <AppButton
-              title="Apply category to selection"
-              onPress={() =>
-                run(async () => {
-                  if (!selected.length || !category.trim())
-                    throw new Error('Select rows and enter a category');
-                  await bulkUpdate(selected, { category: category.trim() });
-                  setSelected([]);
-                })
-              }
-            />
-            <AppButton
-              title="Delete selected"
-              variant="danger"
-              onPress={() => {
-                if (!selected.length) return;
-                Alert.alert(
-                  'Delete selection?',
-                  `Delete ${selected.length} transactions and reverse balances?`,
-                  [
-                    { text: 'Cancel' },
-                    {
-                      text: 'Delete',
-                      style: 'destructive',
-                      onPress: () =>
-                        run(async () => {
-                          await bulkDelete(selected);
-                          setSelected([]);
-                        }),
-                    },
-                  ]
-                );
-              }}
-            />
-            {filtered.map((tx) => (
-              <View key={tx.id} style={{ borderBottomWidth: 1, borderColor: '#ccc', padding: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Switch
-                    value={selected.includes(tx.id)}
-                    onValueChange={(value) =>
-                      setSelected(value ? [...selected, tx.id] : selected.filter((id) => id !== tx.id))
-                    }
-                  />
-                  <Text style={{ flex: 1 }}>
-                    {tx.date} · {tx.title} · {formatMoney(tx.amount)} · {tx.type}
-                  </Text>
-                </View>
-                <AppButton
-                  title="Edit"
-                  onPress={() => navigation.navigate('TransactionDetail', { transaction: tx })}
-                />
-              </View>
-            ))}
           </View>
         )}
         {tab === 'Goals' && (

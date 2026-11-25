@@ -209,3 +209,144 @@ test('accessibility: the filter button label carries the count', async () => {
   await open({ query: { flags: ['hasFile'] } }, 'Old shop');
   expect(within(screen.getByTestId('filter-button')).getByText('1')).toBeTruthy();
 });
+
+describe('B5 select mode', () => {
+  const { act } = require('@testing-library/react-native');
+  const { getAll } = require('../../data/TransactionRepo');
+  const SnackbarHost = require('../../components/ui/SnackbarHost').default;
+  const { clearUndo } = require('../../utils/UndoStore');
+  const { Alert } = require('react-native');
+
+  const openSel = async () => {
+    clearUndo();
+    let beforeRemove = null;
+    const n = {
+      navigate: jest.fn(),
+      goBack: jest.fn(),
+      addListener: jest.fn((ev, cb) => {
+        if (ev === 'beforeRemove') beforeRemove = cb;
+        return () => {};
+      }),
+    };
+    render(
+      <>
+        <AllTransactionsScreen navigation={n} route={{ params: {} }} />
+        <SnackbarHost />
+      </>
+    );
+    await screen.findByText('Anjanadri');
+    return { n, beforeRemove: () => beforeRemove };
+  };
+  const row = (name) => screen.getByLabelText(new RegExp(`^${name}, `));
+  const byId = async () => Object.fromEntries((await getAll()).map((x) => [x.id, x]));
+
+  test('long-press starts it with that row selected; tap toggles; header shows count and expense total', async () => {
+    await openSel();
+    fireEvent(row('Anjanadri'), 'longPress');
+    expect(screen.getByText('1 selected · ₹350')).toBeTruthy();
+    expect(row('Anjanadri').props.accessibilityRole).toBe('checkbox');
+    expect(row('Anjanadri').props.accessibilityState).toEqual({ checked: true });
+    fireEvent.press(row('Swiggy Instamart'));
+    fireEvent.press(row('Employer'));
+    expect(screen.getByText('3 selected · ₹672')).toBeTruthy();
+    fireEvent.press(row('Employer'));
+    expect(screen.getByText('2 selected · ₹672')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Exit select mode' }));
+    expect(screen.getByText('Transactions')).toBeTruthy();
+  });
+
+  test('Select all selects every match of the query, not only those on screen', async () => {
+    await openSel();
+    fireEvent.press(screen.getByRole('button', { name: 'Select' }));
+    expect(screen.getByText('0 selected · ₹0')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Category' }).props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Select all 5' }));
+    expect(screen.getByText('5 selected · ₹1,701')).toBeTruthy();
+  });
+
+  test('Category: bulk path with Undo; loan rows skipped with a note', async () => {
+    await addMany(
+      [tx('loan', { merchant: 'EMI', amount: 5000, loanLink: { loanId: 'l' }, category: 'Loan/EMI' })],
+      { dedup: false }
+    );
+    await openSel();
+    await screen.findByText('EMI');
+    fireEvent(row('Anjanadri'), 'longPress');
+    fireEvent.press(row('EMI'));
+    fireEvent.press(screen.getByRole('button', { name: 'Category' }));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Transport' })));
+    expect(await screen.findByText('Updated 1 transaction · 1 skipped (loan payments)')).toBeTruthy();
+    let rows = await byId();
+    expect(rows.a).toMatchObject({ category: 'Transport', categorySource: 'bulk' });
+    expect(rows.loan.category).toBe('Loan/EMI');
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Undo' })));
+    await screen.findByText('Undone');
+    rows = await byId();
+    expect(rows.a.category).toBe('Food');
+  });
+
+  test('Tag adds a tag (then #tag search finds them) and removes one all share', async () => {
+    await openSel();
+    fireEvent(row('Anjanadri'), 'longPress');
+    fireEvent.press(row('Swiggy Instamart'));
+    fireEvent.press(screen.getByRole('button', { name: 'Tag' }));
+    fireEvent.changeText(screen.getByLabelText('Tag to add'), '#tax-2026');
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Add tag' })));
+    expect(await screen.findByText('Updated 2 transactions')).toBeTruthy();
+    fireEvent.changeText(screen.getByTestId('tx-search'), '#tax-2026');
+    expect(textOf(summary())).toBe('2 transactions · spent ₹672');
+    fireEvent.press(screen.getByRole('button', { name: 'Select' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Select all 2' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Tag' }));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Remove #tax-2026' })));
+    await screen.findByText('No transactions match these filters');
+  });
+
+  test('Account moves rows (transfers skipped); Not in reports toggles; Rename payee', async () => {
+    await openSel();
+    fireEvent(row('Anjanadri'), 'longPress');
+    fireEvent.press(screen.getByRole('button', { name: 'Account' }));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Axis Card ••9070' })));
+    await screen.findByText('Updated 1 transaction');
+    expect((await byId()).a).toMatchObject({ accountId: 'card', account: 'Axis Bank Credit Card' });
+
+    fireEvent(row('Anjanadri'), 'longPress');
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Not in reports' })));
+    await waitFor(async () => expect((await byId()).a.excludeFromReports).toBe(true));
+    fireEvent(row('Anjanadri'), 'longPress');
+    expect(screen.getByRole('button', { name: 'Count in reports' })).toBeTruthy();
+
+    fireEvent.press(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Rename payee…' }));
+    fireEvent.changeText(screen.getByLabelText('Payee name'), 'Anjanadri E.');
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Rename' })));
+    await waitFor(async () =>
+      expect((await byId()).a).toMatchObject({ merchant: 'Anjanadri E.', nameSource: 'bulk' })
+    );
+  });
+
+  test('Delete asks first; no Undo is offered', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await openSel();
+    fireEvent(row('Anjanadri'), 'longPress');
+    fireEvent.press(row('ODS parking'));
+    fireEvent.press(screen.getByRole('button', { name: 'Delete' }));
+    const [title, body, buttons] = alert.mock.calls[0];
+    expect(title).toBe('Delete 2 transactions?');
+    expect(body).toBe('Their files are deleted too.');
+    await act(async () => buttons.find((b) => b.text === 'Delete').onPress());
+    expect(await screen.findByText('Deleted 2 transactions')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    expect((await byId()).a).toBeUndefined();
+    alert.mockRestore();
+  });
+
+  test('Back exits select mode before leaving the screen', async () => {
+    const { beforeRemove } = await openSel();
+    fireEvent(row('Anjanadri'), 'longPress');
+    const e = { preventDefault: jest.fn() };
+    act(() => beforeRemove()(e));
+    expect(e.preventDefault).toHaveBeenCalled();
+    expect(screen.getByText('Transactions')).toBeTruthy();
+  });
+});

@@ -7,14 +7,24 @@
  * filters last while the app is open.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, SectionList, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  BackHandler,
+  Modal,
+  Pressable,
+  ScrollView,
+  SectionList,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import Storage from '../data/Storage';
 import { getAll } from '../data/TransactionRepo';
 import { exportHistory } from '../utils/HistoryExport';
-import { groupByDay } from '../utils/TransactionList';
+import { groupByDay, shortAccountName } from '../utils/TransactionList';
 import {
   SORTS,
   SORT_LABELS,
@@ -38,6 +48,122 @@ import {
 } from '../components/ui';
 import FilterSheet from '../components/FilterSheet';
 import { loadCategories } from './CategoriesScreen';
+import { bulkApply, bulkDelete, bulkSet, undoLastBulk } from '../utils/FeatureService';
+import {
+  eligibleFor,
+  reportsAction,
+  selectedRows,
+  selectionTotal,
+  sharedTags,
+  tagChange,
+} from '../utils/BulkSelect';
+import { showSnackbar } from '../utils/Snackbar';
+import { normalizeTag } from '../utils/Tags';
+
+const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
+
+/** A small sheet with one text field (B5: Tag, Rename payee). */
+function TextSheet({ visible, title, label, placeholder, action, extra, onSubmit, onClose }) {
+  const t = useTokens();
+  const [text, setText] = useState('');
+  useEffect(() => {
+    if (visible) setText('');
+  }, [visible]);
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        onPress={onClose}
+        style={{ flex: 1, backgroundColor: 'rgba(14,23,38,0.45)' }}
+      />
+      <View
+        style={{
+          backgroundColor: t.card,
+          borderTopLeftRadius: radius.xxl,
+          borderTopRightRadius: radius.xxl,
+          padding: space.xl,
+        }}
+      >
+        <Text
+          accessibilityRole="header"
+          style={{ color: t.text, fontFamily: fonts.display, fontSize: 20, marginBottom: space.md }}
+        >
+          {title}
+        </Text>
+        <TextInput
+          accessibilityLabel={label}
+          value={text}
+          onChangeText={setText}
+          placeholder={placeholder}
+          placeholderTextColor={t.placeholder}
+          autoCapitalize="none"
+          autoFocus
+          onSubmitEditing={() => text.trim() && onSubmit(text)}
+          style={{
+            minHeight: 48,
+            borderWidth: 1,
+            borderColor: t.inputBorder,
+            borderRadius: radius.md,
+            paddingHorizontal: space.md,
+            color: t.text,
+            fontFamily: fonts.body,
+            fontSize: 16,
+            marginBottom: space.md,
+          }}
+        />
+        <AppButton title={action} disabled={!text.trim()} onPress={() => onSubmit(text)} />
+        {extra}
+      </View>
+    </Modal>
+  );
+}
+
+function ActionBar({ actions, t }) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        borderTopWidth: 1,
+        borderColor: t.border,
+        backgroundColor: t.card,
+        paddingVertical: space.sm,
+      }}
+    >
+      {actions.map((a) => (
+        <Pressable
+          key={a.label}
+          accessibilityRole="button"
+          accessibilityLabel={a.label}
+          accessibilityState={{ disabled: a.disabled }}
+          disabled={a.disabled}
+          onPress={a.onPress}
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 56,
+            opacity: a.disabled ? 0.4 : 1,
+          }}
+        >
+          <Ionicons name={a.icon} size={22} color={a.danger ? t.expense : t.text} />
+          <Text
+            numberOfLines={2}
+            style={{
+              color: a.danger ? t.expense : t.text,
+              fontFamily: fonts.medium,
+              fontSize: 12,
+              textAlign: 'center',
+              marginTop: 2,
+            }}
+          >
+            {a.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 export const SORT_KEY = 'tx_list_sort';
 const dayTotalLabel = (n) => (n === 0 ? '' : `${n < 0 ? '−' : '+'}${formatMoney(Math.abs(n))}`);
@@ -66,17 +192,18 @@ export default function AllTransactionsScreen({ navigation, route }) {
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [query, setQuery] = useState(() => queryFromParams(route?.params));
-  const [sheet, setSheet] = useState(null); // 'filters' | 'sort'
-  const asOf = useMemo(() => new Date(), [rows]);
+  const [sheet, setSheet] = useState(null); // 'filters' | 'sort' | 'bulk-…'
+  const [selected, setSelected] = useState(null); // B5: Set of ids in select mode, null otherwise
+  const [asOf, setAsOf] = useState(() => new Date()); // "today" for date filters, renewed on each load
 
-  // The remembered sort (B2); filters reset on restart.
+  // The remembered sort (B2); filters reset on restart. Once, on mount.
+  const openedWithSort = !!route?.params?.query?.sort;
   useEffect(() => {
+    if (openedWithSort) return;
     Storage.getItem(SORT_KEY)
-      .then(
-        (s) => s && SORTS.includes(s) && !route?.params?.query?.sort && setQuery((q) => ({ ...q, sort: s }))
-      )
+      .then((s) => s && SORTS.includes(s) && setQuery((q) => ({ ...q, sort: s })))
       .catch(() => {});
-  }, []);
+  }, [openedWithSort]);
   // Opened again from a shortcut while mounted: take its filters, keep the sort.
   const paramQuery = route?.params?.query;
   const paramAccount = route?.params?.accountId;
@@ -89,6 +216,7 @@ export default function AllTransactionsScreen({ navigation, route }) {
     setAccounts(JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]'));
     setCategories(await loadCategories());
     setRows(await getAll());
+    setAsOf(new Date());
   }, []);
   useFocusEffect(
     useCallback(() => {
@@ -261,13 +389,171 @@ export default function AllTransactionsScreen({ navigation, route }) {
   );
 
   const filtered = nFilters > 0 || !!query.text.trim();
+
+  // ── B5: select mode ──────────────────────────────────────────────────────
+  const selecting = selected !== null;
+  const ids = selecting ? [...selected] : [];
+  const nSel = ids.length;
+  const exitSelect = () => setSelected(null);
+  const toggle = (id) =>
+    setSelected((cur) => {
+      const next = new Set(cur || []);
+      const k = String(id);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  // Android Back and leaving the screen exit select mode first
+  useEffect(() => {
+    if (!selecting) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSelected(null);
+      return true;
+    });
+    const off = navigation.addListener?.('beforeRemove', (e) => {
+      e.preventDefault();
+      setSelected(null);
+    });
+    return () => {
+      sub.remove();
+      if (typeof off === 'function') off();
+    };
+  }, [selecting, navigation]);
+
+  const finish = async (updated, note = '') => {
+    exitSelect();
+    await load();
+    showSnackbar({
+      text: `Updated ${updated} transaction${updated === 1 ? '' : 's'}${note ? ` · ${note}` : ''}`,
+      duration: 10000,
+      action: {
+        label: 'Undo',
+        onPress: async () => {
+          const r = await undoLastBulk().catch(() => null);
+          await load();
+          showSnackbar({
+            text: !r ? 'Nothing to undo' : r.skipped ? `Undone · ${r.skipped} changed since, kept` : 'Undone',
+          });
+        },
+      },
+    });
+  };
+  const runBulk = async (task) => {
+    setSheet(null);
+    try {
+      await task();
+    } catch (e) {
+      Alert.alert('Could not update', e.message);
+    }
+  };
+  const setCategoryAll = (category) =>
+    runBulk(async () => {
+      const el = eligibleFor(rows, ids);
+      const { updated } = await bulkApply(
+        el.ids,
+        { category: { from: '', to: category } },
+        { force: true, kind: 'category' }
+      );
+      await finish(updated, el.note);
+    });
+  const setAccountAll = (accId) =>
+    runBulk(async () => {
+      const acc = accounts.find((a) => String(a.id) === String(accId));
+      const el = eligibleFor(rows, ids);
+      const { updated } = await bulkSet(el.ids, { accountId: acc.id, account: acc.name }, 'account');
+      await finish(updated, el.note);
+    });
+  const tagAll = (text, remove = false) =>
+    runBulk(async () => {
+      const change = tagChange(text, remove);
+      if (!change) return;
+      const { updated } = await bulkApply(ids, change, { kind: 'tag' });
+      await finish(updated);
+    });
+  const renameAll = (name) =>
+    runBulk(async () => {
+      const { updated } = await bulkApply(
+        ids,
+        { name: { from: '', to: name.trim() } },
+        { force: true, kind: 'name' }
+      );
+      await finish(updated);
+    });
+  const reports = reportsAction(rows, ids);
+  const toggleReports = () =>
+    runBulk(async () => {
+      const { updated } = await bulkSet(ids, { excludeFromReports: reports.exclude }, 'reports');
+      await finish(updated);
+    });
+  const deleteAll = () =>
+    Alert.alert(`Delete ${nSel} transaction${nSel === 1 ? '' : 's'}?`, 'Their files are deleted too.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          runBulk(async () => {
+            await bulkDelete(ids);
+            exitSelect();
+            await load();
+            showSnackbar({ text: `Deleted ${nSel} transaction${nSel === 1 ? '' : 's'}` });
+          }),
+      },
+    ]);
+  const onMore = (v) => {
+    setSheet(v === 'rename' ? 'bulk-rename' : null);
+    if (v === 'csv' || v === 'xlsx')
+      exportHistory(selectedRows(rows, ids), v === 'xlsx' ? 'xlsx' : undefined).catch((e) =>
+        Alert.alert('Export failed', e.message)
+      );
+  };
+  const shared = selecting ? sharedTags(rows, ids) : [];
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
-      <ScreenHeader
-        title="Transactions"
-        onBack={() => navigation.goBack()}
-        right={<IconButton icon="share-outline" label="Export transactions" onPress={onExport} />}
-      />
+      {selecting ? (
+        <ScreenHeader
+          title={`${nSel} selected · ${formatMoney(selectionTotal(rows, ids))}`}
+          backIcon="close"
+          backLabel="Exit select mode"
+          onBack={exitSelect}
+          right={
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setSelected(new Set(shown.map((x) => String(x.id))))}
+                style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm }}
+              >
+                <Text
+                  style={{ color: t.primary, fontFamily: fonts.semibold, fontSize: 16 }}
+                >{`Select all ${shown.length}`}</Text>
+              </Pressable>
+              <IconButton
+                icon="ellipsis-vertical"
+                label="More actions"
+                onPress={() => setSheet('bulk-more')}
+              />
+            </View>
+          }
+        />
+      ) : (
+        <ScreenHeader
+          title="Transactions"
+          onBack={() => navigation.goBack()}
+          right={
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setSelected(new Set())}
+                style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm }}
+              >
+                <Text style={{ color: t.primary, fontFamily: fonts.semibold, fontSize: 16 }}>Select</Text>
+              </Pressable>
+              <IconButton icon="share-outline" label="Export transactions" onPress={onExport} />
+            </View>
+          }
+        />
+      )}
       <SectionList
         sections={sections}
         keyExtractor={(tx) => String(tx.id)}
@@ -322,7 +608,7 @@ export default function AllTransactionsScreen({ navigation, route }) {
           return (
             <View
               style={{
-                backgroundColor: t.card,
+                backgroundColor: selecting && selected.has(String(item.id)) ? t.primarySoft : t.card,
                 borderColor: t.border,
                 borderLeftWidth: 1,
                 borderRightWidth: 1,
@@ -340,7 +626,13 @@ export default function AllTransactionsScreen({ navigation, route }) {
                 accountsById={accountsById}
                 divider={!last}
                 showDate={flat}
-                onPress={() => navigation.navigate('TransactionDetail', { transaction: item })}
+                selected={selecting ? selected.has(String(item.id)) : null}
+                onPress={() =>
+                  selecting
+                    ? toggle(item.id)
+                    : navigation.navigate('TransactionDetail', { transaction: item })
+                }
+                onLongPress={() => (selecting ? toggle(item.id) : setSelected(new Set([String(item.id)])))}
               />
             </View>
           );
@@ -369,6 +661,87 @@ export default function AllTransactionsScreen({ navigation, route }) {
           setSheet(null);
           setSort(s);
         }}
+        onClose={() => setSheet(null)}
+      />
+      {selecting ? (
+        <ActionBar
+          t={t}
+          actions={[
+            {
+              label: 'Category',
+              icon: 'grid-outline',
+              disabled: !nSel,
+              onPress: () => setSheet('bulk-category'),
+            },
+            { label: 'Tag', icon: 'pricetags-outline', disabled: !nSel, onPress: () => setSheet('bulk-tag') },
+            {
+              label: 'Account',
+              icon: 'card-outline',
+              disabled: !nSel,
+              onPress: () => setSheet('bulk-account'),
+            },
+            { label: reports.label, icon: 'ban-outline', disabled: !nSel, onPress: toggleReports },
+            { label: 'Delete', icon: 'trash-outline', danger: true, disabled: !nSel, onPress: deleteAll },
+          ]}
+        />
+      ) : null}
+      <OptionSheet
+        visible={sheet === 'bulk-category'}
+        title={`Category for ${nSel}`}
+        options={categories.map((c) => ({ value: c, label: c }))}
+        onSelect={setCategoryAll}
+        onClose={() => setSheet(null)}
+      />
+      <OptionSheet
+        visible={sheet === 'bulk-account'}
+        title={`Account for ${nSel}`}
+        options={accounts
+          .filter((a) => SPENDABLE.includes(a.type))
+          .map((a) => ({ value: String(a.id), label: shortAccountName(a.name, a.last4), sublabel: a.type }))}
+        onSelect={setAccountAll}
+        onClose={() => setSheet(null)}
+      />
+      <OptionSheet
+        visible={sheet === 'bulk-more'}
+        title="More"
+        options={[
+          { value: 'rename', label: 'Rename payee…' },
+          { value: 'csv', label: 'Export selected (CSV)' },
+          { value: 'xlsx', label: 'Export selected (Excel)' },
+        ]}
+        onSelect={onMore}
+        onClose={() => setSheet(null)}
+      />
+      <TextSheet
+        visible={sheet === 'bulk-tag'}
+        title={`Tag ${nSel} transaction${nSel === 1 ? '' : 's'}`}
+        label="Tag to add"
+        placeholder="#tax-2026"
+        action="Add tag"
+        onSubmit={(text) => tagAll(text)}
+        onClose={() => setSheet(null)}
+        extra={
+          shared.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space.md }}>
+              {shared.map((g) => (
+                <Chip
+                  key={g}
+                  tone="tag"
+                  label={`Remove #${normalizeTag(g)}`}
+                  onPress={() => tagAll(g, true)}
+                />
+              ))}
+            </View>
+          ) : null
+        }
+      />
+      <TextSheet
+        visible={sheet === 'bulk-rename'}
+        title={`Rename payee for ${nSel}`}
+        label="Payee name"
+        placeholder="Swiggy Instamart"
+        action="Rename"
+        onSubmit={renameAll}
         onClose={() => setSheet(null)}
       />
     </SafeAreaView>

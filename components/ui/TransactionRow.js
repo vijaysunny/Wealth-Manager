@@ -40,7 +40,15 @@ const shortDate = (tx) => {
     : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
-export default function TransactionRow({ tx, onPress, accountsById, showDate = false, divider = true }) {
+export default function TransactionRow({
+  tx,
+  onPress,
+  onLongPress,
+  accountsById,
+  showDate = false,
+  divider = true,
+  selected = null, // B5: true/false in select mode (a round checkbox replaces the icon); null otherwise
+}) {
   const t = useTokens();
   const transfer = tx.type === 'transfer';
   const icon = tx.customIcon ? { name: tx.customIcon } : getCategoryIcon(tx.category);
@@ -48,13 +56,16 @@ export default function TransactionRow({ tx, onPress, accountsById, showDate = f
   const files = Array.isArray(tx.attachments) ? tx.attachments.length : 0;
   const chip = accountChip(tx, accountsById);
   const payee = payeeOf(tx);
+  const selecting = selected !== null;
   // B2: a flat list (sorted by amount or payee) shows the date first: "9 Nov · Food"
   const sub = [showDate ? shortDate(tx) : null, transfer ? null : tx.category].filter(Boolean).join(' · ');
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={selecting ? 'checkbox' : 'button'}
       accessibilityLabel={`${payee}, ${tx.amount}`}
+      accessibilityState={selecting ? { checked: !!selected } : undefined}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
@@ -64,27 +75,47 @@ export default function TransactionRow({ tx, onPress, accountsById, showDate = f
         opacity: pressed ? 0.6 : 1,
       })}
     >
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: radius.md,
-          backgroundColor: transfer ? t.divider : t.primarySoft,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginRight: space.md,
-        }}
-      >
-        {transfer ? (
-          <Ionicons name="swap-horizontal" size={20} color={t.muted} />
-        ) : tx.category || tx.customIcon ? (
-          <Ionicons name={outlineIcon(icon.name)} size={20} color={t.primary} />
-        ) : (
-          <Text style={{ color: t.primary, fontFamily: fonts.semibold, fontSize: 16 }}>
-            {payee.charAt(0).toUpperCase()}
-          </Text>
-        )}
-      </View>
+      {selecting ? (
+        <View
+          testID={selected ? 'row-checked' : 'row-unchecked'}
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 13,
+            borderWidth: 2,
+            borderColor: selected ? t.primary : t.muted,
+            backgroundColor: selected ? t.primary : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: space.xs,
+            marginRight: space.lg,
+          }}
+        >
+          {selected ? <Ionicons name="checkmark" size={16} color={t.onPrimary} /> : null}
+        </View>
+      ) : (
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: radius.md,
+            backgroundColor: transfer ? t.divider : t.primarySoft,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: space.md,
+          }}
+        >
+          {transfer ? (
+            <Ionicons name="swap-horizontal" size={20} color={t.muted} />
+          ) : tx.category || tx.customIcon ? (
+            <Ionicons name={outlineIcon(icon.name)} size={20} color={t.primary} />
+          ) : (
+            <Text style={{ color: t.primary, fontFamily: fonts.semibold, fontSize: 16 }}>
+              {payee.charAt(0).toUpperCase()}
+            </Text>
+          )}
+        </View>
+      )}
       <View style={{ flex: 1, paddingRight: space.sm }}>
         <Text numberOfLines={1} style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
           {payee}
