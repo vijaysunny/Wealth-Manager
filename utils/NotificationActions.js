@@ -3,7 +3,7 @@
  * Category buttons on the "₹322 at Swiggy Instamart" capture notification:
  *  - no category yet: the 3 categories most used for this payee, then this account (last 90 days);
  *  - a rule already chose one: the next 2 likely ones + "Not mine".
- * A tap updates the transaction (categorySource 'user') and posts "Saved as Food"; "Not mine"
+ * A tap updates the transaction (categorySource 'user') and posts a quiet "Saved as Food"; "Not mine"
  * marks it disputed and opens it. Taps are handled once, whether they arrive in the app, in the
  * background notification task, or (fallback) as the last response when the app next opens.
  * The Review screen later offers "apply to similar" for what was categorised here, never silently.
@@ -160,6 +160,26 @@ export const captureContent = async (tx, extra = '') => {
   return { ...captureText(tx, extra), categoryIdentifier, data: { txId: String(tx.id), kind: 'capture' } };
 };
 
+export const QUIET_CHANNEL = 'quiet';
+let quietReady = false;
+/** A low-importance Android channel with no sound for "Saved as Food"; null if unavailable. */
+export const ensureQuietChannel = async () => {
+  if (quietReady) return QUIET_CHANNEL;
+  try {
+    await Notifications.setNotificationChannelAsync(QUIET_CHANNEL, {
+      name: 'Quiet confirmations',
+      importance: Notifications.AndroidImportance.LOW,
+      sound: null,
+      vibrationPattern: null,
+      enableVibrate: false,
+    });
+    quietReady = true;
+    return QUIET_CHANNEL;
+  } catch {
+    return null;
+  }
+};
+
 const openTx = async (id, navigate) => {
   if (!navigate) return Storage.setItem(PENDING_OPEN_KEY, String(id)); // opened by the app later
   const row = (await getAll()).find((t) => String(t.id) === String(id));
@@ -228,13 +248,15 @@ export const handleResponse = async (response, { navigate } = {}) => {
     }
     if (req?.identifier) await Notifications.dismissNotificationAsync(req.identifier).catch(() => null);
     const { title } = captureText(res.tx);
+    const channelId = await ensureQuietChannel();
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `Saved as ${action.category}`,
-        body: `${title} · Undo in the app`,
-        data: { txId: String(res.tx.id), kind: 'saved' },
+        body: `${title} · Tap to change`, // a tap opens the transaction
+        sound: false,
+        data: { txId: String(res.tx.id), kind: 'saved', quiet: true },
       },
-      trigger: null,
+      trigger: channelId ? { channelId } : null,
     }).catch(() => null);
     return { status: res.status };
   } catch (e) {

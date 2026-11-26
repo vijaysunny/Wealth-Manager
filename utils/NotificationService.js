@@ -3,12 +3,12 @@ import AsyncStorage from '../data/Storage';
 import { captureContent } from './NotificationActions';
 // 1. CONFIGURE NOTIFICATIONS (Updated Handler)
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
+  handleNotification: async (notification) => ({
     shouldShowBanner: true,
     // Replaces shouldShowAlert
     shouldShowList: true,
     // Replaces shouldShowAlert
-    shouldPlaySound: true,
+    shouldPlaySound: !notification?.request?.content?.data?.quiet, // E3: "Saved as Food" is quiet
     shouldSetBadge: false,
   }),
 });

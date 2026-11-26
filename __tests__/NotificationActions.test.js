@@ -7,6 +7,8 @@ jest.mock('expo-notifications', () => ({
   setNotificationCategoryAsync: jest.fn(async () => null),
   scheduleNotificationAsync: jest.fn(async () => 'n'),
   dismissNotificationAsync: jest.fn(async () => {}),
+  setNotificationChannelAsync: jest.fn(async () => null),
+  AndroidImportance: { LOW: 2 },
   registerTaskAsync: jest.fn(async () => null),
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   getLastNotificationResponse: jest.fn(() => null),
@@ -178,8 +180,11 @@ describe('sending and handling', () => {
     expect(Notifications.dismissNotificationAsync).toHaveBeenCalledWith('notif-1');
     expect(Notifications.scheduleNotificationAsync.mock.calls[0][0].content).toMatchObject({
       title: 'Saved as Food',
-      body: '₹121 at Local store · Undo in the app',
+      body: '₹121 at Local store · Tap to change',
+      sound: false,
+      data: { quiet: true },
     });
+    expect(Notifications.scheduleNotificationAsync.mock.calls[0][0].trigger).toEqual({ channelId: 'quiet' });
     expect(await A.loadCategorised(rows)).toEqual([
       expect.objectContaining({ id: 't1', from: 'General', to: 'Food' }),
     ]);
@@ -275,4 +280,28 @@ describe('app start and the background task', () => {
     });
     await startNotificationActions(navigate);
   });
+});
+
+test('the "Saved as" confirmation goes on a quiet channel (created once); without it, plain', async () => {
+  jest.resetModules();
+  const N = require('expo-notifications');
+  const B = require('../utils/NotificationActions');
+  N.setNotificationChannelAsync.mockClear();
+  expect(await B.ensureQuietChannel()).toBe('quiet');
+  expect(await B.ensureQuietChannel()).toBe('quiet');
+  expect(N.setNotificationChannelAsync).toHaveBeenCalledTimes(1);
+  expect(N.setNotificationChannelAsync.mock.calls[0][1]).toMatchObject({ importance: 2, sound: null });
+  jest.resetModules();
+  const N2 = require('expo-notifications');
+  N2.setNotificationChannelAsync.mockRejectedValueOnce(new Error('ios'));
+  expect(await require('../utils/NotificationActions').ensureQuietChannel()).toBeNull();
+});
+
+test('the in-app handler stays silent for quiet notifications only', async () => {
+  const N = require('expo-notifications');
+  jest.isolateModules(() => require('../utils/NotificationService'));
+  const handler = N.setNotificationHandler.mock.calls.at(-1)[0].handleNotification;
+  expect((await handler({ request: { content: { data: { quiet: true } } } })).shouldPlaySound).toBe(false);
+  expect((await handler({ request: { content: { data: {} } } })).shouldPlaySound).toBe(true);
+  expect((await handler()).shouldPlaySound).toBe(true);
 });
