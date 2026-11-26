@@ -97,7 +97,7 @@ export const markSettled = (ious = [], id, date = new Date().toISOString()) =>
 export const unsettle = (ious = [], id) =>
   ious.map((i) => {
     if (String(i.id) !== String(id)) return i;
-    const { settledAt, settledByTxId, ...rest } = i; // eslint-disable-line no-unused-vars
+    const { settledAt, settledByTxId, ...rest } = i;
     return rest;
   });
 

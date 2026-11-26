@@ -42,6 +42,7 @@ import PayeeRulesScreen from './screens/PayeeRulesScreen';
 import SplitScreen from './screens/SplitScreen';
 import PeopleScreen from './screens/PeopleScreen';
 import PersonScreen from './screens/PersonScreen';
+import UpcomingBillsScreen from './screens/UpcomingBillsScreen';
 import BankEmiScreen from './screens/BankEmiScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardSetupScreen from './screens/CardSetupScreen';
@@ -206,6 +207,7 @@ function AppContent() {
         <Stack.Screen name="Split" component={SplitScreen} options={{ headerShown: false }} />
         <Stack.Screen name="People" component={PeopleScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Person" component={PersonScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="UpcomingBills" component={UpcomingBillsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanDetail" component={LoanDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="BankEmi" component={BankEmiScreen} options={{ headerShown: false }} />

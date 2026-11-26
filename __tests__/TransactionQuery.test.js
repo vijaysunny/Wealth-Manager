@@ -279,7 +279,6 @@ test('performance: 5,000 rows with every filter on (warning only)', () => {
   const r = runQuery(rows, query, asOf);
   const ms = performance.now() - start;
   expect(r.rows.length).toBeGreaterThan(0);
-  // eslint-disable-next-line no-console
   if (ms > 50) console.warn(`runQuery over 5,000 rows took ${Math.round(ms)} ms (target < 50 ms)`);
   const all = runQuery(rows, q({ sort: 'payee' }), asOf);
   expect(all.rows).toHaveLength(5000);

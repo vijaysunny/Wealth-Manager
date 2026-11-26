@@ -1,4 +1,5 @@
 import SmsAndroid from 'react-native-get-sms-android';
+import { parseMandate } from '../utils/Mandates';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { parseTransactionText, isTransactionalSender } from '../utils/TransactionParser';
 import { parseCardStatement } from '../utils/CardStatementSms';
@@ -75,12 +76,13 @@ export const scanBankSms = async (minDate = 0) => {
     const relevant = messages.filter((m) => isTransactionalSender(m.address));
     console.log(`📥 ${messages.length} SMS read, ${relevant.length} from bank-like senders`);
     const unparsed = [];
-    const items = parseData(relevant, unparsed);
+    const mandates = [];
+    const items = parseData(relevant, unparsed, mandates);
     // B7: card statement SMS → { statement, date } for the card's bill
     const statements = relevant
       .map((m) => ({ statement: parseCardStatement(m.body), date: new Date(Number(m.date) || Date.now()) }))
       .filter((x) => x.statement);
-    return { ok: true, reason: null, items, unparsed, statements };
+    return { ok: true, reason: null, items, unparsed, statements, mandates };
   } catch (err) {
     console.log('❌ Error reading SMS:', err);
     return { ok: false, reason: 'read_failed', items: [] };
@@ -91,12 +93,18 @@ export const scanBankSms = async (minDate = 0) => {
 export const fetchRecentBankSms = async (lastSyncTime = 0) => (await scanBankSms(lastSyncTime)).items;
 
 /** `unparsed` collects bank SMS the regex parser rejected but that look like money moved (AI input). */
-const parseData = (messages, unparsed = []) => {
+const parseData = (messages, unparsed = [], mandates = []) => {
   const results = [];
 
   messages.forEach((msg) => {
     const parsed = parseTransactionText(msg.body, { sender: msg.address, bankFallback: 'Unknown Bank' });
     if (!parsed) {
+      // E2: autopay mandate set up / paused / cancelled (not a transaction)
+      const mandate = parseMandate(msg.body, new Date(Number(msg.date) || Date.now()));
+      if (mandate) {
+        mandates.push(mandate);
+        return;
+      }
       if (isAiSmsCandidate(msg.body))
         unparsed.push({ id: msg._id, body: msg.body, sender: msg.address, date: msg.date });
       return;

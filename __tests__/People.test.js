@@ -1,6 +1,3 @@
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
-);
 import {
   balanceOf,
   peopleSummary,
@@ -19,6 +16,10 @@ import {
 } from '../utils/People';
 import { monthIncome } from '../utils/Report';
 import { computeNetWorth } from '../utils/BalanceService';
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
 
 const ravi = { id: 'ravi', name: 'Ravi', payeeKeys: [] };
 const priya = { id: 'priya', name: 'Priya', payeeKeys: [] };

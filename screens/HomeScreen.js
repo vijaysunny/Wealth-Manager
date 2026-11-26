@@ -4,6 +4,7 @@
  * quick actions · 3 recent rows with See all.
  * Card bills and wallet top-ups are transfers, so they never count as spending.
  */
+import { upcoming, nextBill } from '../utils/UpcomingBills';
 import { balanceOf } from '../utils/People';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -51,6 +52,7 @@ export default function HomeScreen({ navigation }) {
   const [backup, setBackup] = useState(null);
   const [permWarnings, setPermWarnings] = useState([]);
   const [people, setPeople] = useState({ owedToMe: 0, iOwe: 0 }); // E4 shortcut
+  const [bill, setBill] = useState(null); // E2: the next bill due
 
   const loadData = useCallback(async () => {
     setBackup(backupStatus(await Storage.getItem(LAST_BACKUP_KEY)));
@@ -65,6 +67,18 @@ export default function HomeScreen({ navigation }) {
     setUserName((await Storage.getItem('user_name')) || '');
     setPeople(balanceOf(JSON.parse((await Storage.getItem('ious')) || '[]')));
     const rows = await getAll();
+    const read = async (k) => JSON.parse((await Storage.getItem(k)) || '[]');
+    setBill(
+      nextBill(
+        upcoming({
+          accounts: await read('user_wealth_accounts'),
+          txs: rows,
+          recurring: await read('recurring_transactions'),
+          bills: await read('recurring_bills'),
+          mandates: await read('mandates'),
+        })
+      )
+    );
     rows.sort((a, b) => new Date(b.fullDate) - new Date(a.fullDate));
     setTransactions(rows);
     setLoaded(true);
@@ -222,6 +236,24 @@ export default function HomeScreen({ navigation }) {
             </View>
           </Pressable>
         )}
+
+        {/* E2: the next bill due */}
+        {bill ? (
+          <Pressable
+            testID="next-bill"
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('UpcomingBills')}
+            style={[styles.review, { backgroundColor: t.card, borderColor: t.border }]}
+          >
+            <View style={[styles.reviewIcon, { backgroundColor: t.primarySoft }]}>
+              <Ionicons name="calendar-outline" size={22} color={t.primary} />
+            </View>
+            <Text style={{ flex: 1, color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+              {`Next bill: ${bill.name.replace(/ bill$/, '')} ${formatMoney(bill.amount)} · ${new Date(bill.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`}
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color={t.muted} />
+          </Pressable>
+        ) : null}
 
         {/* E4: People, only when something is owed */}
         {people.owedToMe > 0 || people.iOwe > 0 ? (

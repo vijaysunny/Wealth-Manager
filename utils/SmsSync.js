@@ -17,6 +17,7 @@ import { scanBankSms } from '../components/RealSmsReader';
 import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, createDedupIndex } from './DeduplicationEngine';
 import { refundWords } from './RefundMatch';
+import { saveMandates } from './FeatureService';
 import { isReportable } from './BalanceService';
 import { formatMoney } from './Format';
 import { applyStatementSms } from './CardService';
@@ -135,6 +136,8 @@ const run = async ({ scan, storage, notify, save, now, ai, applyStatement }) => 
       console.warn('Statement not saved:', e?.message || e);
     }
   }
+  // E2: autopay mandate messages (set up / paused / cancelled) for Upcoming bills
+  if (res.mandates?.length) await saveMandates(res.mandates).catch(() => null);
   // Advance on every successful scan (found something or not)
   await storage.setItem(LAST_SYNC_KEY, String(startedAt));
 

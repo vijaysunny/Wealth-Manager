@@ -11,6 +11,8 @@ import AsyncStorage from '../data/Storage';
 import { sendTransactionNotification } from './NotificationService';
 import { saveWithDedup, buildSmsId, hashText } from './DeduplicationEngine';
 import { refundWords } from './RefundMatch';
+import { parseMandate } from './Mandates';
+import { saveMandates } from './FeatureService';
 import { isReportable } from './BalanceService';
 import { parseTransactionText } from './TransactionParser';
 import { capturedFields } from './CaptureMapper';
@@ -33,7 +35,13 @@ export const startSmsListener = () => {
       return;
     }
     const parsed = parseTransactionText(body, { sender, bankFallback: sender || 'Unknown' });
-    if (!parsed) return;
+    if (!parsed) {
+      // E2: an autopay mandate set up / paused / cancelled updates Upcoming bills
+      const mandate = parseMandate(body, new Date(Number(message.timestamp) || Date.now()));
+      if (mandate && (await AsyncStorage.getItem('sms_auto_track_enabled')) !== 'false')
+        await saveMandates([mandate]).catch(() => null);
+      return;
+    }
 
     const bankName = parsed.bankName;
     const now = new Date();

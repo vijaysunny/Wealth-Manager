@@ -31,6 +31,9 @@ export const BACKUP_FIELDS = {
   people: { key: 'people', kind: 'array' },
   ious: { key: 'ious', kind: 'array' },
   ownerUpiId: { key: 'owner_upi_id', kind: 'scalar' },
+  bills: { key: 'recurring_bills', kind: 'array' },
+  billDismissed: { key: 'bill_dismissed', kind: 'array' },
+  mandates: { key: 'mandates', kind: 'array' },
   userName: { key: 'user_name', kind: 'scalar' },
 };
 

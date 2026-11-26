@@ -25,6 +25,8 @@ import { ruleFromChanges, mergeRule, restoreRule } from './PayeeRules';
 import { recordBulk, takeUndo } from './UndoStore';
 import { linkChanges as refundLinkChanges, UNLINK_CHANGES } from './RefundMatch';
 import { validateSplit, iousForSplit, splitChanges, UNSPLIT_CHANGES } from './Splits';
+import { mergeMandate } from './Mandates';
+import { billFromSeries } from './RecurringDetect';
 import {
   newPerson,
   newIou,
@@ -193,6 +195,45 @@ export const settleFromCredit = (txId, personId) =>
 
 /** "No, it's income": not offered again. */
 export const dismissSettle = (txId) => atomic((db) => updateInDb(db, txId, { settleDismissed: true }));
+
+// ── E2: upcoming bills ────────────────────────────────────────────────────────
+/** Keep the newest mandate message per payee. */
+export const saveMandates = (list) =>
+  atomic(async (db) => {
+    let mandates = await readList(db, 'mandates');
+    for (const m of list || []) mandates = mergeMandate(mandates, m);
+    await writeValue(db, 'mandates', JSON.stringify(mandates));
+    return mandates;
+  });
+
+/** Add or replace a saved bill (by id). */
+export const saveBill = (bill) =>
+  atomic(async (db) => {
+    const bills = await readList(db, 'recurring_bills');
+    const i = bills.findIndex((b) => String(b.id) === String(bill.id));
+    await writeValue(
+      db,
+      'recurring_bills',
+      JSON.stringify(i < 0 ? [...bills, bill] : bills.map((b, j) => (j === i ? bill : b)))
+    );
+    return bill;
+  });
+
+/** "Add" on a detected series: it becomes a saved bill. */
+export const confirmSeries = (series) => saveBill(billFromSeries(series));
+
+export const deleteBill = (id) =>
+  atomic(async (db) => {
+    const bills = await readList(db, 'recurring_bills');
+    await writeValue(db, 'recurring_bills', JSON.stringify(bills.filter((b) => String(b.id) !== String(id))));
+  });
+
+/** "Not a bill": this payee is never suggested again. */
+export const dismissBillPayee = (key) =>
+  atomic(async (db) => {
+    const keys = await readList(db, 'bill_dismissed');
+    if (!keys.includes(key)) await writeValue(db, 'bill_dismissed', JSON.stringify([...keys, key]));
+  });
 
 /** E5: link a refund to the purchase it refunds (checked: it can't exceed what is left). */
 export const linkRefund = (refundId, purchaseId) =>

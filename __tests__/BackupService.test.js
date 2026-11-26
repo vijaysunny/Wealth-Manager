@@ -49,6 +49,9 @@ const full = () => ({
     { id: 'i1', personId: 'p1', amount: 500, direction: 'owedToMe', date: '2026-10-12' },
   ]),
   owner_upi_id: 'me@upi',
+  recurring_bills: JSON.stringify([{ id: 'b1', name: 'Gym', amount: 1500, cadence: 'monthly' }]),
+  bill_dismissed: JSON.stringify(['swiggy']),
+  mandates: JSON.stringify([{ key: 'openai', payee: 'OpenAI LLC', status: 'paused' }]),
 });
 
 describe('backup round trip', () => {

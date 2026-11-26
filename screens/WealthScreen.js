@@ -698,33 +698,55 @@ export default function WealthScreen({ navigation }) {
           </Section>
         ) : null}
 
-        <Section title="People">
+        <Section title="People and bills">
           {card(
-            <Pressable
-              testID="people-row"
-              accessibilityRole="button"
-              accessibilityLabel={`People. Owed to you ${formatMoney(ov.people.owedToMe)}, you owe ${formatMoney(ov.people.iOwe)}`}
-              onPress={() => navigation.navigate('People')}
-              style={[styles.row, { borderColor: t.divider, borderBottomWidth: 0 }]}
-            >
-              <View style={[styles.badge, { backgroundColor: t.incomeBg }]}>
-                <Ionicons name="people-outline" size={22} color={t.income} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>People</Text>
-                <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
-                  {ov.people.owedToMe || ov.people.iOwe
-                    ? [
-                        ov.people.owedToMe ? `Owed to you ${formatMoney(ov.people.owedToMe)}` : null,
-                        ov.people.iOwe ? `You owe ${formatMoney(ov.people.iOwe)}` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')
-                    : 'Split bills and IOUs'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={t.muted} />
-            </Pressable>
+            <>
+              <Pressable
+                testID="bills-row"
+                accessibilityRole="button"
+                accessibilityLabel="Upcoming bills"
+                onPress={() => navigation.navigate('UpcomingBills')}
+                style={[styles.row, { borderColor: t.divider, borderBottomWidth: 1 }]}
+              >
+                <View style={[styles.badge, { backgroundColor: t.primarySoft }]}>
+                  <Ionicons name="calendar-outline" size={22} color={t.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+                    Upcoming bills
+                  </Text>
+                  <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
+                    Card bills, EMIs and subscriptions in the next 30 days
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={t.muted} />
+              </Pressable>
+              <Pressable
+                testID="people-row"
+                accessibilityRole="button"
+                accessibilityLabel={`People. Owed to you ${formatMoney(ov.people.owedToMe)}, you owe ${formatMoney(ov.people.iOwe)}`}
+                onPress={() => navigation.navigate('People')}
+                style={[styles.row, { borderColor: t.divider, borderBottomWidth: 0 }]}
+              >
+                <View style={[styles.badge, { backgroundColor: t.incomeBg }]}>
+                  <Ionicons name="people-outline" size={22} color={t.income} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>People</Text>
+                  <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
+                    {ov.people.owedToMe || ov.people.iOwe
+                      ? [
+                          ov.people.owedToMe ? `Owed to you ${formatMoney(ov.people.owedToMe)}` : null,
+                          ov.people.iOwe ? `You owe ${formatMoney(ov.people.iOwe)}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : 'Split bills and IOUs'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={t.muted} />
+              </Pressable>
+            </>
           )}
         </Section>
 
