@@ -311,6 +311,13 @@ export default function BudgetScreen({ navigation }) {
           icon="stats-chart-outline"
           onPress={() => navigation.navigate('Analytics')}
         />
+        <AppButton
+          title="Month in review"
+          variant="secondary"
+          icon="calendar-outline"
+          style={{ marginTop: space.sm }}
+          onPress={() => navigation.navigate('MonthReview')}
+        />
       </ScrollView>
 
       <OptionSheet

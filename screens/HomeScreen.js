@@ -4,6 +4,7 @@
  * quick actions · 3 recent rows with See all.
  * Card bills and wallet top-ups are transfers, so they never count as spending.
  */
+import { showReviewCard, monthKeyOf, monthName, prevMonth } from '../utils/MonthReview';
 import { upcoming, nextBill } from '../utils/UpcomingBills';
 import { balanceOf } from '../utils/People';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -236,6 +237,24 @@ export default function HomeScreen({ navigation }) {
             </View>
           </Pressable>
         )}
+
+        {/* E6: last month in review, on the 1st–7th */}
+        {showReviewCard() ? (
+          <Pressable
+            testID="review-month-card"
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('MonthReview', { month: monthKeyOf(prevMonth(new Date())) })}
+            style={[styles.review, { backgroundColor: t.card, borderColor: t.border }]}
+          >
+            <View style={[styles.reviewIcon, { backgroundColor: t.primarySoft }]}>
+              <Ionicons name="stats-chart-outline" size={22} color={t.primary} />
+            </View>
+            <Text style={{ flex: 1, color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+              {`${monthName(prevMonth(new Date()))} in review`}
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color={t.muted} />
+          </Pressable>
+        ) : null}
 
         {/* E2: the next bill due */}
         {bill ? (

@@ -43,6 +43,8 @@ import SplitScreen from './screens/SplitScreen';
 import PeopleScreen from './screens/PeopleScreen';
 import PersonScreen from './screens/PersonScreen';
 import UpcomingBillsScreen from './screens/UpcomingBillsScreen';
+import MonthReviewScreen from './screens/MonthReviewScreen';
+import { scheduleMonthReview } from './utils/MonthReviewReminder';
 import BankEmiScreen from './screens/BankEmiScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardSetupScreen from './screens/CardSetupScreen';
@@ -131,6 +133,7 @@ function AppContent() {
         await syncCardReminders(); // B4: a payment may have cleared a bill
         await syncLoans(); // C4: link new EMI debits; remind when one is missing
         await saveNetWorthSnapshot();
+        await scheduleMonthReview().catch(() => null); // E6: 'Your November summary is ready' on the 1st
       } catch (err) {
         console.warn('Catch-up error:', err);
       }
@@ -208,6 +211,7 @@ function AppContent() {
         <Stack.Screen name="People" component={PeopleScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Person" component={PersonScreen} options={{ headerShown: false }} />
         <Stack.Screen name="UpcomingBills" component={UpcomingBillsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="MonthReview" component={MonthReviewScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanDetail" component={LoanDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="BankEmi" component={BankEmiScreen} options={{ headerShown: false }} />
