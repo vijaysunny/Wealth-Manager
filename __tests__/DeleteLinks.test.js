@@ -97,3 +97,18 @@ test('bulk delete unlinks too; deleting something unlinked changes nothing else;
   expect(await remove('other')).toBe(true);
   expect(await remove('missing')).toBe(false);
 });
+
+test('deleting the credit that settled an IOU makes it owed again (People and net worth)', async () => {
+  const { settleFromCredit } = require('../utils/FeatureService');
+  const ravi = await splitForRavi();
+  await addMany([{ id: 'back', type: 'income', amount: 300, merchant: 'RAVI K', fullDate: at(11, 25) }], {
+    dedup: false,
+  });
+  await settleFromCredit('back', ravi.id); // part-settles the ₹500
+  expect((await list('ious')).filter((i) => !i.settledAt).map((i) => i.amount)).toEqual([200]);
+  await remove('back');
+  const ious = await list('ious');
+  expect(ious).toHaveLength(1);
+  expect(ious[0]).toMatchObject({ personId: ravi.id, amount: 500 });
+  expect(ious[0].settledAt).toBeUndefined();
+});

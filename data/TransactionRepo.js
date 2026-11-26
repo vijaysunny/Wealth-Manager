@@ -5,6 +5,7 @@ import { applyCategoryRules } from '../utils/FinanceTools';
 import { readValue, writeValue } from './Storage';
 import { countHits } from '../utils/PayeeRules';
 import { markRefundCandidates, UNLINK_CHANGES } from '../utils/RefundMatch';
+import { reopenSettledBy } from '../utils/People';
 import { checkBudgetAlerts } from '../utils/MonthlyBudgets';
 import { filterNew } from '../utils/DeduplicationEngine';
 import { applyToAccounts, reverseOnAccounts, applyCapturedToAccounts } from '../utils/BalanceService';
@@ -160,7 +161,8 @@ export const removeInDb = async (db, id) => {
 
 /**
  * E4/E5: what pointed at a deleted transaction goes with it. Open IOUs from its split are removed
- * (settled ones stay as history), and refunds linked to it count as income again.
+ * (settled ones stay as history), IOUs it settled are owed again, and refunds linked to it count
+ * as income again.
  */
 const dropLinksTo = async (db, tx) => {
   const key = String(tx.id);
@@ -172,7 +174,8 @@ const dropLinksTo = async (db, tx) => {
   }
   if (Array.isArray(ious)) {
     const kept = ious.filter((i) => !(i && i.txId != null && String(i.txId) === key && !i.settledAt));
-    if (kept.length !== ious.length) await writeValue(db, 'ious', JSON.stringify(kept));
+    const next = reopenSettledBy(kept, key); // it was a settlement: those IOUs are owed again
+    if (next !== kept || kept.length !== ious.length) await writeValue(db, 'ious', JSON.stringify(next));
   }
   const linked = (await db.getAllAsync('SELECT data FROM transactions WHERE data LIKE ?', '%"refundOf"%'))
     .map(decodeRow)

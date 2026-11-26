@@ -247,3 +247,30 @@ test('edge cases: defaults, ties, missing fields', () => {
   expect(newPerson(undefined, 'A').name).toBe('A');
   expect(newIou({ personId: 'p', amount: 1 }).note).toBe('');
 });
+
+test('reopenSettledBy: a deleted settlement reopens what it settled and folds a remainder back', () => {
+  const { reopenSettledBy, settle: settleIous } = require('../utils/People');
+  const ious = [
+    { id: 'a', personId: 'r', amount: 300, direction: 'owedToMe', date: '2026-11-01' },
+    { id: 'b', personId: 'r', amount: 500, direction: 'owedToMe', date: '2026-11-02' },
+    {
+      id: 'c',
+      personId: 'r',
+      amount: 50,
+      direction: 'owedToMe',
+      date: '2026-11-03',
+      settledAt: 'x',
+      settledByTxId: 'other',
+    },
+  ];
+  const r = settleIous(ious, 'r', 400, { date: '2026-11-20T00:00:00.000Z', txId: 'cr' });
+  expect(r.ious).toHaveLength(4); // b was split into 100 settled + 400 open
+  const back = reopenSettledBy(r.ious, 'cr');
+  expect(back.map((i) => [i.id, i.amount, !!i.settledAt])).toEqual([
+    ['a', 300, false],
+    ['b', 500, false],
+    ['c', 50, true],
+  ]);
+  expect(reopenSettledBy(ious, 'nothing')).toBe(ious);
+  expect(reopenSettledBy(undefined, 'x')).toEqual([]);
+});

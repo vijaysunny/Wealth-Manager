@@ -101,6 +101,31 @@ export const unsettle = (ious = [], id) =>
     return rest;
   });
 
+/**
+ * The credit that settled these IOUs was deleted: reopen them, and fold a part-settle's open
+ * remainder ("<id>_rest_…") back in, so the IOU is whole again. Returns the same array when
+ * nothing changes.
+ */
+export const reopenSettledBy = (ious = [], txId) => {
+  const key = String(txId);
+  const hit = ious.filter((i) => i && i.settledByTxId != null && String(i.settledByTxId) === key);
+  if (!hit.length) return ious;
+  const reopened = new Map(hit.map((i) => [String(i.id), i]));
+  const merged = new Set();
+  const out = [];
+  for (const i of ious) {
+    if (reopened.has(String(i.id))) {
+      const { settledAt, settledByTxId, ...rest } = i;
+      const remainder = ious.find(
+        (r) => r && !r.settledAt && String(r.id).startsWith(`${i.id}_rest_`) && !merged.has(r.id)
+      );
+      if (remainder) merged.add(remainder.id);
+      out.push(remainder ? { ...rest, amount: round2(num(rest.amount) + num(remainder.amount)) } : rest);
+    } else out.push(i);
+  }
+  return out.filter((i) => !merged.has(i?.id));
+};
+
 const words = (s) =>
   String(s || '')
     .toLowerCase()
