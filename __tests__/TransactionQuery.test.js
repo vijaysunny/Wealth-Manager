@@ -295,3 +295,68 @@ test('monthDate: this month or a custom range for that month', () => {
     '1 Feb – 28 Feb'
   );
 });
+
+describe('spent matches Budget (Report.spendLines)', () => {
+  const { monthSpend } = require('../utils/Report');
+  const { runQuery: run, monthDate: md } = require('../utils/TransactionQuery');
+  const at = (m, d) => new Date(2026, m - 1, d, 12).toISOString();
+  const rows = [
+    {
+      id: 'amz',
+      type: 'expense',
+      amount: 2840,
+      category: 'Groceries',
+      fullDate: at(11, 12),
+      splits: [
+        { id: 'a', category: 'Groceries', amount: 1240 },
+        { id: 'b', category: 'Electronics', amount: 1100 },
+        { id: 'c', personId: 'ravi', amount: 500 },
+      ],
+    },
+    { id: 'shoe', type: 'expense', amount: 1499, category: 'Shopping', fullDate: at(11, 20) },
+    { id: 'tee', type: 'expense', amount: 700, category: 'Shopping', fullDate: at(12, 2) },
+    // refund for the shoes, arrived in December, linked back to November
+    {
+      id: 'rf',
+      type: 'income',
+      amount: 1499,
+      refundOf: 'shoe',
+      refundCategory: 'Shopping',
+      refundDate: at(11, 20),
+      fullDate: at(12, 3),
+    },
+  ];
+  const asOf = new Date(2026, 11, 10);
+  const nov = new Date(2026, 10, 1);
+  const dec = new Date(2026, 11, 1);
+  const shortcut = (month, category) => ({
+    date: md(month, asOf),
+    categories: [category],
+    types: ['expense'],
+  });
+
+  test('a split row counts only the parts in the chosen category', () => {
+    const r = run(rows, shortcut(nov, 'Groceries'), asOf);
+    expect(r.rows.map((t) => t.id)).toEqual(['amz']);
+    expect(r.totals.spent).toBe(1240);
+    expect(r.totals.spent).toBe(monthSpend(rows, nov).byCategory.Groceries);
+    expect(run(rows, shortcut(nov, 'Electronics'), asOf).totals.spent).toBe(1100);
+  });
+
+  test('a linked refund lowers its purchase month, not the month it arrived; even with Expenses only', () => {
+    expect(run(rows, shortcut(nov, 'Shopping'), asOf).totals.spent).toBe(0);
+    expect(run(rows, shortcut(nov, 'Shopping'), asOf).totals.spent).toBe(
+      monthSpend(rows, nov).byCategory.Shopping
+    );
+    const decShop = run(rows, shortcut(dec, 'Shopping'), asOf);
+    expect(decShop.totals.spent).toBe(700);
+    expect(decShop.totals.spent).toBe(monthSpend(rows, dec).byCategory.Shopping);
+    // a whole month with no filters agrees with Budget's total too
+    expect(run(rows, { date: md(nov, asOf) }, asOf).totals.spent).toBe(monthSpend(rows, nov).total);
+    expect(run(rows, { date: md(dec, asOf) }, asOf).totals.spent).toBe(monthSpend(rows, dec).total);
+    // income only: no spending
+    expect(run(rows, { date: md(dec, asOf), types: ['income'] }, asOf).totals.spent).toBe(0);
+    // other filters still apply to the refund row
+    expect(run(rows, { ...shortcut(nov, 'Shopping'), text: 'zzz-no-match' }, asOf).totals.spent).toBe(0);
+  });
+});

@@ -9,7 +9,7 @@
 import { parseSearch, matchesSearch, visibleTags } from './Tags';
 import { payeeOf } from './PayeeMatch';
 import { shortAccountName } from './TransactionList';
-import { totalsOf, categoriesOf } from './Report';
+import { totalsOf, categoriesOf, spendLines, isLinkedRefund, round2 } from './Report';
 import { formatMoney } from './Format';
 
 export const SORTS = ['newest', 'oldest', 'amountDesc', 'amountAsc', 'payee'];
@@ -133,23 +133,47 @@ export const runQuery = (rows, query, asOf = new Date(), { accounts = [] } = {})
   const { from, to } = dateRange(q.date, asOf);
   const accs = q.accountIds.map((id) => accounts.find((a) => String(a.id) === String(id)) || { id });
   const flagTests = q.flags.map((f) => FLAG_TESTS[f] || (() => false));
-  const out = (rows || []).filter((tx) => {
-    if (!tx) return false;
-    if (from || to) {
-      const t = new Date(tx.fullDate);
-      if (Number.isNaN(t.getTime()) || (from && t < from) || (to && t >= to)) return false;
-    }
-    if (q.types.length && !q.types.includes(tx.type)) return false;
+  const inRange = (iso) => {
+    if (!from && !to) return true;
+    const t = new Date(iso);
+    return !Number.isNaN(t.getTime()) && !(from && t < from) && !(to && t >= to);
+  };
+  // Filters that don't depend on dates, types or categories (those differ for spending lines).
+  const others = (tx) => {
     if (accs.length && !accs.some((a) => onAccount(tx, a))) return false;
-    if (q.categories.length && !categoriesOf(tx).some((c) => q.categories.includes(c))) return false;
     const amt = Number(tx.amount);
     if (q.amountMin != null && !(amt >= q.amountMin)) return false;
     if (q.amountMax != null && !(amt <= q.amountMax)) return false;
     if (flagTests.length && !flagTests.some((f) => f(tx))) return false;
     return matchesSearch(tx, search);
+  };
+  const out = (rows || []).filter((tx) => {
+    if (!tx || !inRange(tx.fullDate)) return false;
+    if (q.types.length && !q.types.includes(tx.type)) return false;
+    if (q.categories.length && !categoriesOf(tx).some((c) => q.categories.includes(c))) return false;
+    return others(tx);
   });
   out.sort(COMPARE[q.sort] || COMPARE.newest);
-  return { rows: out, totals: totalsOf(out) };
+  return { rows: out, totals: { ...totalsOf(out), spent: spentFor(rows, q, inRange, others) } };
+};
+
+/**
+ * "Spent" the way Budget counts it (Report.spendLines): only the split parts in the chosen
+ * categories, and a refund linked to a purchase lowers the purchase's month and category,
+ * even when the list shows expenses only.
+ */
+const spentFor = (rows, q, inRange, others) => {
+  let spent = 0;
+  for (const tx of rows || []) {
+    if (!tx) continue;
+    const asType = isLinkedRefund(tx) ? 'expense' : tx.type;
+    if (q.types.length && !q.types.includes(asType)) continue;
+    if (!others(tx)) continue;
+    for (const l of spendLines(tx))
+      if (inRange(l.fullDate) && (!q.categories.length || q.categories.includes(l.category)))
+        spent += l.amount;
+  }
+  return round2(spent);
 };
 
 const monthName = (d) => d.toLocaleDateString('en-GB', { month: 'long' });
