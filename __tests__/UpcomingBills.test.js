@@ -295,3 +295,51 @@ test('defaults: no transactions, bills without a key or anchor day', () => {
     '2026-12-10',
   ]);
 });
+
+test('newBill: checks the fields; weekly keeps a 7-day step; the date cannot be past', () => {
+  const { newBill } = require('../utils/UpcomingBills');
+  const now = new Date(2026, 10, 26, 12);
+  expect(() => newBill({ name: ' ' }, now)).toThrow('Enter a name.');
+  expect(() => newBill({ name: 'Gym', amount: 0 }, now)).toThrow('Enter an amount.');
+  expect(() => newBill({ name: 'Gym', amount: 'x' }, now)).toThrow('Enter an amount.');
+  expect(() => newBill({ name: 'Gym', amount: 500, cadence: 'daily' }, now)).toThrow('Choose how often.');
+  expect(() => newBill({ name: 'Gym', amount: 500 }, now)).toThrow('Choose the next due date');
+  expect(() => newBill({ name: 'Gym', amount: 500, nextDate: new Date(2026, 10, 25) }, now)).toThrow(
+    'today or later'
+  );
+  const b = newBill(
+    {
+      name: ' Cult Fit ',
+      amount: '999.999',
+      cadence: 'weekly',
+      nextDate: new Date(2026, 10, 26, 20),
+      reminder: 1,
+    },
+    now
+  );
+  expect(b).toMatchObject({
+    name: 'Cult Fit',
+    amount: 1000,
+    cadence: 'weekly',
+    stepDays: 7,
+    anchorDay: 26,
+    accountId: null,
+    source: 'manual',
+    reminder: true,
+  });
+  expect(b.key).toBeTruthy();
+  expect(newBill({ name: 'Rent', amount: 100, nextDate: new Date(2026, 11, 1) }, now)).toMatchObject({
+    cadence: 'monthly',
+    stepDays: null,
+    reminder: false,
+  });
+  expect(newBill({ name: 'Rent', amount: 100, nextDate: new Date(2099, 0, 1) }).nextDate).toBeTruthy();
+});
+
+test('more defaults: window and card payer with no arguments, odd amounts', () => {
+  const w = windowOf();
+  expect(w.to - w.from).toBeGreaterThan(29 * 86400000);
+  expect(cardPaidFrom({ id: 'c' })).toBeNull();
+  expect(cardPaidFrom({ id: 'c' }, null)).toBeNull();
+  expect(billNext({ cadence: 'monthly', nextDate: d(2026, 12, 3) }).toString()).not.toBe('Invalid Date');
+});

@@ -150,3 +150,10 @@ Result values: `PENDING`, `PASS`, `FAIL`, `BLOCKED`.
 | C4-4 | Sort by amount, switch to another app and back; then restart the app | Sort and filters still there; after a restart the sort is remembered and filters are cleared | PENDING | |
 | C4-5 | Long-press → select 5 → Tag #tax-2026 → search `#tax-2026` | Shows those 5 | PENDING | |
 | C4-6 | Scroll Transactions with a full year of SMS | Smooth | PENDING | |
+| E-1 | Settings → Backup → Export (encrypted) and share it | Home's backup banner is gone; Month in review no longer says "No backup yet" | PENDING | Backup stays manual in Phase 14 (plan E1) |
+| E-2 | Open Accounts → Upcoming bills | Lists the Axis card bill, the Bajaj EMI and Google with the right dates; confirming a detected bill keeps it next month; the reminder arrives 2 days before at 9:00 | PENDING | |
+| E-3 | With the app **closed**, tap a category button on a capture notification; then open the app | "Saved as …" appears; the transaction has that category; Review → Check offers "apply to similar" | PENDING | If the tap only applies when the app opens, the background task isn't delivered on this phone: note it here |
+| E-3b | Tap **Not mine** on a notification where a rule chose the category; turn off Settings → "Category buttons on notifications" | The app opens on that transaction and it is in "Needs review"; the next capture notification has no buttons | PENDING | |
+| E-4 | Split an order, part to Ravi; Ravi pays back by UPI | Budget counts only your part; Ravi's payment is suggested as a settlement and does not count as income | PENDING | |
+| E-5 | A real refund SMS arrives | Matched to its purchase from Review → Check; that month's spending goes down; income doesn't go up | PENDING | |
+| E-6 | On the 1st of the month | "Your <month> summary is ready" arrives at about 9:00 and opens Month in review; the numbers match Reports for that month; Share sends no payee names | PENDING | |
