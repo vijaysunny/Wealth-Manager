@@ -4,7 +4,7 @@ import { atomic, getDatabase, insertRow, decodeRow, encodeTransaction, sourceId 
 import { applyCategoryRules } from '../utils/FinanceTools';
 import { readValue, writeValue } from './Storage';
 import { countHits } from '../utils/PayeeRules';
-import { markRefundCandidates } from '../utils/RefundMatch';
+import { markRefundCandidates, UNLINK_CHANGES } from '../utils/RefundMatch';
 import { checkBudgetAlerts } from '../utils/MonthlyBudgets';
 import { filterNew } from '../utils/DeduplicationEngine';
 import { applyToAccounts, reverseOnAccounts, applyCapturedToAccounts } from '../utils/BalanceService';
@@ -154,7 +154,30 @@ export const removeInDb = async (db, id) => {
   const tx = decodeRow(row);
   if (tx.balanceMode !== 'none') await moveBalances(db, (accounts) => reverseOnAccounts(accounts, tx));
   await db.runAsync('DELETE FROM transactions WHERE id=?', String(id));
+  await dropLinksTo(db, tx);
   return true;
+};
+
+/**
+ * E4/E5: what pointed at a deleted transaction goes with it. Open IOUs from its split are removed
+ * (settled ones stay as history), and refunds linked to it count as income again.
+ */
+const dropLinksTo = async (db, tx) => {
+  const key = String(tx.id);
+  let ious = [];
+  try {
+    ious = JSON.parse((await readValue(db, 'ious')) || '[]');
+  } catch {
+    ious = [];
+  }
+  if (Array.isArray(ious)) {
+    const kept = ious.filter((i) => !(i && i.txId != null && String(i.txId) === key && !i.settledAt));
+    if (kept.length !== ious.length) await writeValue(db, 'ious', JSON.stringify(kept));
+  }
+  const linked = (await db.getAllAsync('SELECT data FROM transactions WHERE data LIKE ?', '%"refundOf"%'))
+    .map(decodeRow)
+    .filter((r) => r.refundOf != null && String(r.refundOf) === key);
+  for (const r of linked) await updateInDb(db, r.id, { ...UNLINK_CHANGES, refundCandidate: true });
 };
 export const remove = async (id) => {
   const removed = await atomic((db) => removeInDb(db, id));
