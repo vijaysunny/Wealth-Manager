@@ -6,7 +6,7 @@
  * Budget and Card detail ({ accountId } still works). The sort is remembered across restarts;
  * filters last while the app is open.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, Pressable, ScrollView, SectionList, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -104,6 +104,8 @@ const dayTotalLabel = (n) => (n === 0 ? '' : `${n < 0 ? '−' : '+'}${formatMone
 /** The query a screen opened with: { query } (partial) or the { accountId } shortcut. */
 export const queryFromParams = (params, sort) => {
   const base = { ...defaultQuery(), sort: sort || 'newest' };
+  // Android closed the app in the background: the list comes back as it was (A6.5 restore)
+  if (params?.restoredQuery) return { ...base, ...params.restoredQuery };
   if (params?.query) return { ...base, ...params.query, sort: params.query.sort || base.sort };
   if (params?.accountId != null) return { ...base, accountIds: [String(params.accountId)] };
   return base;
@@ -129,8 +131,8 @@ export default function AllTransactionsScreen({ navigation, route }) {
   const [selected, setSelected] = useState(null); // B5: Set of ids in select mode, null otherwise
   const [asOf, setAsOf] = useState(() => new Date()); // "today" for date filters, renewed on each load
 
-  // The remembered sort (B2); filters reset on restart. Once, on mount.
-  const openedWithSort = !!route?.params?.query?.sort;
+  // The remembered sort (B2); filters reset on a fresh start. Once, on mount.
+  const openedWithSort = !!route?.params?.query?.sort || !!route?.params?.restoredQuery;
   useEffect(() => {
     if (openedWithSort) return;
     Storage.getItem(SORT_KEY)
@@ -140,10 +142,21 @@ export default function AllTransactionsScreen({ navigation, route }) {
   // Opened again from a shortcut while mounted: take its filters, keep the sort.
   const paramQuery = route?.params?.query;
   const paramAccount = route?.params?.accountId;
+  const mounted = useRef(false);
   useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true; // the first render already used the params (or the restored filters)
+      return;
+    }
     if (paramQuery || paramAccount != null)
       setQuery((q) => queryFromParams({ query: paramQuery, accountId: paramAccount }, q.sort));
   }, [paramQuery, paramAccount]);
+
+  // Keep the current filters in the route, so the saved navigation state brings them back if
+  // Android closes the app in the background. A fresh start opens Home, so they reset then.
+  useEffect(() => {
+    navigation?.setParams?.({ restoredQuery: query });
+  }, [navigation, query]);
 
   const load = useCallback(async () => {
     setAccounts(JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]'));

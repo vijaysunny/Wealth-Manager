@@ -350,3 +350,27 @@ describe('B5 select mode', () => {
     expect(screen.getByText('Transactions')).toBeTruthy();
   });
 });
+
+test('hand-set filters are kept in the route, so they come back after Android closes the app', async () => {
+  const setParams = jest.fn();
+  const n = { navigate: jest.fn(), goBack: jest.fn(), setParams };
+  render(<AllTransactionsScreen navigation={n} route={{ params: {} }} />);
+  await screen.findByText('Anjanadri');
+  fireEvent.changeText(screen.getByLabelText('Search transactions'), 'anjan');
+  await waitFor(() =>
+    expect(setParams).toHaveBeenLastCalledWith({ restoredQuery: expect.objectContaining({ text: 'anjan' }) })
+  );
+  const saved = setParams.mock.calls.at(-1)[0].restoredQuery;
+  // a restored screen (same saved params) opens with them, and the remembered sort doesn't override
+  await Storage.setItem('tx_list_sort', 'amountDesc');
+  screen.unmount();
+  render(
+    <AllTransactionsScreen
+      navigation={n}
+      route={{ params: { query: { types: ['income'] }, restoredQuery: saved } }}
+    />
+  );
+  expect(await screen.findByDisplayValue('anjan')).toBeTruthy();
+  expect(screen.getByText('Anjanadri')).toBeTruthy();
+  expect(queryFromParams({ restoredQuery: { ...saved, sort: 'payee' } }).sort).toBe('payee');
+});
