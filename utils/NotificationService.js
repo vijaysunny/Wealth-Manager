@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '../data/Storage';
+import { captureContent } from './NotificationActions';
 // 1. CONFIGURE NOTIFICATIONS (Updated Handler)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -19,7 +20,8 @@ let lastNotifTime = 0;
 // 2. REQUEST PERMISSIONS
 
 // 3. SEND INSTANT TRANSACTION ALERT (With Spam Blocker)
-export async function sendTransactionNotification(title, body) {
+// E3: pass the captured transaction to get "₹322 at Swiggy" with category buttons (debits only).
+export async function sendTransactionNotification(title, body, tx = null) {
   const now = Date.now();
   const contentKey = `${title}|${body}`;
 
@@ -33,10 +35,12 @@ export async function sendTransactionNotification(title, body) {
   lastNotifContent = contentKey;
   lastNotifTime = now;
   try {
+    const actionable = tx ? await captureContent(tx, body).catch(() => null) : null;
     await Notifications.scheduleNotificationAsync({
       content: {
         title: title,
         body: body,
+        ...(actionable || {}),
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },

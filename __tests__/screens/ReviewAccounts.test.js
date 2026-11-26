@@ -138,3 +138,75 @@ test('A11: Check tab asks "Is Debit Card ••4821 linked to Axis Bank ••09
   const [axis] = JSON.parse(await Storage.getItem('user_wealth_accounts')).filter((a) => a.id === 'axis');
   expect(axis.debitCards).toEqual(['4821']);
 });
+
+describe('E3: categorised from notifications', () => {
+  const row = (id, category, day) => ({
+    id,
+    type: 'expense',
+    amount: 121,
+    category,
+    merchant: 'Local store',
+    title: 'Local store',
+    fullDate: new Date(2026, 10, day, 12).toISOString(),
+  });
+  beforeEach(async () => {
+    await Storage.clear();
+    await addMany([row('n1', 'Food', 20), row('n2', 'General', 10), row('n3', 'General', 11)], {
+      dedup: false,
+    });
+    await Storage.setItem('notif_categorised', JSON.stringify([{ id: 'n1', from: 'General', to: 'Food' }]));
+  });
+
+  test('Review offers apply to similar; Update copies the category to the others', async () => {
+    render(<ReviewAccountsScreen navigation={nav()} route={{ params: { tab: 'check' } }} />);
+    expect(await screen.findByText('You categorised 1 from notifications · apply to similar?')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Apply Food to similar Local store transactions' }));
+    fireEvent.press(await screen.findByRole('button', { name: 'Update 2' }));
+    await waitFor(async () =>
+      expect(
+        (await getAll())
+          .filter((t) => t.category === 'Food')
+          .map((t) => t.id)
+          .sort()
+      ).toEqual(['n1', 'n2', 'n3'])
+    );
+    await waitFor(() => expect(screen.queryByTestId('notif-similar')).toBeNull());
+  });
+
+  test('Only this one on the sheet drops it and changes nothing else', async () => {
+    render(<ReviewAccountsScreen navigation={nav()} route={{ params: { tab: 'check' } }} />);
+    fireEvent.press(
+      await screen.findByRole('button', { name: 'Apply Food to similar Local store transactions' })
+    );
+    await screen.findByRole('button', { name: 'Update 2' });
+    fireEvent.press(screen.getByRole('button', { name: 'Only this one' }));
+    await waitFor(() => expect(screen.queryByTestId('notif-similar')).toBeNull());
+    expect((await getAll()).filter((t) => t.category === 'Food')).toHaveLength(1);
+  });
+
+  test('Dismiss on the card clears the list', async () => {
+    await Storage.setItem(
+      'notif_categorised',
+      JSON.stringify([
+        { id: 'n1', from: 'General', to: 'Food' },
+        { id: 'gone', from: 'General', to: 'Bills' },
+      ])
+    );
+    render(<ReviewAccountsScreen navigation={nav()} route={{ params: { tab: 'check' } }} />);
+    const card = await screen.findByTestId('notif-similar');
+    fireEvent.press(within(card).getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(screen.queryByTestId('notif-similar')).toBeNull());
+    expect(await Storage.getItem('notif_categorised')).toBe('[]');
+  });
+
+  test('no similar rows: a snackbar and the entry goes', async () => {
+    const { update } = require('../../data/TransactionRepo');
+    await update('n2', { merchant: 'Elsewhere' });
+    await update('n3', { merchant: 'Elsewhere' });
+    render(<ReviewAccountsScreen navigation={nav()} route={{ params: { tab: 'check' } }} />);
+    fireEvent.press(
+      await screen.findByRole('button', { name: 'Apply Food to similar Local store transactions' })
+    );
+    await waitFor(() => expect(screen.queryByTestId('notif-similar')).toBeNull());
+  });
+});

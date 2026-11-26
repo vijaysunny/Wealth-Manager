@@ -179,3 +179,15 @@ test('E4: Your UPI ID is saved for People reminders', async () => {
   expect(await Storage.getItem('owner_upi_id')).toBe('me@okaxis');
   expect(await screen.findByText('me@okaxis')).toBeTruthy();
 });
+
+test('E3: "Category buttons on notifications" is on by default and can be turned off', async () => {
+  const S = SettingsScreen();
+  render(<S navigation={nav()} />);
+  const sw = () =>
+    screen
+      .UNSAFE_getAllByType(RN.Switch)
+      .find((x) => x.props.accessibilityLabel === 'Category buttons on notifications');
+  await waitFor(() => expect(sw().props.value).toBe(true));
+  fireEvent(sw(), 'valueChange', false);
+  await waitFor(async () => expect(await Storage.getItem('notif_category_buttons')).toBe('false'));
+});

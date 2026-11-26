@@ -89,7 +89,8 @@ export const dateRange = (date, asOf = new Date()) => {
 };
 
 const FLAG_TESTS = {
-  needsReview: (tx) => tx.reviewStatus === 'pending' || !!tx.accountUnresolved,
+  needsReview: (tx) =>
+    tx.reviewStatus === 'pending' || tx.reviewStatus === 'disputed' || !!tx.accountUnresolved, // E3: Not mine
   hasFile: (tx) => Array.isArray(tx.attachments) && tx.attachments.length > 0,
   hasTags: (tx) => visibleTags(tx.tags).length > 0,
   notInReports: (tx) => !!tx.excludeFromReports,

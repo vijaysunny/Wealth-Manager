@@ -88,7 +88,7 @@ const notifyOne = async (tx, spentBefore, limit, notify) => {
   let body = `Total ${tx.category} spend: ${formatMoney(total)}`;
   if (limit > 0)
     body = `You've spent ${formatMoney(total)} out of ${formatMoney(limit)} (${Math.round((total / limit) * 100)}%)`;
-  await notify(`Spent ${formatMoney(tx.amount)} on ${tx.category}`, body);
+  await notify(`Spent ${formatMoney(tx.amount)} on ${tx.category}`, body, tx); // E3: buttons
 };
 
 const run = async ({ scan, storage, notify, save, now, ai, applyStatement }) => {

@@ -8,7 +8,12 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
@@ -45,6 +50,7 @@ import PersonScreen from './screens/PersonScreen';
 import UpcomingBillsScreen from './screens/UpcomingBillsScreen';
 import MonthReviewScreen from './screens/MonthReviewScreen';
 import { scheduleMonthReview } from './utils/MonthReviewReminder';
+import { startNotificationActions } from './utils/NotificationTask';
 import BankEmiScreen from './screens/BankEmiScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardSetupScreen from './screens/CardSetupScreen';
@@ -101,6 +107,11 @@ const restoreNavigation = async () => {
   }
 };
 const Stack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef();
+// E3/E6: notification taps navigate once the navigator is ready
+const navigateFromNotification = (name, params) => {
+  if (navigationRef.isReady()) navigationRef.navigate(name, params);
+};
 const Tab = createBottomTabNavigator();
 
 // C4: five tabs with the shared TabBar. "Wealth" is now "Accounts"; Money tools hub removed.
@@ -170,10 +181,21 @@ function AppContent() {
       .then(setInitialNav)
       .finally(() => setNavReady(true));
   }, []);
+  useEffect(() => {
+    if (!navReady) return undefined;
+    let stop = null;
+    startNotificationActions(navigateFromNotification)
+      .then((s) => {
+        stop = s;
+      })
+      .catch((e) => console.warn('Notification actions not started:', e?.message || e));
+    return () => stop?.();
+  }, [navReady]);
   if (!navReady) return null;
 
   return (
     <NavigationContainer
+      ref={navigationRef}
       theme={dark ? DarkTheme : DefaultTheme}
       initialState={initialNav}
       onStateChange={saveNav}

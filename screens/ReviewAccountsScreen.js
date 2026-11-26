@@ -18,7 +18,12 @@ import {
   resolveCaptureAccount,
   linkRefund,
   dismissRefund,
+  bulkApply,
+  undoLastBulk,
 } from '../utils/FeatureService';
+import { loadCategorised, dropCategorised } from '../utils/NotificationActions';
+import UpdateSimilarSheet from '../components/UpdateSimilarSheet';
+import { showSnackbar } from '../utils/Snackbar';
 import { discoverAccounts, checkItems } from '../utils/AccountDiscovery';
 import { describeCapture, reviewHint, debitCardQuestion } from '../utils/ReviewText';
 import { formatMoney } from '../utils/Format';
@@ -32,7 +37,7 @@ import { accountInitials } from '../utils/TransactionList';
 import { emiSuggestions } from '../utils/LoanLink';
 import { loadDismissed } from '../utils/LoanService';
 import RefundMatchSheet from '../components/RefundMatchSheet';
-import { payeeOf } from '../utils/PayeeMatch';
+import { payeeOf, payeeName, payeeKey, findSimilar } from '../utils/PayeeMatch';
 
 const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
 
@@ -57,10 +62,16 @@ export default function ReviewAccountsScreen({ navigation, route }) {
   const [linking, setLinking] = useState(null); // group being linked to an existing account
 
   const [dismissed, setDismissed] = useState([]); // C4: "Not a loan" payee|amount keys
+  const [fromNotif, setFromNotif] = useState([]); // E3: categorised from notification buttons
+  const [cats, setCats] = useState([]);
+  const [similar, setSimilar] = useState(null); // { result, before, id } while the sheet is open
   const load = useCallback(async () => {
     setAccounts(JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]'));
-    setRows(await getAll());
+    const all = await getAll();
+    setRows(all);
     setDismissed(await loadDismissed());
+    setFromNotif(await loadCategorised(all)); // E3
+    setCats(JSON.parse((await Storage.getItem('user_categories')) || '[]'));
   }, []);
   useFocusEffect(
     useCallback(() => {
@@ -80,6 +91,51 @@ export default function ReviewAccountsScreen({ navigation, route }) {
     () => emiSuggestions(rows, Object.fromEntries(accounts.map((a) => [String(a.id), a])), dismissed),
     [rows, accounts, dismissed]
   );
+
+  // E3: "apply to similar" for a category chosen on a notification (never applied silently)
+  const offerSimilar = async (e) => {
+    const tx = rows.find((x) => String(x.id) === String(e.id));
+    const before = { ...tx, category: e.from || 'General' };
+    const result = findSimilar(before, tx, rows, { categories: cats });
+    if (result.matches.length) return setSimilar({ result, before, id: e.id });
+    await dropCategorised([e.id]);
+    showSnackbar({ text: `No other ${payeeName(tx) || 'similar'} transactions` });
+    return load();
+  };
+  const applySimilar = async ({ ids, changes, future }) => {
+    const { before, id } = similar;
+    setBusy(true);
+    try {
+      const { updated } = await bulkApply(ids, changes, {
+        ruleKey: future ? payeeKey(before, { categories: cats }) : null,
+        ruleLabel: payeeName(before),
+      });
+      await dropCategorised([id]);
+      setSimilar(null);
+      await load();
+      showSnackbar({
+        text: `Updated ${updated} transaction${updated === 1 ? '' : 's'}`,
+        duration: 10000,
+        action: {
+          label: 'Undo',
+          onPress: async () => {
+            const r = await undoLastBulk().catch(() => null);
+            showSnackbar({ text: r ? 'Undone' : 'Nothing to undo' });
+            load();
+          },
+        },
+      });
+    } catch (err) {
+      Alert.alert('Could not update', err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const closeSimilar = async () => {
+    await dropCategorised([similar.id]);
+    setSimilar(null);
+    load();
+  };
 
   const run = async (action) => {
     setBusy(true);
@@ -280,6 +336,14 @@ export default function ReviewAccountsScreen({ navigation, route }) {
         onLink={(purchaseId) => run(() => linkRefund(matching.id, purchaseId)).then(() => setMatching(null))}
         onNotRefund={() => run(() => dismissRefund(matching.id)).then(() => setMatching(null))}
       />
+      <UpdateSimilarSheet
+        visible={!!similar}
+        result={similar?.result}
+        oldName={similar ? payeeName(similar.before) || similar.before.category : ''}
+        busy={busy}
+        onOnlyThis={() => closeSimilar().catch(() => null)}
+        onUpdate={applySimilar}
+      />
       <Text style={[styles.intro, { color: t.text2 }]}>
         We read these accounts from your bank SMS. Add each one once and every matching transaction moves to
         it.
@@ -290,7 +354,10 @@ export default function ReviewAccountsScreen({ navigation, route }) {
         onChange={setTab}
         options={[
           { value: 'new', label: `New accounts · ${groups.length}` },
-          { value: 'check', label: `Check · ${checks.length + loanHints.length + refundHints.length}` },
+          {
+            value: 'check',
+            label: `Check · ${checks.length + loanHints.length + refundHints.length + (fromNotif.length ? 1 : 0)}`,
+          },
         ]}
       />
       {tab === 'new' ? (
@@ -313,6 +380,42 @@ export default function ReviewAccountsScreen({ navigation, route }) {
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <View>
+              {fromNotif.length ? (
+                <Card testID="notif-similar">
+                  <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 15 }}>
+                    {`You categorised ${fromNotif.length} from notifications · apply to similar?`}
+                  </Text>
+                  {fromNotif.map((e) => {
+                    const tx = rows.find((x) => String(x.id) === String(e.id));
+                    return (
+                      <View
+                        key={e.id}
+                        style={{ flexDirection: 'row', alignItems: 'center', marginTop: space.sm }}
+                      >
+                        <Text style={{ flex: 1, color: t.text2 }}>
+                          {`${formatMoney(tx.amount)} at ${payeeOf(tx)} → ${e.to}`}
+                        </Text>
+                        <AppButton
+                          title="Similar"
+                          size="sm"
+                          variant="secondary"
+                          accessibilityLabel={`Apply ${e.to} to similar ${payeeOf(tx)} transactions`}
+                          onPress={() =>
+                            offerSimilar(e).catch((err) => Alert.alert('Cannot check', err.message))
+                          }
+                        />
+                      </View>
+                    );
+                  })}
+                  <AppButton
+                    title="Dismiss"
+                    size="sm"
+                    variant="secondary"
+                    style={{ marginTop: space.sm, alignSelf: 'flex-start' }}
+                    onPress={() => dropCategorised().then(load)}
+                  />
+                </Card>
+              ) : null}
               {refundHints.map((r) => (
                 <Card key={`refund-${r.id}`} testID={`refund-hint-${r.id}`}>
                   <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 15 }}>
@@ -349,7 +452,7 @@ export default function ReviewAccountsScreen({ navigation, route }) {
             </View>
           }
           ListEmptyComponent={
-            loanHints.length || refundHints.length ? null : (
+            loanHints.length || refundHints.length || fromNotif.length ? null : (
               <Text style={{ color: t.muted, textAlign: 'center', marginTop: space.xxl }}>
                 Nothing to check.
               </Text>

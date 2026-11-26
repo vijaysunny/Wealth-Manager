@@ -101,7 +101,11 @@ export const startSmsListener = () => {
         if (pct >= 90) notifBody = `⚠️ ${notifBody} — Near limit!`;
         if (pct >= 100) notifBody = `🚨 ${notifBody} — Budget exceeded!`;
       }
-      await sendTransactionNotification(`Spent ₹${parsed.amount} on ${parsed.category}`, notifBody);
+      await sendTransactionNotification(
+        `Spent ₹${parsed.amount} on ${parsed.category}`,
+        notifBody,
+        result.addedTxs?.[0] || newTx // E3: category buttons
+      );
     } else if (parsed.type === 'transfer') {
       await sendTransactionNotification(
         'Transfer captured',

@@ -3,6 +3,7 @@
  * SMS banners (A8) · Capture · Money · Security & backup · More.
  * Categories and Backup & restore are their own screens; AI settings live in AI assistant.
  */
+import { BUTTONS_KEY } from '../utils/NotificationActions';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -67,6 +68,7 @@ export default function SettingsScreen({ navigation }) {
   const [smsPermission, setSmsPermission] = useState(false);
   const [smsLastState, setSmsLastState] = useState('denied');
   const [walletReminder, setWalletReminder] = useState(false);
+  const [catButtons, setCatButtons] = useState(true); // E3
   const [locked, setLocked] = useState(false);
   const [backup, setBackup] = useState(null);
   const [aiLine, setAiLine] = useState('');
@@ -82,6 +84,7 @@ export default function SettingsScreen({ navigation }) {
     setSmsPermission(await hasReceivePermission());
     setSmsLastState(await smsPermissionStatus());
     setWalletReminder((await Storage.getItem(WALLET_REMINDER_KEY)) === 'true');
+    setCatButtons((await Storage.getItem(BUTTONS_KEY)) !== 'false');
     setBackup(backupStatus(await Storage.getItem(LAST_BACKUP_KEY)));
     setLocked((await SecureStore.getItemAsync(LOCK_KEY).catch(() => null)) === 'true');
     setGmailConnected(isGmailEnabled() && (await isGmailConnected()));
@@ -272,6 +275,16 @@ export default function SettingsScreen({ navigation }) {
                 />
               </>
             )}
+            <Divider t={t} />
+            <AppSwitch
+              testID="cat-buttons-switch"
+              label="Category buttons on notifications"
+              value={catButtons}
+              onValueChange={async (on) => {
+                setCatButtons(on);
+                await Storage.setItem(BUTTONS_KEY, on ? 'true' : 'false');
+              }}
+            />
             <Divider t={t} />
             <AppSwitch
               label="Weekly wallet reconcile reminder"
