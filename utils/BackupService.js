@@ -28,6 +28,9 @@ export const BACKUP_FIELDS = {
   monthlyBudgets: { key: 'monthly_budgets', kind: 'object' },
   categoryRules: { key: 'category_rules', kind: 'array' },
   netWorthHistory: { key: 'networth_history', kind: 'array' },
+  people: { key: 'people', kind: 'array' },
+  ious: { key: 'ious', kind: 'array' },
+  ownerUpiId: { key: 'owner_upi_id', kind: 'scalar' },
   userName: { key: 'user_name', kind: 'scalar' },
 };
 

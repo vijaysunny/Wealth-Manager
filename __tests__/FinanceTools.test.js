@@ -160,3 +160,24 @@ describe('A6: payee rules', () => {
     expect(applyCategoryRules(tx, [{ id: 'e', kind: 'payee', payeeKey: 'swiggy inst' }])).toBe(tx);
   });
 });
+
+test('E4: history CSV has a Split of column', () => {
+  const csv = historyCsv([
+    {
+      fullDate: 'D',
+      title: 'Amazon',
+      type: 'expense',
+      amount: 5,
+      category: 'Groceries',
+      account: 'A',
+      splitOf: 'Amazon',
+    },
+    { fullDate: 'D', title: 'X' },
+  ]);
+  const unquote = (line) => line.replace(/"/g, '');
+  expect(csv.split('\r\n').map(unquote)).toEqual([
+    'Date,Title,Type,Amount,Category,Account,Split of',
+    'D,Amazon,expense,5,Groceries,A,Amazon',
+    'D,X,,,,,',
+  ]);
+});

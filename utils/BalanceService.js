@@ -14,6 +14,7 @@
  * Loans, investments etc. are never moved by transactions.
  */
 
+import { balanceOf } from './People';
 import AsyncStorage from '../data/Storage';
 import { cardDebt } from './CardMath';
 import { isCardEmi } from './LoanCalculator';
@@ -53,9 +54,19 @@ export const isLiability = (account) => LIABILITY_TYPES.includes(account && acco
  * unconfirmed SMS-history estimate is not counted) and loans by their schedule. Card EMIs and
  * closed loans are never liabilities.
  */
-export const computeNetWorth = (accounts = [], assets = [], { txs = null, asOf = new Date() } = {}) => {
+export const computeNetWorth = (
+  accounts = [],
+  assets = [],
+  { txs = null, asOf = new Date(), ious = null } = {}
+) => {
   let totalAssets = 0;
   let totalLiabilities = 0;
+  // E4: money people owe you is an asset; what you owe them a liability
+  if (ious) {
+    const p = balanceOf(ious);
+    totalAssets += p.owedToMe;
+    totalLiabilities += p.iOwe;
+  }
   [...accounts, ...assets].forEach((a) => {
     if (a && a.type === 'Credit Card') {
       // C5: with transactions, a card counts what CardMath says you owe; overpaid is an asset.

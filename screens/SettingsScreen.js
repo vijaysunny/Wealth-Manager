@@ -58,6 +58,8 @@ const Divider = ({ t }) => <View style={{ height: 1, backgroundColor: t.divider 
 export default function SettingsScreen({ navigation }) {
   const { dark, setDark, t } = useAppTheme();
   const [name, setName] = useState('');
+  const [upi, setUpi] = useState(''); // E4: shared in People reminders
+  const [editingUpi, setEditingUpi] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [catCount, setCatCount] = useState(0);
   const [accCount, setAccCount] = useState(0);
@@ -73,6 +75,7 @@ export default function SettingsScreen({ navigation }) {
 
   const load = useCallback(async () => {
     setName((await Storage.getItem('user_name')) || '');
+    setUpi((await Storage.getItem('owner_upi_id')) || '');
     setCatCount((await loadCategories()).length);
     setAccCount(JSON.parse((await Storage.getItem('user_wealth_accounts')) || '[]').length);
     setSmsAutoTrack((await Storage.getItem('sms_auto_track_enabled')) !== 'false');
@@ -121,6 +124,11 @@ export default function SettingsScreen({ navigation }) {
     }
     setSmsAutoTrack(val);
     await setSmsTracking(val); // saves the flag and starts / stops the listener right now
+  };
+
+  const saveUpi = async () => {
+    await Storage.setItem('owner_upi_id', upi.trim());
+    setEditingUpi(false);
   };
 
   const saveName = async () => {
@@ -381,6 +389,39 @@ export default function SettingsScreen({ navigation }) {
               </View>
             ) : (
               <ListRow label="Your name" value={name || 'Not set'} onPress={() => setEditingName(true)} />
+            )}
+            <Divider t={t} />
+            {editingUpi ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 52, gap: space.sm }}>
+                <TextInput
+                  testID="upi-input"
+                  accessibilityLabel="Your UPI ID"
+                  value={upi}
+                  onChangeText={setUpi}
+                  autoFocus
+                  autoCapitalize="none"
+                  placeholder="name@bank"
+                  placeholderTextColor={t.placeholder}
+                  onSubmitEditing={saveUpi}
+                  style={{
+                    flex: 1,
+                    color: t.text,
+                    fontFamily: fonts.body,
+                    fontSize: 16,
+                    borderBottomWidth: 1,
+                    borderColor: t.primary,
+                    paddingVertical: space.sm,
+                  }}
+                />
+                <AppButton title="Save" size="sm" onPress={saveUpi} />
+              </View>
+            ) : (
+              <ListRow
+                label="Your UPI ID"
+                sublabel="Shared when you remind someone to pay you back"
+                value={upi || 'Not set'}
+                onPress={() => setEditingUpi(true)}
+              />
             )}
             <Divider t={t} />
             <ListRow

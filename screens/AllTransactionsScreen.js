@@ -7,17 +7,7 @@
  * filters last while the app is open.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  BackHandler,
-  Modal,
-  Pressable,
-  ScrollView,
-  SectionList,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, BackHandler, Pressable, ScrollView, SectionList, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -38,11 +28,11 @@ import { formatMoney } from '../utils/Format';
 import { useTokens } from '../components/Theme';
 import { fonts, radius, space, type } from '../components/tokens';
 import {
-  AppButton,
   Chip,
   EmptyState,
   IconButton,
   OptionSheet,
+  TextSheet,
   ScreenHeader,
   TransactionRow,
 } from '../components/ui';
@@ -61,63 +51,6 @@ import { showSnackbar } from '../utils/Snackbar';
 import { normalizeTag } from '../utils/Tags';
 
 const SPENDABLE = ['Bank Account', 'Credit Card', 'Cash', 'Wallet'];
-
-/** A small sheet with one text field (B5: Tag, Rename payee). */
-function TextSheet({ visible, title, label, placeholder, action, extra, onSubmit, onClose }) {
-  const t = useTokens();
-  const [text, setText] = useState('');
-  useEffect(() => {
-    if (visible) setText('');
-  }, [visible]);
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close"
-        onPress={onClose}
-        style={{ flex: 1, backgroundColor: 'rgba(14,23,38,0.45)' }}
-      />
-      <View
-        style={{
-          backgroundColor: t.card,
-          borderTopLeftRadius: radius.xxl,
-          borderTopRightRadius: radius.xxl,
-          padding: space.xl,
-        }}
-      >
-        <Text
-          accessibilityRole="header"
-          style={{ color: t.text, fontFamily: fonts.display, fontSize: 20, marginBottom: space.md }}
-        >
-          {title}
-        </Text>
-        <TextInput
-          accessibilityLabel={label}
-          value={text}
-          onChangeText={setText}
-          placeholder={placeholder}
-          placeholderTextColor={t.placeholder}
-          autoCapitalize="none"
-          autoFocus
-          onSubmitEditing={() => text.trim() && onSubmit(text)}
-          style={{
-            minHeight: 48,
-            borderWidth: 1,
-            borderColor: t.inputBorder,
-            borderRadius: radius.md,
-            paddingHorizontal: space.md,
-            color: t.text,
-            fontFamily: fonts.body,
-            fontSize: 16,
-            marginBottom: space.md,
-          }}
-        />
-        <AppButton title={action} disabled={!text.trim()} onPress={() => onSubmit(text)} />
-        {extra}
-      </View>
-    </Modal>
-  );
-}
 
 function ActionBar({ actions, t }) {
   return (

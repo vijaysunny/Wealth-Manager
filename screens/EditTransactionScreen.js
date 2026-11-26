@@ -756,6 +756,21 @@ export default function EditTransactionScreen({ route, navigation }) {
               onPress={() => navigation.push?.('TransactionDetail', { transaction: refunds[0] })}
             />
           ) : null}
+          {/* E4: split into categories and people */}
+          {transaction.type === 'expense' && !transaction.loanLink ? (
+            <AppButton
+              title={
+                Array.isArray(transaction.splits) && transaction.splits.length
+                  ? `Split into ${transaction.splits.length} parts · Edit`
+                  : 'Split'
+              }
+              variant="secondary"
+              icon="git-branch-outline"
+              style={{ marginBottom: space.md }}
+              onPress={() => navigation.navigate('Split', { txId: transaction.id })}
+            />
+          ) : null}
+
           {/* C6: a bank debit (or the loan amount coming in) can be linked to a loan */}
           {linkable ? (
             <AppButton

@@ -4,6 +4,7 @@
  * quick actions · 3 recent rows with See all.
  * Card bills and wallet top-ups are transfers, so they never count as spending.
  */
+import { balanceOf } from '../utils/People';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -49,6 +50,7 @@ export default function HomeScreen({ navigation }) {
   const [loaded, setLoaded] = useState(false);
   const [backup, setBackup] = useState(null);
   const [permWarnings, setPermWarnings] = useState([]);
+  const [people, setPeople] = useState({ owedToMe: 0, iOwe: 0 }); // E4 shortcut
 
   const loadData = useCallback(async () => {
     setBackup(backupStatus(await Storage.getItem(LAST_BACKUP_KEY)));
@@ -61,6 +63,7 @@ export default function HomeScreen({ navigation }) {
       })
     );
     setUserName((await Storage.getItem('user_name')) || '');
+    setPeople(balanceOf(JSON.parse((await Storage.getItem('ious')) || '[]')));
     const rows = await getAll();
     rows.sort((a, b) => new Date(b.fullDate) - new Date(a.fullDate));
     setTransactions(rows);
@@ -219,6 +222,29 @@ export default function HomeScreen({ navigation }) {
             </View>
           </Pressable>
         )}
+
+        {/* E4: People, only when something is owed */}
+        {people.owedToMe > 0 || people.iOwe > 0 ? (
+          <Pressable
+            testID="people-card"
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('People')}
+            style={[styles.review, { backgroundColor: t.card, borderColor: t.border }]}
+          >
+            <View style={[styles.reviewIcon, { backgroundColor: t.incomeBg }]}>
+              <Ionicons name="people-outline" size={22} color={t.income} />
+            </View>
+            <Text style={{ flex: 1, color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+              {[
+                people.owedToMe ? `People owe you ${formatMoney(people.owedToMe)}` : null,
+                people.iOwe ? `You owe ${formatMoney(people.iOwe)}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color={t.muted} />
+          </Pressable>
+        ) : null}
 
         {/* 5. Quick actions */}
         <View style={styles.quickRow}>

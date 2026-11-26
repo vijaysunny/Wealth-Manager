@@ -93,11 +93,13 @@ export default function UpdateSimilarSheet({
   const shown = expanded ? matches : matches.slice(0, PREVIEW);
   const more = matches.length - shown.length;
   const loans = (result?.skipped || []).filter((s) => s.reason === 'loan').length;
+  const splits = ch.category ? (result?.skipped || []).filter((s) => s.reason === 'split').length : 0;
   const kept = ch.category ? result?.keptCategory || 0 : 0;
   const notes = [
     more > 0 ? `+ ${more} more` : null,
     kept ? `${kept} with a category you set by hand keeps it` : null,
     loans ? `${loans} skipped (loan payments)` : null,
+    splits ? `${splits} split ${splits === 1 ? 'keeps its' : 'keep their'} categories` : null,
   ].filter(Boolean);
 
   const toggleRow = (id) => {

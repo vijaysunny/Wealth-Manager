@@ -220,3 +220,29 @@ test('C1: Liabilities shows both groups; a card EMI says "in card balance" and i
   fireEvent.press(screen.getByRole('button', { name: 'Add loan or EMI' }));
   expect(n.navigate).toHaveBeenCalled();
 });
+
+test('E4: People row (always), "You owe people" in Liabilities, net worth counts IOUs', async () => {
+  await Storage.setItem(
+    'ious',
+    JSON.stringify([
+      { id: 'i1', personId: 'p', amount: 500, direction: 'owedToMe', date: '2026-11-12' },
+      { id: 'i2', personId: 'p', amount: 300, direction: 'iOwe', date: '2026-11-20' },
+    ])
+  );
+  const n = nav();
+  render(<WealthScreen navigation={n} />);
+  expect(await screen.findByText('Net worth includes ₹500 people owe you')).toBeTruthy();
+  expect(screen.getByTestId('networth').props.children).toBe('₹1,200');
+  expect(screen.getByText('Owed to you ₹500 · You owe ₹300')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('you-owe-people'));
+  fireEvent.press(screen.getByTestId('people-row'));
+  expect(n.navigate.mock.calls).toEqual([['People'], ['People']]);
+  await Storage.removeItem('ious');
+});
+
+test('E4: with nobody owing, the People row invites splitting', async () => {
+  render(<WealthScreen navigation={nav()} />);
+  expect(await screen.findByText('Topped up from Axis ••0973')).toBeTruthy();
+  expect(screen.getByText('Split bills and IOUs')).toBeTruthy();
+  expect(screen.queryByTestId('you-owe-people')).toBeNull();
+});

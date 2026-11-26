@@ -3,7 +3,16 @@ import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
 import { historyCsv } from './FinanceTools';
 import { suppressNextLock } from './LockSuppress';
-export const exportHistory = async (rows, format = 'csv') => {
+import Storage from '../data/Storage';
+import { exportRows } from './Splits';
+/** E4: one row per split part, "Split of" naming the transaction. */
+const expand = async (rows) => {
+  const people = JSON.parse((await Storage.getItem('people')) || '[]');
+  return exportRows(rows, Object.fromEntries(people.map((p) => [p.id, p])));
+};
+
+export const exportHistory = async (txs, format = 'csv') => {
+  const rows = await expand(txs);
   const uri = FileSystem.cacheDirectory + `wealthmanager_history.${format}`;
   if (format === 'xlsx') {
     const workbook = XLSX.utils.book_new();
@@ -17,6 +26,7 @@ export const exportHistory = async (rows, format = 'csv') => {
           Amount: tx.amount,
           Category: tx.category,
           Account: tx.account,
+          'Split of': tx.splitOf || '',
         }))
       ),
       'Transactions'

@@ -3,7 +3,7 @@
  * "Open App info" opens the system settings. The switch shows flag && permission.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -167,4 +167,15 @@ test('B1: a backup over 50 MB of files asks first and offers Without files', asy
   );
   const buttons = alert.mock.calls.find((c) => c[0] === 'Large backup')[2].map((b) => b.text);
   expect(buttons).toEqual(['Cancel', 'Without files', 'With files']);
+});
+
+test('E4: Your UPI ID is saved for People reminders', async () => {
+  const S = SettingsScreen();
+  render(<S navigation={nav()} />);
+  await smsSwitch();
+  fireEvent.press(screen.getByRole('button', { name: /Your UPI ID/ }));
+  fireEvent.changeText(screen.getByTestId('upi-input'), ' me@okaxis ');
+  await act(async () => fireEvent.press(screen.getAllByRole('button', { name: 'Save' })[0]));
+  expect(await Storage.getItem('owner_upi_id')).toBe('me@okaxis');
+  expect(await screen.findByText('me@okaxis')).toBeTruthy();
 });

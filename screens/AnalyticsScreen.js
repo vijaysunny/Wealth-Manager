@@ -454,7 +454,8 @@ export default function AnalyticsScreen({ navigation }) {
     });
 
     // --- NET WORTH ---
-    const nw = computeNetWorth(accounts, [], { txs: transactions }); // C5: cards via CardMath
+    const ious = JSON.parse((await AsyncStorage.getItem('ious')) || '[]');
+    const nw = computeNetWorth(accounts, [], { txs: transactions, ious }); // C5 cards via CardMath; E4 people
     setAssets(nw.assets);
     setLiabilities(nw.liabilities);
     let assetMap = {

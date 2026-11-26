@@ -106,11 +106,18 @@ export const diffEdit = (before, after) => {
 };
 
 /** Which of `changes` would alter `row` (a value the owner set by hand is left alone). */
+const isSplit = (row) => Array.isArray(row?.splits) && row.splits.length > 0;
+
 export const willChangeFor = (row, changes) => {
   const out = [];
   if (changes.name && sourceOf(row, 'name') !== 'user' && payeeName(row) !== changes.name.to)
     out.push('name');
-  if (changes.category && sourceOf(row, 'category') !== 'user' && row.category !== changes.category.to)
+  if (
+    changes.category &&
+    !isSplit(row) &&
+    sourceOf(row, 'category') !== 'user' &&
+    row.category !== changes.category.to
+  )
     out.push('category');
   if (changes.tags) {
     const has = userTags(row);
@@ -146,6 +153,11 @@ export const matchRows = (rows, changes, { type = null } = {}) => {
       keptCategory += 1;
     if (changes.name && sourceOf(r, 'name') === 'user' && payeeName(r) !== changes.name.to) keptName += 1;
     const willChange = willChangeFor(r, changes);
+    // E4: a split's parts hold its categories; name and tags still apply
+    if (!willChange.length && changes.category && isSplit(r) && r.category !== changes.category.to) {
+      skipped.push({ id: r.id, reason: 'split' });
+      continue;
+    }
     if (!willChange.length) continue;
     matches.push({ ...r, willChange });
   }
@@ -183,7 +195,7 @@ export const bulkPatch = (row, changes, { force = false } = {}) => {
     patch.title = changes.name.to;
     patch.nameSource = 'bulk';
   }
-  if (changes.category && catFree && row.category !== changes.category.to) {
+  if (changes.category && catFree && !isSplit(row) && row.category !== changes.category.to) {
     patch.category = changes.category.to;
     patch.categorySource = 'bulk';
     // a row without a payee is titled with its category: keep that in step

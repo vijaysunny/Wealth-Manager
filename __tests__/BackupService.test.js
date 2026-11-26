@@ -44,6 +44,11 @@ const full = () => ({
   monthly_budgets: JSON.stringify({ '2026-10': { limit: 40000 } }),
   category_rules: JSON.stringify([{ id: 1, pattern: 'swiggy', category: 'Food' }]),
   networth_history: JSON.stringify([{ date: '2026-10-11', netWorth: 5000 }]),
+  people: JSON.stringify([{ id: 'p1', name: 'Ravi', payeeKeys: [] }]),
+  ious: JSON.stringify([
+    { id: 'i1', personId: 'p1', amount: 500, direction: 'owedToMe', date: '2026-10-12' },
+  ]),
+  owner_upi_id: 'me@upi',
 });
 
 describe('backup round trip', () => {

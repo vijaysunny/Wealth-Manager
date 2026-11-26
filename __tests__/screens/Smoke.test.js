@@ -339,6 +339,30 @@ describe('HomeScreen (B2)', () => {
   });
 });
 
+describe('HomeScreen People card (E4)', () => {
+  const HomeScreen = require('../../screens/HomeScreen').default;
+  afterEach(() => Storage.removeItem('ious'));
+  test('shows only when something is owed, and opens People', async () => {
+    render(<HomeScreen navigation={nav()} />);
+    await screen.findByTestId('greeting');
+    expect(screen.queryByTestId('people-card')).toBeNull();
+  });
+  test('owed both ways', async () => {
+    await Storage.setItem(
+      'ious',
+      JSON.stringify([
+        { id: 1, personId: 'p', amount: 500, direction: 'owedToMe' },
+        { id: 2, personId: 'q', amount: 300, direction: 'iOwe' },
+      ])
+    );
+    const n = nav();
+    render(<HomeScreen navigation={n} />);
+    expect(await screen.findByText('People owe you ₹500 · You owe ₹300')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('people-card'));
+    expect(n.navigate).toHaveBeenCalledWith('People');
+  });
+});
+
 describe('HomeScreen review card (A2)', () => {
   const HomeScreen = require('../../screens/HomeScreen').default;
   const { addMany } = require('../../data/TransactionRepo');

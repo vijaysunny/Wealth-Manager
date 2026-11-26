@@ -63,6 +63,7 @@ export default function WealthScreen({ navigation }) {
   const [accounts, setAccounts] = useState([]);
   const [counts, setCounts] = useState({});
   const [txs, setTxs] = useState([]);
+  const [ious, setIous] = useState([]); // E4
   const [showClosed, setShowClosed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [balanceEdit, setBalanceEdit] = useState(null); // { account, text }
@@ -162,6 +163,7 @@ export default function WealthScreen({ navigation }) {
 
     const txs = await getAll();
     setTxs(txs);
+    setIous(JSON.parse((await AsyncStorage.getItem('ious')) || '[]'));
     setAccounts(accounts);
     setCounts(monthCounts(txs));
     setRefreshing(false);
@@ -277,7 +279,7 @@ export default function WealthScreen({ navigation }) {
     loadData();
   };
 
-  const ov = accountsOverview(accounts, { txs });
+  const ov = accountsOverview(accounts, { txs, ious });
   const liab = ov.groups.liabilities;
   const g = groupAccounts(accounts);
   const byId = Object.fromEntries(accounts.map((a) => [String(a.id), a]));
@@ -557,6 +559,11 @@ export default function WealthScreen({ navigation }) {
               Cash & bank includes {formatMoney(ov.cardCredit)} (card credit)
             </Text>
           ) : null}
+          {ov.people.owedToMe > 0 ? (
+            <Text style={{ color: t.inkMuted, fontFamily: fonts.body, fontSize: 13, marginTop: space.sm }}>
+              Net worth includes {formatMoney(ov.people.owedToMe)} people owe you
+            </Text>
+          ) : null}
         </View>
 
         {empty ? (
@@ -638,6 +645,30 @@ export default function WealthScreen({ navigation }) {
                   </>
                 ) : null}
                 {liab.cards.length > 0 ? <View style={{ height: 1, backgroundColor: t.divider }} /> : null}
+                {ov.people.iOwe > 0 ? (
+                  <>
+                    <Pressable
+                      testID="you-owe-people"
+                      accessibilityRole="button"
+                      accessibilityLabel={`You owe people ${formatMoney(ov.people.iOwe)}`}
+                      onPress={() => navigation.navigate('People')}
+                      style={[styles.row, { borderColor: t.divider, borderBottomWidth: 1 }]}
+                    >
+                      <Ionicons
+                        name="people-outline"
+                        size={22}
+                        color={t.expense}
+                        style={{ marginRight: space.md }}
+                      />
+                      <Text style={{ flex: 1, color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>
+                        You owe people
+                      </Text>
+                      <Text style={{ color: t.expense, fontFamily: fonts.semibold, fontSize: 16 }}>
+                        {formatMoney(ov.people.iOwe)}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
                 <Text style={[styles.groupTitle, { color: t.text2 }]}>Loans & EMIs</Text>
                 {liab.loans.map((l) => loanRow(l))}
                 {liab.closed.length > 0 ? (
@@ -666,6 +697,36 @@ export default function WealthScreen({ navigation }) {
             )}
           </Section>
         ) : null}
+
+        <Section title="People">
+          {card(
+            <Pressable
+              testID="people-row"
+              accessibilityRole="button"
+              accessibilityLabel={`People. Owed to you ${formatMoney(ov.people.owedToMe)}, you owe ${formatMoney(ov.people.iOwe)}`}
+              onPress={() => navigation.navigate('People')}
+              style={[styles.row, { borderColor: t.divider, borderBottomWidth: 0 }]}
+            >
+              <View style={[styles.badge, { backgroundColor: t.incomeBg }]}>
+                <Ionicons name="people-outline" size={22} color={t.income} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: t.text, fontFamily: fonts.semibold, fontSize: 16 }}>People</Text>
+                <Text style={{ color: t.muted, fontFamily: fonts.body, fontSize: 13 }}>
+                  {ov.people.owedToMe || ov.people.iOwe
+                    ? [
+                        ov.people.owedToMe ? `Owed to you ${formatMoney(ov.people.owedToMe)}` : null,
+                        ov.people.iOwe ? `You owe ${formatMoney(ov.people.iOwe)}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : 'Split bills and IOUs'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={t.muted} />
+            </Pressable>
+          )}
+        </Section>
 
         <View style={{ marginTop: space.lg }}>
           <Collapsible

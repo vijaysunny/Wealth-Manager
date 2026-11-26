@@ -6,6 +6,7 @@ import { computeNetWorth, isWallet } from './BalanceService';
 import { cardDebt, isCardSetUp } from './CardMath';
 import { isCardEmi } from './LoanCalculator';
 import { loanOwed } from './LoanLedger';
+import { balanceOf } from './People';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -38,10 +39,13 @@ export const groupAccounts = (accounts = []) => ({
  * schedule. liabilities = cards' positive owed (counted ones) + active loans, never card EMIs.
  * An overpaid card's credit is shown in Cash & bank (cardCredit). `owed` = liabilities (alias,
  * kept for one release).
+ * E4: opts.ious adds People: what people owe you counts in net worth, what you owe them is a
+ * liability ("You owe people").
  */
-export const accountsOverview = (accounts = [], { txs = null, asOf = new Date() } = {}) => {
+export const accountsOverview = (accounts = [], { txs = null, asOf = new Date(), ious = null } = {}) => {
   const g = groupAccounts(accounts);
-  const nw = computeNetWorth(accounts, [], { txs, asOf });
+  const nw = computeNetWorth(accounts, [], { txs, asOf, ious });
+  const people = balanceOf(ious || []);
   const cards = g.cards.map((account) => {
     const d = txs
       ? cardDebt(account, txs, asOf)
@@ -57,7 +61,7 @@ export const accountsOverview = (accounts = [], { txs = null, asOf = new Date() 
   const cardOwed = round2(cards.reduce((s, c) => s + (c.counted && c.owed > 0 ? c.owed : 0), 0));
   const cardCredit = round2(cards.reduce((s, c) => s + (c.counted && c.owed < 0 ? -c.owed : 0), 0));
   const loanTotal = round2(loans.reduce((s, l) => s + (l.inCard || l.closed ? 0 : l.outstanding), 0));
-  const liabilities = round2(cardOwed + loanTotal);
+  const liabilities = round2(cardOwed + loanTotal + people.iOwe);
   return {
     netWorth: nw.netWorth,
     cashBank: round2(sum([...g.banks, ...g.wallets]) + cardCredit),
@@ -65,6 +69,7 @@ export const accountsOverview = (accounts = [], { txs = null, asOf = new Date() 
     investments: sum(g.investments),
     liabilities,
     owed: liabilities,
+    people,
     missing: accounts.filter(balanceMissing).length,
     notCounted: cards.filter((c) => !c.counted).map((c) => c.account),
     groups: {

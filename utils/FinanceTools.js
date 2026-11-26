@@ -78,8 +78,16 @@ export const escapeCsv = (value) => {
 };
 export const historyCsv = (rows) =>
   [
-    ['Date', 'Title', 'Type', 'Amount', 'Category', 'Account'],
-    ...rows.map((tx) => [tx.fullDate, tx.title, tx.type, tx.amount, tx.category, tx.account]),
+    ['Date', 'Title', 'Type', 'Amount', 'Category', 'Account', 'Split of'],
+    ...rows.map((tx) => [
+      tx.fullDate,
+      tx.title,
+      tx.type,
+      tx.amount,
+      tx.category,
+      tx.account,
+      tx.splitOf || '',
+    ]),
   ]
     .map((row) => row.map(escapeCsv).join(','))
     .join('\r\n');

@@ -24,6 +24,16 @@ import { bulkPatch } from './PayeeMatch';
 import { ruleFromChanges, mergeRule, restoreRule } from './PayeeRules';
 import { recordBulk, takeUndo } from './UndoStore';
 import { linkChanges as refundLinkChanges, UNLINK_CHANGES } from './RefundMatch';
+import { validateSplit, iousForSplit, splitChanges, UNSPLIT_CHANGES } from './Splits';
+import {
+  newPerson,
+  newIou,
+  markSettled,
+  unsettle,
+  settle as settlePeople,
+  learnPayee,
+  settlementChanges,
+} from './People';
 export const bulkUpdate = (ids, changes) =>
   atomic(async (db) => {
     for (const id of ids) await updateInDb(db, id, changes);
@@ -98,6 +108,92 @@ export const undoLastBulk = () =>
     return { restored: plan.patches.length, skipped: plan.skipped };
   });
 const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
+// ── E4: splits and People ─────────────────────────────────────────────────────
+const readList = async (db, key) => {
+  try {
+    const v = JSON.parse((await readValue(db, key)) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+};
+const rowById = async (db, id) => {
+  const row = (await db.getAllAsync('SELECT data FROM transactions'))
+    .map(decodeRow)
+    .find((t) => String(t.id) === String(id));
+  if (!row) throw new Error('Transaction no longer exists');
+  return row;
+};
+
+/** Save a split: parts must add up; person parts become IOUs owed to you. */
+export const saveSplit = (txId, parts) =>
+  atomic(async (db) => {
+    const tx = await rowById(db, txId);
+    const check = validateSplit(tx, parts);
+    if (!check.ok) throw new Error(check.errors[0]);
+    const ious = iousForSplit(tx, parts, await readList(db, 'ious'));
+    await writeValue(db, 'ious', JSON.stringify(ious));
+    return updateInDb(db, tx.id, splitChanges(parts));
+  });
+
+/** Remove a split: the single category counts again; its open IOUs go. */
+export const removeSplit = (txId) =>
+  atomic(async (db) => {
+    const tx = await rowById(db, txId);
+    await writeValue(db, 'ious', JSON.stringify(iousForSplit(tx, [], await readList(db, 'ious'))));
+    return updateInDb(db, tx.id, UNSPLIT_CHANGES);
+  });
+
+export const addPerson = (name) =>
+  atomic(async (db) => {
+    const people = await readList(db, 'people');
+    const person = newPerson(people, name);
+    await writeValue(db, 'people', JSON.stringify([...people, person]));
+    return person;
+  });
+
+/** Record "I owe" (or "owes me") by hand. */
+export const addIou = (fields) =>
+  atomic(async (db) => {
+    const iou = newIou(fields);
+    await writeValue(db, 'ious', JSON.stringify([...(await readList(db, 'ious')), iou]));
+    return iou;
+  });
+
+/** Mark one item settled (or, with undo, open again). */
+export const setIouSettled = (id, settled = true) =>
+  atomic(async (db) => {
+    const ious = await readList(db, 'ious');
+    await writeValue(db, 'ious', JSON.stringify(settled ? markSettled(ious, id) : unsettle(ious, id)));
+  });
+
+/**
+ * "Yes, settle": the credit pays off what the person owes (oldest first, partial allowed), stops
+ * counting as income, and its payee is remembered for them.
+ */
+export const settleFromCredit = (txId, personId) =>
+  atomic(async (db) => {
+    const tx = await rowById(db, txId);
+    const people = await readList(db, 'people');
+    const person = people.find((p) => String(p.id) === String(personId));
+    if (!person) throw new Error('This person was removed');
+    const r = settlePeople(await readList(db, 'ious'), person.id, Number(tx.amount) || 0, {
+      date: tx.fullDate,
+      txId: tx.id,
+    });
+    if (!r.settled.length) throw new Error(`${person.name} owes you nothing now`);
+    await writeValue(db, 'ious', JSON.stringify(r.ious));
+    await writeValue(
+      db,
+      'people',
+      JSON.stringify(people.map((p) => (p === person ? learnPayee(person, tx) : p)))
+    );
+    return updateInDb(db, tx.id, settlementChanges(person.id));
+  });
+
+/** "No, it's income": not offered again. */
+export const dismissSettle = (txId) => atomic((db) => updateInDb(db, txId, { settleDismissed: true }));
+
 /** E5: link a refund to the purchase it refunds (checked: it can't exceed what is left). */
 export const linkRefund = (refundId, purchaseId) =>
   atomic(async (db) => {
@@ -295,7 +391,7 @@ export const saveNetWorthSnapshot = () =>
     const date = new Date().toLocaleDateString('en-CA');
     // C5: cards are valued from their SMS (available limit) and bills, loans by their schedule
     const txs = (await db.getAllAsync('SELECT data FROM transactions')).map(decodeRow);
-    const snapshot = { date, ...computeNetWorth(accounts, [], { txs }) };
+    const snapshot = { date, ...computeNetWorth(accounts, [], { txs, ious: await readList(db, 'ious') }) };
     await writeValue(
       db,
       'networth_history',

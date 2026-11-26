@@ -15,3 +15,4 @@ export { default as TabBar, TAB_ICONS } from './TabBar';
 export { default as TransactionRow, payeeOf } from './TransactionRow';
 export { default as OptionSheet } from './OptionSheet';
 export { default as SnackbarHost } from './SnackbarHost';
+export { default as TextSheet } from './TextSheet';

@@ -92,6 +92,27 @@ test('a category change shows only the Category row and the right count', async 
   expect(n.goBack).not.toHaveBeenCalled();
 });
 
+test('E4: a split row keeps its categories (noted, not counted)', async () => {
+  await addMany(
+    [
+      row('sp', 8, {
+        splits: [
+          { id: 'a', category: 'Food', amount: 50 },
+          { id: 'b', personId: 'p', amount: 58 },
+        ],
+      }),
+    ],
+    {
+      dedup: false,
+    }
+  );
+  await open();
+  pickCategory('Food');
+  save();
+  expect(await screen.findByText('Apply to 3 more from this payee?')).toBeTruthy();
+  expect(screen.getByText(/1 split keeps its categories/)).toBeTruthy();
+});
+
 test('name + category + tag: three rows; unticking updates N and the rule line; none ticked disables Update', async () => {
   await open();
   fireEvent.changeText(screen.getByTestId('payee-input'), 'Swiggy Instamart');

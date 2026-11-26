@@ -39,6 +39,9 @@ import ScanSmsScreen from './screens/ScanSmsScreen';
 import BackupScreen from './screens/BackupScreen';
 import CategoriesScreen from './screens/CategoriesScreen';
 import PayeeRulesScreen from './screens/PayeeRulesScreen';
+import SplitScreen from './screens/SplitScreen';
+import PeopleScreen from './screens/PeopleScreen';
+import PersonScreen from './screens/PersonScreen';
 import BankEmiScreen from './screens/BankEmiScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
 import CardSetupScreen from './screens/CardSetupScreen';
@@ -200,6 +203,9 @@ function AppContent() {
         <Stack.Screen name="Backup" component={BackupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Categories" component={CategoriesScreen} options={{ headerShown: false }} />
         <Stack.Screen name="PayeeRules" component={PayeeRulesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Split" component={SplitScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="People" component={PeopleScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Person" component={PersonScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="LoanDetail" component={LoanDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="BankEmi" component={BankEmiScreen} options={{ headerShown: false }} />
