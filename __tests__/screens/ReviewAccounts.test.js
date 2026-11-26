@@ -180,7 +180,8 @@ describe('E3: categorised from notifications', () => {
     );
     await screen.findByRole('button', { name: 'Update 2' });
     fireEvent.press(screen.getByRole('button', { name: 'Only this one' }));
-    await waitFor(() => expect(screen.queryByTestId('notif-similar')).toBeNull());
+    await waitFor(async () => expect(await Storage.getItem('notif_categorised')).toBe('[]'));
+    await waitFor(() => expect(screen.queryByTestId('notif-similar')).toBeNull(), { timeout: 5000 });
     expect((await getAll()).filter((t) => t.category === 'Food')).toHaveLength(1);
   });
 
