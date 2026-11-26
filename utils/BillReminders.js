@@ -6,6 +6,8 @@
 import * as Notifications from 'expo-notifications';
 import Storage from '../data/Storage';
 import { upcoming } from './UpcomingBills';
+import { getAll } from '../data/TransactionRepo';
+import { formatMoney } from './Format';
 
 const KEY = 'bill_reminder_ids';
 const DAY = 24 * 60 * 60 * 1000;
@@ -45,4 +47,21 @@ export const syncBillReminders = async (bills, txs, { ask = false, fmt = (n) => 
     );
   await Storage.setItem(KEY, JSON.stringify(ids));
   return plan;
+};
+
+/**
+ * App start: re-plan from the saved bills, so after a reminder fires the next one is scheduled
+ * without opening Upcoming bills. Never asks for permission here.
+ */
+export const refreshBillReminders = async () => {
+  let bills = [];
+  try {
+    bills = JSON.parse((await Storage.getItem('recurring_bills')) || '[]');
+  } catch {
+    bills = [];
+  }
+  if (!Array.isArray(bills)) bills = [];
+  const previous = JSON.parse((await Storage.getItem(KEY)) || '[]');
+  if (!bills.some((b) => b && b.reminder) && !previous.length) return []; // nothing to do
+  return syncBillReminders(bills, await getAll(), { fmt: formatMoney });
 };

@@ -50,6 +50,7 @@ import PersonScreen from './screens/PersonScreen';
 import UpcomingBillsScreen from './screens/UpcomingBillsScreen';
 import MonthReviewScreen from './screens/MonthReviewScreen';
 import { scheduleMonthReview } from './utils/MonthReviewReminder';
+import { refreshBillReminders } from './utils/BillReminders';
 import { startNotificationActions } from './utils/NotificationTask';
 import BankEmiScreen from './screens/BankEmiScreen';
 import CardDetailScreen from './screens/CardDetailScreen';
@@ -145,6 +146,7 @@ function AppContent() {
         await syncLoans(); // C4: link new EMI debits; remind when one is missing
         await saveNetWorthSnapshot();
         await scheduleMonthReview().catch(() => null); // E6: 'Your November summary is ready' on the 1st
+        await refreshBillReminders().catch(() => null); // E2: the next reminder after one has fired
       } catch (err) {
         console.warn('Catch-up error:', err);
       }

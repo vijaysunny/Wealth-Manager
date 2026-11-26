@@ -174,3 +174,32 @@ test('reminders: nothing to plan; first run has no old ids; a custom money forma
     'Rs 1500 · Upcoming bills'
   );
 });
+
+test('app start re-plans bill reminders from the saved bills (the next one after one fired)', async () => {
+  const { refreshBillReminders } = require('../utils/BillReminders');
+  jest.clearAllMocks();
+  await Storage.removeItem('bill_reminder_ids');
+  await Storage.setItem('recurring_bills', '{broken');
+  expect(await refreshBillReminders()).toEqual([]);
+  await Storage.setItem('recurring_bills', JSON.stringify({ not: 'a list' }));
+  expect(await refreshBillReminders()).toEqual([]);
+  expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+
+  const soon = new Date();
+  soon.setDate(soon.getDate() + 20);
+  const bill = newBill({ name: 'Gym', amount: 1500, nextDate: soon, reminder: true }, new Date());
+  await Storage.setItem('recurring_bills', JSON.stringify([bill]));
+  await Storage.setItem('bill_reminder_ids', JSON.stringify(['fired-last-month']));
+  const plan = await refreshBillReminders();
+  expect(plan).toHaveLength(1);
+  expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('fired-last-month');
+  expect(Notifications.scheduleNotificationAsync.mock.calls.at(-1)[0].content).toMatchObject({
+    title: 'Gym due in 2 days',
+    body: '₹1,500 · Upcoming bills',
+  });
+
+  // reminders turned off: the old ones are cancelled, none planned
+  await Storage.setItem('recurring_bills', JSON.stringify([{ ...bill, reminder: false }]));
+  expect(await refreshBillReminders()).toEqual([]);
+  expect(await list('bill_reminder_ids')).toEqual([]);
+});
