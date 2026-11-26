@@ -56,7 +56,8 @@ beforeEach(async () => {
         accountId: 'ac',
         account: 'Axis Bank Credit Card',
         availableLimit: 275511.19,
-        fullDate: new Date().toISOString(),
+        // a minute ago: the card only reads SMS up to "now", and this machine's clock can jump back
+        fullDate: new Date(Date.now() - 60 * 1000).toISOString(),
       },
     ],
     { dedup: false }
